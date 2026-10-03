@@ -27,7 +27,7 @@ const agentWorkspaceRoot =
   process.env.MOLING_WORKSPACE_ROOT ||
   (app.isPackaged ? "" : projectRoot);
 const serviceEntry = path.join(projectRoot, "Source code engine", "app.py");
-const defaultModelName = "qwen2.5:0.5b";
+const defaultModelName = "qwen2.5:3b";
 const ollamaBaseUrl = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
 const ollamaModelName = process.env.OLLAMA_MODEL || defaultModelName;
 const ollamaSetup = createOllamaSetup(ollamaBaseUrl, ollamaModelName);

@@ -11,12 +11,19 @@
 - 评测与基准工具（`eval.py` / `evaluate.py` / `benchmark.py`）
 - TypeScript 参考实现（`app.tsx` / `chat.tsx`，需构建链后可用）
 
+## [0.1.1] - 2026-10-03
+
+### Changed
+- 默认推理模型从 `qwen2.5:0.5b` 升级为 `qwen2.5:3b`
+  （Electron 默认值、`启动墨灵.bat`、docker-compose、角色自我认知文案同步更新）
+- 建立真实评测基线：`benchmark.py` 产出 0.5b / 3b 延迟与吞吐对比，写入 `eval_results.json`
+
 ## [0.1.0] - 2026-10-03
 
 ### Added
 - Electron 桌面聊天 MVP（主窗口 + 悬浮窗），Electron 主进程随窗口启停本地 Python API
 - 本地 Python API（`app.py`），支持 `/health`、`/v1/generate`、`/v1/translate` 等路由
-- 推理后端：`placeholder`（零依赖）、`ollama`（默认 `qwen2.5:0.5b`）、`transformers`（懒加载）、云端 OpenAI 兼容协议（默认关闭）
+- 推理后端：`placeholder`（零依赖）、`ollama`（默认 `qwen2.5:3b`）、`transformers`（懒加载）、云端 OpenAI 兼容协议（默认关闭）
 - 角色卡系统（角色卡库、人格预设、头像导入、模拟状态）
 - 记忆管理（显式记忆、隐私开关、JSON 导入/导出）
 - 本地语音（Piper 合成 + Whisper 转写，可选 extra）

@@ -20,7 +20,7 @@ class OllamaIntegrationTests(unittest.TestCase):
             os.environ,
             {
                 "MODEL_BACKEND": "ollama",
-                "OLLAMA_MODEL": os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b"),
+                "OLLAMA_MODEL": os.getenv("OLLAMA_MODEL", "qwen2.5:3b"),
                 "OLLAMA_URL": os.getenv("OLLAMA_URL", "http://127.0.0.1:11434"),
                 "CHARACTER_CARD_PATH": os.path.join(self.temp_dir.name, "character.json"),
                 "CHARACTER_MEMORY_PATH": os.path.join(self.temp_dir.name, "memory.json"),

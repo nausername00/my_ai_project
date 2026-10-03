@@ -16,8 +16,6 @@ import time
 
 from inference import GenerationRequest, InferenceEngine, ModelUnavailableError
 
-from metrics import corpus_stats
-
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -84,9 +82,15 @@ def main() -> None:
     if not latencies:
         raise SystemExit("没有成功的运行，无法生成报告")
 
-    stats = corpus_stats(outputs)
+    characters = sum(len(text) for text in outputs)
+    # 中文文本按空格分词会严重低估 token 数（整段中文只算 1-2 个"词"）。
+    # 改用字符数估算：中文近似 1.5 字符/token，且每轮不超过 --max-tokens
+    # （后端实际生成上限），避免估算超过真实输出。
+    estimated_tokens = sum(
+        min(args.max_tokens, max(1, round(len(text) / 1.5))) for text in outputs
+    )
     total_seconds = sum(latencies) / 1000.0
-    tokens_per_second = stats["tokens"] / total_seconds if total_seconds > 0 else 0.0
+    tokens_per_second = estimated_tokens / total_seconds if total_seconds > 0 else 0.0
     report = {
         "backend": engine.model_name,
         "runs": len(latencies),
@@ -99,7 +103,11 @@ def main() -> None:
             "min": round(min(latencies), 2),
             "max": round(max(latencies), 2),
         },
-        "output_stats": stats,
+        "output_stats": {
+            "characters": characters,
+            "estimated_tokens": estimated_tokens,
+            "token_estimate_rule": "chars/1.5 per run, capped at --max-tokens",
+        },
         "tokens_per_second": round(tokens_per_second, 2),
     }
     if args.json:
@@ -110,7 +118,7 @@ def main() -> None:
               f"p95={report['latency_ms']['p95']}  mean={report['latency_ms']['mean']}  "
               f"min={report['latency_ms']['min']}  max={report['latency_ms']['max']}")
         print(f"输出统计: {report['output_stats']}")
-        print(f"吞吐: {report['tokens_per_second']} tokens/s")
+        print(f"吞吐(估算): {report['tokens_per_second']} tokens/s")
 
 
 if __name__ == "__main__":

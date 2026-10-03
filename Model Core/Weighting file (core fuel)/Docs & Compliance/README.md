@@ -63,7 +63,7 @@ the local CocoCompanion cache. Public distribution still requires a trusted
 code-signing certificate and a clean-machine release test.
 
 The Electron renderer has no Node integration and uses a restricted preload IPC
-bridge. The desktop app defaults to Ollama with `qwen2.5:0.5b`; override
+bridge. The desktop app defaults to Ollama with `qwen2.5:3b`; override
 `MODEL_BACKEND`, `OLLAMA_MODEL`, or `OLLAMA_URL` in the environment if needed.
 
 The service exposes:
@@ -102,7 +102,7 @@ The service exposes:
   observation against a success criterion; this assessment is model-generated,
   not independent proof.
 - The Python vision adapter can pass an explicitly approved image to a
-  loopback Ollama vision model (maximum 10 MB). The default `qwen2.5:0.5b` is
+  loopback Ollama vision model (maximum 10 MB). The default `qwen2.5:3b` is
   text-only; screen capture is not exposed through the API or desktop UI, and
   there is no automatic screen monitoring.
 - `GET /v1/social/status` and `GET /v1/social/partners` report the local
@@ -144,9 +144,9 @@ The placeholder backend is retained for local API tests only.
 To use a model already installed in a local Ollama service:
 
 ```powershell
-ollama pull qwen2.5:0.5b
+ollama pull qwen2.5:3b
 $env:MODEL_BACKEND = "ollama"
-$env:OLLAMA_MODEL = "qwen2.5:0.5b"
+$env:OLLAMA_MODEL = "qwen2.5:3b"
 $env:OLLAMA_URL = "http://127.0.0.1:11434"
 $env:PYTHONPATH = ".\Model Core\Weighting file (core fuel)\Source code engine"
 py -3 ".\Model Core\Weighting file (core fuel)\Source code engine\app.py"
@@ -154,7 +154,7 @@ py -3 ".\Model Core\Weighting file (core fuel)\Source code engine\app.py"
 
 This connects to Ollama's local `/api/chat` endpoint and does not download
 models at service startup. Ollama must be installed, running, and have the
-selected model available. `qwen2.5:0.5b` is a small starting point for a GPU
+selected model available. `qwen2.5:3b` is a small starting point for a GPU
 with 4 GB VRAM; larger models may be slower or require CPU offload.
 If the service cannot be reached or the model is missing, generation returns a
 service-unavailable error instead of placeholder output.
@@ -266,7 +266,7 @@ Korean, French, German, and Spanish targets, and offers one-click result
 copying. Translation requests use the currently configured model, do not
 include chat history or character memories, and are not persisted by the app.
 Text is sent to the configured model service; if that service is remote, the
-text leaves the computer. The bundled `qwen2.5:0.5b` starter model can make
+text leaves the computer. The bundled `qwen2.5:3b` starter model can make
 meaning errors on longer or nuanced text, so review important translations.
 Reference voice resources accept user-authorized WAV/MP3 samples up to 25 MB,
 with a custom name, language, local preview, character-card association, and
@@ -331,7 +331,7 @@ are local measurements, not guarantees for other models or computers.
 Conversation messages are not written to disk. Only an explicit, exact
 name/identity question uses a short card-based reply; a passing mention of
 self-introduction continues through the model. Other replies depend on the
-selected model; the 0.5B starter model is small and can still be terse, generic,
+selected model; the 3B starter model is small and can still be terse, generic,
 or inconsistent even with a clearer role prompt. The appearance workbench can
 import local MMD, VRM, Live2D, PNGtuber and companion resource files (mesh,
 texture, motion, expression, physics and audio metadata), classify a primary
@@ -409,7 +409,7 @@ To run the opt-in end-to-end test against a live local Ollama model:
 
 ```powershell
 $env:MODEL_BACKEND = "ollama"
-$env:OLLAMA_MODEL = "qwen2.5:0.5b"
+$env:OLLAMA_MODEL = "qwen2.5:3b"
 $env:OLLAMA_URL = "http://127.0.0.1:11434"
 $env:RUN_OLLAMA_INTEGRATION = "1"
 $env:PYTHONPATH = ".\Model Core\Weighting file (core fuel)\Source code engine"

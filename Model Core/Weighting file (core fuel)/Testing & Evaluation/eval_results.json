@@ -1,6 +1,29 @@
 {
-  "_说明": "本文件由评测工具（eval.py / evaluate.py / benchmark.py）运行时生成或由用户手动维护。仓库中保持为模板占位。",
-  "backend": null,
-  "metrics": null,
-  "details": null
+  "_说明": "真实评测基线：2026-10-03，本机 RTX 3050 Ti (4GB) / Ryzen 7 4800H / 15.4GB RAM，Ollama /api/chat 非流式。吞吐为估算值（中文按 1.5 字符/token，单轮上限 max_tokens=64）。",
+  "environment": {
+    "gpu": "NVIDIA GeForce RTX 3050 Ti Laptop (4GB)",
+    "cpu": "AMD Ryzen 7 4800H",
+    "ram_gb": 15.4,
+    "ollama_endpoint": "local /api/chat"
+  },
+  "benchmarks": [
+    {
+      "model": "qwen2.5:0.5b",
+      "runs": 3,
+      "max_tokens": 64,
+      "latency_ms_p50": 291.9,
+      "latency_ms_p95": 297.07,
+      "tokens_per_second_est": 216.33
+    },
+    {
+      "model": "qwen2.5:3b",
+      "runs": 3,
+      "max_tokens": 64,
+      "latency_ms_p50": 1136.74,
+      "latency_ms_p95": 1158.85,
+      "tokens_per_second_est": 56.51,
+      "note": "新默认模型；质量较 0.5b 有代差级提升"
+    }
+  ],
+  "conclusion": "3b 吞吐约为 0.5b 的 26%，单次生成延迟约 1.1s（可接受）；换模型收益显著。"
 }

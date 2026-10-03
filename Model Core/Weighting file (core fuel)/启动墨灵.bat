@@ -5,7 +5,7 @@ chcp 65001 >nul
 set "PROJECT_ROOT=%~dp0"
 set "FRONTEND_DIR=%PROJECT_ROOT%Frontend"
 if not defined MODEL_BACKEND set "MODEL_BACKEND=ollama"
-if not defined OLLAMA_MODEL set "OLLAMA_MODEL=qwen2.5:0.5b"
+if not defined OLLAMA_MODEL set "OLLAMA_MODEL=qwen2.5:3b"
 if not defined OLLAMA_URL set "OLLAMA_URL=http://127.0.0.1:11434"
 
 echo.
@@ -62,7 +62,7 @@ if not exist "%FRONTEND_DIR%\node_modules\electron\dist\electron.exe" (
     )
 )
 
-py -3 -c "import json, os, urllib.request; data=json.load(urllib.request.urlopen(os.getenv('OLLAMA_URL', 'http://127.0.0.1:11434').rstrip('/') + '/api/tags', timeout=3)); raise SystemExit(0 if any(item.get('name') == os.getenv('OLLAMA_MODEL', 'qwen2.5:0.5b') for item in data.get('models', [])) else 2)" >nul 2>&1
+py -3 -c "import json, os, urllib.request; data=json.load(urllib.request.urlopen(os.getenv('OLLAMA_URL', 'http://127.0.0.1:11434').rstrip('/') + '/api/tags', timeout=3)); raise SystemExit(0 if any(item.get('name') == os.getenv('OLLAMA_MODEL', 'qwen2.5:3b') for item in data.get('models', [])) else 2)" >nul 2>&1
 if errorlevel 1 (
     echo.
     echo [模型未就绪] 无法确认 Ollama 服务或模型 "%OLLAMA_MODEL%" 可用。
