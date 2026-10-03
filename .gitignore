@@ -74,6 +74,9 @@ Model Core/Weighting file (core fuel)/High-performance backend/
 Model Core/Weighting file (core fuel)/Platform-Specific/
 Model Core/Weighting file (core fuel)/Engineering Config/.git
 
+# ----- 墨灵作品集（本地创作记录，默认不推送）-----
+Works/
+
 # ----- IDE 与系统文件 -----
 .trae/
 .idea/

@@ -1404,6 +1404,147 @@ button {
   cursor: not-allowed;
 }
 
+.gallery-panel {
+  max-width: 1080px;
+  padding: 28px 32px 40px;
+}
+
+.gallery-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.gallery-status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+}
+
+.gallery-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(145deg, #1f2230 0%, #171a22 100%);
+}
+
+.gallery-card header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.gallery-card header strong {
+  font-size: 13px;
+  color: #e4e6ee;
+}
+
+.gallery-card header span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.gallery-reaction {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #2d2840;
+  color: #c9bde8;
+  font-size: 10px;
+}
+
+.gallery-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gallery-card-body img {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #0f1116;
+}
+
+.gallery-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.gallery-open {
+  align-self: flex-start;
+  padding: 6px 12px;
+  border: 1px solid #4a4560;
+  border-radius: 999px;
+  background: #252836;
+  color: #e2e4ec;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.gallery-open:hover {
+  border-color: #7a6cb0;
+}
+
+.gallery-empty {
+  grid-column: 1 / -1;
+  padding: 28px 20px;
+  border: 1px dashed #5a5378;
+  border-radius: 14px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.gallery-viewer {
+  width: min(92vw, 900px);
+  max-height: 86vh;
+  padding: 16px;
+  border: 1px solid #4a4560;
+  border-radius: 16px;
+  background: #171a22;
+  color: #e4e6ee;
+}
+
+.gallery-viewer figure {
+  margin: 0 0 12px;
+}
+
+.gallery-viewer img {
+  display: block;
+  width: 100%;
+  max-height: 72vh;
+  object-fit: contain;
+  border-radius: 12px;
+  background: #0f1116;
+}
+
+.gallery-viewer figcaption {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.gallery-viewer::backdrop {
+  background: rgba(8, 10, 16, 0.72);
+}
+
 .composer {
   width: min(720px, calc(100% - 48px));
   align-self: center;

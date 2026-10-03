@@ -37,6 +37,10 @@
           <span class="workspace-icon" aria-hidden="true">协</span>
           <span class="workspace-label">智能体协作</span>
         </button>
+        <button class="conversation workspace-button" id="gallery-workspace" type="button" aria-label="作品集" title="作品集" aria-pressed="false">
+          <span class="workspace-icon" aria-hidden="true">藏</span>
+          <span class="workspace-label">墨灵的作品集</span>
+        </button>
         <div class="sidebar-bottom">
           <span class="local-indicator"></span>
           <span>本地服务</span>
@@ -206,6 +210,19 @@
             <div class="synthesis-sections" id="collaboration-synthesis-sections"></div>
           </section>
           <div class="collaboration-results" id="collaboration-results"></div>
+        </section>
+
+        <section class="gallery-panel" id="gallery-panel" aria-labelledby="gallery-title" hidden>
+          <div class="translator-heading gallery-heading">
+            <span class="eyebrow">MOLING WORKS · 作品集</span>
+            <h1 id="gallery-title">墨灵的作品集</h1>
+            <p>探索中你点头留下的作品，保存在本机 Works/ 目录；点击可放大查看。</p>
+          </div>
+          <div class="gallery-toolbar">
+            <p class="form-status gallery-status" id="gallery-status" role="status" aria-live="polite"></p>
+            <button class="icon-button" id="gallery-refresh" type="button">刷新</button>
+          </div>
+          <div class="gallery-grid" id="gallery-grid" aria-live="polite"></div>
         </section>
 
         <section class="conversation-view" id="conversation" aria-live="polite">

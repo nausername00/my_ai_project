@@ -5,8 +5,11 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
 from time import perf_counter
 from typing import Any, Literal, Mapping
 from uuid import uuid4
@@ -24,8 +27,13 @@ __all__ = [
     "propose_exploration",
     "run_exploration",
     "record_exploration_reaction",
+    "save_exploration_work",
+    "list_exploration_works",
+    "read_exploration_work",
     "FEEDBACK_INTENT_LABELS",
 ]
+
+MAX_SAVED_SVG_BYTES = 64 * 1024
 
 FEEDBACK_INTENT_LABELS: dict[str, str] = {
     "share_win": "想听你的看法",
@@ -364,3 +372,144 @@ def record_exploration_reaction(
         "memory": memory_entry,
         "affect": affect,
     }
+
+
+def _safe_work_id(exploration_id: Any) -> str:
+    if not isinstance(exploration_id, str) or not exploration_id.strip():
+        raise ValueError("exploration_id must be a non-empty string")
+    cleaned = exploration_id.strip()
+    if len(cleaned) > 64 or not re.fullmatch(r"[A-Za-z0-9_-]+", cleaned):
+        raise ValueError("exploration_id may only contain letters, digits, underscore or dash")
+    return cleaned
+
+
+def _validate_saved_artifact(artifact: Any) -> dict[str, Any]:
+    if not isinstance(artifact, dict):
+        raise ValueError("artifact must be an object")
+    kind = artifact.get("kind")
+    content = artifact.get("content")
+    if kind != "svg" or not isinstance(content, str):
+        raise ValueError("only svg works can be saved")
+    if len(content) > MAX_SAVED_SVG_BYTES:
+        raise ValueError("svg content exceeds the 64 KB save limit")
+    stripped = content.lstrip()
+    if stripped.startswith("<svg"):
+        is_svg = True
+    elif stripped.startswith("<?xml"):
+        parts = stripped.split("?>", 1)
+        is_svg = len(parts) == 2 and parts[1].lstrip().startswith("<svg")
+    else:
+        is_svg = False
+    if not is_svg:
+        raise ValueError("svg content must start with <svg (optionally after an XML declaration)")
+    try:
+        width = int(artifact.get("width") or 0)
+        height = int(artifact.get("height") or 0)
+    except (TypeError, ValueError):
+        width = 0
+        height = 0
+    prompt = artifact.get("prompt")
+    return {
+        "kind": "svg",
+        "content": content,
+        "width": width,
+        "height": height,
+        "prompt": prompt if isinstance(prompt, str) else "",
+    }
+
+
+def _load_work_index(works_root: Path) -> list[dict[str, Any]]:
+    index_file = works_root / "index.json"
+    if not index_file.exists():
+        return []
+    try:
+        data = json.loads(index_file.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    if isinstance(data, dict) and isinstance(data.get("works"), list):
+        return data["works"]
+    if isinstance(data, list):
+        return data
+    return []
+
+
+def _save_work_index(works_root: Path, works: list[dict[str, Any]]) -> None:
+    works_root.mkdir(parents=True, exist_ok=True)
+    index_file = works_root / "index.json"
+    payload = {"version": 1, "works": works}
+    tmp = index_file.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(index_file)
+
+
+def save_exploration_work(
+    workspace_root: Any,
+    *,
+    exploration_id: Any,
+    topic: Any,
+    artifact: Any,
+    note: Any = "",
+) -> dict[str, Any]:
+    """把一次探索的 SVG 成果收进本地作品集（项目根 Works/）。
+
+    由用户点击「收进作品集」触发——用户手势即授权（宪法：权限是爱的语法）。
+    同一 exploration_id 重复保存为幂等更新。
+    """
+    root = Path(workspace_root).resolve()
+    safe_id = _safe_work_id(exploration_id)
+    resolved = _normalize_topic(topic or "")
+    if len(resolved) < 2:
+        raise ValueError("topic must be at least 2 characters")
+    work = _validate_saved_artifact(artifact)
+    note_clean = note.strip() if isinstance(note, str) else ""
+    if len(note_clean) > 500:
+        raise ValueError("note must not exceed 500 characters")
+
+    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    works_root = root / "Works"
+    month_dir = works_root / month
+    month_dir.mkdir(parents=True, exist_ok=True)
+    target = month_dir / f"{safe_id}.svg"
+
+    now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    entry = {
+        "id": safe_id,
+        "topic": resolved,
+        "prompt": work["prompt"],
+        "created_at": now_iso,
+        "file": f"{month}/{safe_id}.svg",
+        "width": work["width"],
+        "height": work["height"],
+        "note": note_clean,
+        "reaction": None,
+    }
+    target.write_text(work["content"], encoding="utf-8")
+    works = [w for w in _load_work_index(works_root) if w.get("id") != safe_id]
+    works.append(entry)
+    _save_work_index(works_root, works)
+    return {"saved": True, "entry": entry, "path": target.relative_to(root).as_posix()}
+
+
+def list_exploration_works(workspace_root: Any) -> dict[str, Any]:
+    """列出作品集全部作品，按创建时间倒序。"""
+    root = Path(workspace_root).resolve()
+    works = _load_work_index(root / "Works")
+    works.sort(key=lambda w: str(w.get("created_at", "")), reverse=True)
+    return {"works": works, "count": len(works)}
+
+
+def read_exploration_work(workspace_root: Any, file: Any) -> dict[str, Any]:
+    """按索引中的相对路径读取一件作品的 SVG 内容。"""
+    root = Path(workspace_root).resolve()
+    if not isinstance(file, str) or not file.strip():
+        raise ValueError("file must be a non-empty string")
+    requested = Path(file)
+    if requested.is_absolute() or ".." in requested.parts:
+        raise ValueError("file must be a relative path inside Works/")
+    candidate = (root / "Works" / requested).resolve(strict=True)
+    if not candidate.is_relative_to(root / "Works") or candidate.suffix.casefold() != ".svg":
+        raise ValueError("file must identify an svg inside Works/")
+    content = candidate.read_text(encoding="utf-8")
+    if len(content) > MAX_SAVED_SVG_BYTES:
+        raise ValueError("saved svg exceeds the 64 KB read limit")
+    return {"file": requested.as_posix(), "kind": "svg", "content": content}

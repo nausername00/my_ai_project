@@ -16,6 +16,11 @@
 ### Added
 - CORE_WORLD 四环探索竖切片（第四节四环 + 第六节反馈意图；代码随仓库存在，本轮补记文档）：
   `/v1/explore/propose|run|react` 三路由、前端提议/成果/反馈卡片、`share_win` / `ask_direction` / `shy_retry` / `need_permission` 四个反馈意图 ID
+- 探索作品集（宪法八节「回放」落地）：`/v1/explore/save|works|work` 三路由，
+  SVG 成果经用户点击「收进作品集」落盘到项目根 `Works/`（索引 index.json），
+  侧边栏新增「墨灵的作品集」工作区（网格 + 大图预览）；`explore.py` 增补
+  `save_exploration_work` / `list_exploration_works` / `read_exploration_work`（含路径注入防护与 SVG 校验），
+  `agent_tools` 工具目录仍保持只读 + 受限创建不变
 
 ### Changed
 - 默认推理模型从 `qwen2.5:0.5b` 升级为 `qwen2.5:3b`

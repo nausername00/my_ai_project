@@ -179,6 +179,9 @@ async function callApi(route, method = "GET", body, extraHeaders = {}) {
     "/v1/explore/propose": ["POST"],
     "/v1/explore/run": ["POST"],
     "/v1/explore/react": ["POST"],
+    "/v1/explore/save": ["POST"],
+    "/v1/explore/works": ["GET"],
+    "/v1/explore/work": ["POST"],
     "/v1/translate": ["POST"],
     "/v1/agent/reflect": ["POST"],
     "/v1/agent/collaborate": ["POST"],
@@ -571,6 +574,13 @@ function registerIpcHandlers() {
   );
   ipcMain.handle("companion:explore-react", (_event, payload) =>
     callApi("/v1/explore/react", "POST", payload),
+  );
+  ipcMain.handle("companion:explore-save", (_event, payload) =>
+    callApi("/v1/explore/save", "POST", payload),
+  );
+  ipcMain.handle("companion:explore-works", () => callApi("/v1/explore/works"));
+  ipcMain.handle("companion:explore-work", (_event, payload) =>
+    callApi("/v1/explore/work", "POST", payload),
   );
   ipcMain.handle("companion:translate", (_event, request) =>
     callApi("/v1/translate", "POST", request),

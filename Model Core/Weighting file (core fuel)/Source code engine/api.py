@@ -18,6 +18,9 @@ from explore import (
     propose_exploration,
     record_exploration_reaction,
     run_exploration,
+    save_exploration_work,
+    list_exploration_works,
+    read_exploration_work,
 )
 from pathlib import Path
 
@@ -356,6 +359,12 @@ class ApiHandler(BaseHTTPRequestHandler):
                 },
             )
             return
+        if path == "/v1/explore/works":
+            try:
+                self._send_json(HTTPStatus.OK, list_exploration_works(self.workspace_root))
+            except (TypeError, ValueError, OSError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
         if path == "/v1/notify":
             if not self._is_local_request():
                 self._send_json(HTTPStatus.FORBIDDEN, {"error": "notifications are 127.0.0.1 only"})
@@ -648,6 +657,36 @@ class ApiHandler(BaseHTTPRequestHandler):
                 )
                 self._send_json(HTTPStatus.OK, result)
             except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/explore/save":
+            try:
+                payload = self._read_json()
+                exploration_id = payload.get("exploration_id")
+                topic = payload.get("topic")
+                artifact = payload.get("artifact")
+                note = payload.get("note", "")
+                if not isinstance(artifact, dict):
+                    raise ValueError("artifact must be an object")
+                if note is not None and not isinstance(note, str):
+                    raise TypeError("note must be a string")
+                result = save_exploration_work(
+                    self.workspace_root,
+                    exploration_id=exploration_id,
+                    topic=topic,
+                    artifact=artifact,
+                    note=note or "",
+                )
+                self._send_json(HTTPStatus.OK, result)
+            except (TypeError, ValueError, json.JSONDecodeError, OSError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/explore/work":
+            try:
+                payload = self._read_json()
+                file = payload.get("file")
+                self._send_json(HTTPStatus.OK, read_exploration_work(self.workspace_root, file))
+            except (TypeError, ValueError, OSError) as error:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         if path == "/v1/agent/collaborate":

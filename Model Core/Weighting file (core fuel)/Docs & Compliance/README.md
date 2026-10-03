@@ -80,7 +80,10 @@ The service exposes:
   - `POST /v1/explore/propose` with `{"message": "..."}` detects interest cues and proposes a mini try (`proposed`, `topic`, `teaser`)
   - `POST /v1/explore/run` with `{"message": "...", "topic": "..."}` creates a local SVG artifact and returns a companion line, a feedback intent (`share_win` / `ask_direction` / `shy_retry` / `need_permission`) with a short label, updated simulated affect, and a memory entry
   - `POST /v1/explore/react` with `{"topic": "...", "reaction": "praise|redirect|stop", "note": "..."}` records user feedback into memory and updates affect
-  - The desktop chat renders proposal cards, result cards with intent labels, and praise/redirect/stop buttons. The slice writes no files besides character memory, never captures the screen, and stays local.
+  - `POST /v1/explore/save` with `{"exploration_id": "...", "topic": "...", "artifact": {"kind": "svg", "content": "...", "width": 0, "height": 0}, "note": "..."}` saves an SVG work into the local portfolio (`Works/`), triggered by the user's explicit "收进作品集" action
+  - `GET /v1/explore/works` lists the portfolio; `POST /v1/explore/work` with `{"file": "YYYY-MM/<id>.svg"}` returns one saved work's SVG content
+  - Portfolio works live under the project root `Works/` (ignored by Git, kept local like character data); the server root can be overridden with `WORKSPACE_ROOT`
+  - The desktop chat renders proposal cards, result cards with intent labels, praise/redirect/stop buttons, and a "收进作品集" button; the sidebar "墨灵的作品集" workspace shows saved works with zoom preview. The slice writes no files besides character memory and saved portfolio works, never captures the screen, and stays local.
 - `POST /v1/agent/collaborate` with `{"task": "..."}` to run a local
   configurable collaboration. `GET /v1/agent/roles` returns the built-in L1
   review roles; a collaboration request may include enabled role keys and

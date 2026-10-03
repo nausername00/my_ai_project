@@ -15,6 +15,9 @@ from explore import (
     propose_exploration,
     record_exploration_reaction,
     run_exploration,
+    save_exploration_work,
+    list_exploration_works,
+    read_exploration_work,
 )
 from inference import InferenceEngine
 from character import CharacterStore
@@ -70,6 +73,103 @@ class ExploreModuleTests(unittest.TestCase):
         self.assertIsNotNone(reacted["memory"])
         self.assertTrue(any("探索反馈" in m["content"] for m in memories))
 
+    def test_save_and_list_work(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            svg = (
+                '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80">'
+                '<rect width="100%" height="100%" fill="#2da44e"/>'
+                "<text x='10' y='20'>你好</text></svg>"
+            )
+            saved = save_exploration_work(
+                tmp,
+                exploration_id="abc-123-def",
+                topic="画画",
+                artifact={
+                    "kind": "svg",
+                    "content": svg,
+                    "width": 120,
+                    "height": 80,
+                    "prompt": "概念小海报",
+                },
+                note="喜欢这个配色",
+            )
+            self.assertTrue(saved["saved"])
+            work_file = Path(tmp) / "Works" / saved["entry"]["file"]
+            self.assertTrue(work_file.exists())
+            self.assertIn("<svg", work_file.read_text(encoding="utf-8"))
+            listing = list_exploration_works(tmp)
+            self.assertEqual(listing["count"], 1)
+            self.assertEqual(listing["works"][0]["topic"], "画画")
+            self.assertEqual(listing["works"][0]["note"], "喜欢这个配色")
+            loaded = read_exploration_work(tmp, saved["entry"]["file"])
+            self.assertEqual(loaded["content"], svg)
+
+    def test_save_is_idempotent_for_same_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            svg = (
+                '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">'
+                "<rect width='10' height='10'/></svg>"
+            )
+            for _ in range(2):
+                save_exploration_work(
+                    tmp,
+                    exploration_id="same-id",
+                    topic="音乐",
+                    artifact={"kind": "svg", "content": svg, "width": 10, "height": 10},
+                )
+            self.assertEqual(list_exploration_works(tmp)["count"], 1)
+
+    def test_save_accepts_xml_declaration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            svg = (
+                '<?xml version="1.0" encoding="UTF-8"?>\n'
+                '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">'
+                "<rect width='10' height='10'/></svg>"
+            )
+            saved = save_exploration_work(
+                tmp,
+                exploration_id="xml-decl-id",
+                topic="星空",
+                artifact={"kind": "svg", "content": svg, "width": 10, "height": 10},
+            )
+            self.assertTrue(saved["saved"])
+            loaded = read_exploration_work(tmp, saved["entry"]["file"])
+            self.assertEqual(loaded["content"], svg)
+
+    def test_save_rejects_unsafe_input(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            svg = (
+                '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">'
+                "<rect width='10' height='10'/></svg>"
+            )
+            with self.assertRaises(ValueError):
+                save_exploration_work(
+                    tmp,
+                    exploration_id="../evil",
+                    topic="音乐",
+                    artifact={"kind": "svg", "content": svg, "width": 10, "height": 10},
+                )
+            with self.assertRaises(ValueError):
+                save_exploration_work(
+                    tmp,
+                    exploration_id="ok-id",
+                    topic="音乐",
+                    artifact={"kind": "png", "content": svg, "width": 10, "height": 10},
+                )
+            with self.assertRaises(ValueError):
+                save_exploration_work(
+                    tmp,
+                    exploration_id="ok-id",
+                    topic="音乐",
+                    artifact={"kind": "svg", "content": "not svg", "width": 10, "height": 10},
+                )
+            self.assertEqual(list_exploration_works(tmp)["count"], 0)
+
+    def test_read_work_rejects_traversal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError):
+                read_exploration_work(tmp, "../memory.json")
+
 
 class ExploreApiTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -83,6 +183,7 @@ class ExploreApiTests(unittest.TestCase):
                 "CHARACTER_ASSET_DIR": self.temp_dir.name,
                 "CHARACTER_PRIVACY_PATH": os.path.join(self.temp_dir.name, "privacy.json"),
                 "CHARACTER_AFFECT_PATH": os.path.join(self.temp_dir.name, "affect.json"),
+                "WORKSPACE_ROOT": os.path.join(self.temp_dir.name, "works"),
             },
         )
         self.environment.start()
@@ -111,6 +212,14 @@ class ExploreApiTests(unittest.TestCase):
         response.read()
         return response.status, data
 
+    def _get(self, path: str) -> tuple[int, dict]:
+        conn = self.connection
+        conn.request("GET", path)
+        response = conn.getresponse()
+        data = json.loads(response.read())
+        response.read()
+        return response.status, data
+
     def test_generate_includes_explore_proposal(self) -> None:
         status, data = self._post(
             "/v1/generate",
@@ -128,6 +237,49 @@ class ExploreApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("artifact", data)
         self.assertIn("feedback_intent", data)
+
+    def test_explore_save_and_works_endpoints(self) -> None:
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80">'
+            '<rect width="100%" height="100%" fill="#7a6cb0"/>'
+            "<text x='10' y='20'>你好</text></svg>"
+        )
+        status, data = self._post(
+            "/v1/explore/save",
+            {
+                "exploration_id": "api-test-id",
+                "topic": "画画",
+                "artifact": {"kind": "svg", "content": svg, "width": 120, "height": 80},
+                "note": "测试保存",
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(data["saved"])
+        self.assertEqual(data["entry"]["topic"], "画画")
+
+        status, listing = self._get("/v1/explore/works")
+        self.assertEqual(status, 200)
+        self.assertEqual(listing["count"], 1)
+        self.assertEqual(listing["works"][0]["id"], "api-test-id")
+
+        status, work = self._post(
+            "/v1/explore/work",
+            {"file": data["entry"]["file"]},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(work["content"], svg)
+
+    def test_explore_save_rejects_bad_artifact(self) -> None:
+        status, data = self._post(
+            "/v1/explore/save",
+            {
+                "exploration_id": "bad-art",
+                "topic": "画画",
+                "artifact": {"kind": "png", "content": "x", "width": 1, "height": 1},
+            },
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("error", data)
 
 
 if __name__ == "__main__":

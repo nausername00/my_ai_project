@@ -16,6 +16,11 @@ const chatWorkspaceButton = document.getElementById("chat-workspace");
 const translatorWorkspaceButton = document.getElementById("translator-workspace");
 const translatorPanel = document.getElementById("translator-panel");
 const collaborationWorkspaceButton = document.getElementById("collaboration-workspace");
+const galleryWorkspaceButton = document.getElementById("gallery-workspace");
+const galleryPanel = document.getElementById("gallery-panel");
+const galleryGrid = document.getElementById("gallery-grid");
+const galleryStatus = document.getElementById("gallery-status");
+const galleryRefresh = document.getElementById("gallery-refresh");
 const collaborationPanel = document.getElementById("collaboration-panel");
 const collaborationForm = document.getElementById("collaboration-form");
 const collaborationTask = document.getElementById("collaboration-task");
@@ -316,6 +321,28 @@ function renderExploreResult(result, userPrompt) {
   stop.type = "button";
   stop.textContent = "先这样";
 
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "explore-save";
+  save.textContent = "收进作品集";
+  save.addEventListener("click", async () => {
+    save.disabled = true;
+    try {
+      const saved = await window.companion.exploreSave({
+        exploration_id: result.exploration_id,
+        topic: result.topic,
+        artifact: result.artifact,
+      });
+      save.textContent = "已收进作品集 ✓";
+      if (saved.entry?.created_at) {
+        save.title = `保存于 ${saved.entry.created_at}`;
+      }
+    } catch (error) {
+      save.disabled = false;
+      save.textContent = `保存失败：${error.message}`;
+    }
+  });
+
   const disableAll = () => {
     praise.disabled = true;
     redirect.disabled = true;
@@ -354,9 +381,111 @@ function renderExploreResult(result, userPrompt) {
   redirect.addEventListener("click", () => void react("redirect"));
   stop.addEventListener("click", () => void react("stop"));
 
-  actions.append(praise, redirect, stop);
+  actions.append(praise, redirect, stop, save);
   card.append(actions);
   return card;
+}
+
+function renderGallery(works) {
+  galleryGrid.replaceChildren();
+  galleryStatus.textContent = "";
+  if (!works?.length) {
+    const empty = document.createElement("p");
+    empty.className = "gallery-empty";
+    empty.textContent =
+      "作品集还是空的。和墨灵聊天时，如果她在探索里做出你喜欢的作品，点卡片上的「收进作品集」就会出现在这里。";
+    galleryGrid.append(empty);
+    return;
+  }
+  for (const entry of works) {
+    const card = document.createElement("article");
+    card.className = "gallery-card";
+    card.dataset.file = entry.file || "";
+
+    const header = document.createElement("header");
+    const title = document.createElement("strong");
+    title.textContent = `「${entry.topic}」`;
+    const meta = document.createElement("span");
+    const created = entry.created_at ? entry.created_at.replace("T", " ").slice(0, 16) : "";
+    meta.textContent = created ? `创建于 ${created}` : "时间未知";
+    const reaction = document.createElement("span");
+    reaction.className = "gallery-reaction";
+    reaction.textContent =
+      entry.reaction === "praise"
+        ? "你点过赞"
+        : entry.reaction === "redirect"
+          ? "你换过方向"
+          : entry.reaction === "stop"
+            ? "已暂停"
+            : "等你反馈";
+    header.append(title, meta, reaction);
+
+    const body = document.createElement("div");
+    body.className = "gallery-card-body";
+    const img = document.createElement("img");
+    img.alt = `围绕「${entry.topic}」的作品`;
+    img.loading = "lazy";
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="100%" height="100%" fill="#f0f2f5"/><text x="12" y="15" text-anchor="middle" font-size="9" fill="#57606a">加载中…</text></svg>`)}`;
+    const load = async () => {
+      try {
+        const work = await window.companion.exploreWork(entry.file);
+        img.src = svgDataUrl(work.content);
+      } catch (error) {
+        img.alt = `作品读取失败：${error.message}`;
+      }
+    };
+    body.append(img);
+    void load();
+    const note = document.createElement("p");
+    note.className = "gallery-note";
+    note.textContent = entry.note || "";
+    if (entry.note) body.append(note);
+
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "gallery-open";
+    open.textContent = "查看大图";
+    open.addEventListener("click", () => {
+      const overlay = document.createElement("dialog");
+      overlay.className = "gallery-viewer";
+      const figure = document.createElement("figure");
+      const big = document.createElement("img");
+      big.alt = `围绕「${entry.topic}」的作品`;
+      big.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="100%" height="100%" fill="#f0f2f5"/><text x="12" y="15" text-anchor="middle" font-size="9" fill="#57606a">加载中…</text></svg>`)}`;
+      void window.companion.exploreWork(entry.file).then((work) => {
+        big.src = svgDataUrl(work.content);
+      }).catch((error) => {
+        big.alt = `作品读取失败：${error.message}`;
+      });
+      const caption = document.createElement("figcaption");
+      caption.textContent = `「${entry.topic}」 · ${created || ""} · ${reaction.textContent}`;
+      figure.append(big, caption);
+      const close = document.createElement("button");
+      close.type = "button";
+      close.className = "icon-button";
+      close.textContent = "关闭";
+      close.addEventListener("click", () => overlay.close());
+      overlay.append(figure, close);
+      document.body.append(overlay);
+      overlay.showModal();
+      overlay.addEventListener("close", () => overlay.remove(), { once: true });
+    });
+
+    card.append(header, body, open);
+    galleryGrid.append(card);
+  }
+}
+
+async function refreshGallery() {
+  galleryStatus.textContent = "正在读取作品集…";
+  try {
+    const data = await window.companion.exploreWorks();
+    renderGallery(data?.works || []);
+    galleryStatus.textContent = data?.count ? `共 ${data.count} 件作品` : "";
+  } catch (error) {
+    galleryStatus.textContent = `读取作品集失败：${error.message}`;
+    galleryStatus.classList.add("error");
+  }
 }
 
 function setVoiceStatus(message, isError = false) {
@@ -1221,27 +1350,32 @@ function setWorkspace(workspace) {
   currentWorkspace = workspace;
   const isTranslator = workspace === "translator";
   const isCollaboration = workspace === "collaboration";
-  document.getElementById("conversation").hidden = isTranslator || isCollaboration;
-  document.getElementById("composer").hidden = isTranslator || isCollaboration;
-  document.getElementById("chat-notice").hidden = isTranslator || isCollaboration;
+  const isGallery = workspace === "gallery";
+  const isChat = !isTranslator && !isCollaboration && !isGallery;
+  document.getElementById("conversation").hidden = !isChat;
+  document.getElementById("composer").hidden = !isChat;
+  document.getElementById("chat-notice").hidden = !isChat;
   translatorPanel.hidden = !isTranslator;
   collaborationPanel.hidden = !isCollaboration;
-  document.getElementById("new-chat").hidden = isTranslator || isCollaboration;
-  document.getElementById("affect-indicator").hidden = isTranslator || isCollaboration;
-  chatWorkspaceButton.classList.toggle("active", !isTranslator && !isCollaboration);
+  galleryPanel.hidden = !isGallery;
+  document.getElementById("new-chat").hidden = !isChat;
+  document.getElementById("affect-indicator").hidden = !isChat;
+  chatWorkspaceButton.classList.toggle("active", isChat);
   translatorWorkspaceButton.classList.toggle("active", isTranslator);
   collaborationWorkspaceButton.classList.toggle("active", isCollaboration);
-  chatWorkspaceButton.setAttribute(
-    "aria-pressed",
-    String(!isTranslator && !isCollaboration),
-  );
+  galleryWorkspaceButton.classList.toggle("active", isGallery);
+  chatWorkspaceButton.setAttribute("aria-pressed", String(isChat));
   translatorWorkspaceButton.setAttribute("aria-pressed", String(isTranslator));
   collaborationWorkspaceButton.setAttribute("aria-pressed", String(isCollaboration));
+  galleryWorkspaceButton.setAttribute("aria-pressed", String(isGallery));
   document.querySelector(".topbar-title strong").textContent = isTranslator
     ? "文本翻译器"
     : isCollaboration
       ? "智能体协作"
-      : `和${activeCharacterNickname}聊天`;
+      : isGallery
+        ? "墨灵的作品集"
+        : `和${activeCharacterNickname}聊天`;
+  if (isGallery) void refreshGallery();
 }
 
 chatWorkspaceButton.addEventListener("click", () => setWorkspace("chat"));
@@ -1251,6 +1385,8 @@ translatorWorkspaceButton.addEventListener("click", () =>
 collaborationWorkspaceButton.addEventListener("click", () =>
   setWorkspace("collaboration"),
 );
+galleryWorkspaceButton.addEventListener("click", () => setWorkspace("gallery"));
+galleryRefresh.addEventListener("click", () => void refreshGallery());
 
 function renderCollaborationResults(collaborators) {
   collaborationResults.replaceChildren();
