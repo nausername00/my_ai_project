@@ -13,6 +13,10 @@
 
 ## [0.1.1] - 2026-10-03
 
+### Added
+- CORE_WORLD 四环探索竖切片（第四节四环 + 第六节反馈意图；代码随仓库存在，本轮补记文档）：
+  `/v1/explore/propose|run|react` 三路由、前端提议/成果/反馈卡片、`share_win` / `ask_direction` / `shy_retry` / `need_permission` 四个反馈意图 ID
+
 ### Changed
 - 默认推理模型从 `qwen2.5:0.5b` 升级为 `qwen2.5:3b`
   （Electron 默认值、`启动墨灵.bat`、docker-compose、角色自我认知文案同步更新）

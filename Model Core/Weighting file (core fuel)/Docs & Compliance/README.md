@@ -76,6 +76,11 @@ The service exposes:
   persona, currently registered plan tools, recent shipped capability areas,
   and explicit limits. It avoids free-form model drift and clarifies that the
   status summary is not a Git diff or evidence of subjective feelings.
+- The CORE_WORLD four-loop exploration slice (听见乐趣 → 小步尝试 → 展示 + 反馈意图 → 记忆) is implemented as a low-permission vertical slice:
+  - `POST /v1/explore/propose` with `{"message": "..."}` detects interest cues and proposes a mini try (`proposed`, `topic`, `teaser`)
+  - `POST /v1/explore/run` with `{"message": "...", "topic": "..."}` creates a local SVG artifact and returns a companion line, a feedback intent (`share_win` / `ask_direction` / `shy_retry` / `need_permission`) with a short label, updated simulated affect, and a memory entry
+  - `POST /v1/explore/react` with `{"topic": "...", "reaction": "praise|redirect|stop", "note": "..."}` records user feedback into memory and updates affect
+  - The desktop chat renders proposal cards, result cards with intent labels, and praise/redirect/stop buttons. The slice writes no files besides character memory, never captures the screen, and stays local.
 - `POST /v1/agent/collaborate` with `{"task": "..."}` to run a local
   configurable collaboration. `GET /v1/agent/roles` returns the built-in L1
   review roles; a collaboration request may include enabled role keys and

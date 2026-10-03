@@ -238,17 +238,19 @@ L0–L7 变更不得违背 **第二节四条思想** 与 **第四节四环**。
 
 ## 十二、实现对照（当前仓库 · 非 exhaustive）
 
-便于研发对齐差距，**不代表宪法缩水**：
+便于研发对齐差距，**不代表宪法缩水**。下表「现状」为 2026-10-03 对仓库代码的核查结果：
 
-| 宪法能力 | 现状（约） | 缺口方向 |
-|----------|------------|----------|
-| 四环 ① | 场景分类、认知路由、聊天 | 乐趣实体、主动提议 UI |
-| 四环 ②③ | brain plan、部分 L4 占位、协作 | 探索执行器、成果卡片、反馈意图 |
-| 镜中 | 角色卡、资产导入、affect | 实时化身、探索→装扮联动 |
-| 工坊 | 只读工具、规划 | 写文件/子功能打包（高权限） |
-| 剧场 | vision/controller 闸门 | 产品化审批流、陪玩/共画策略 |
-| 邮局 | 本地四角色协作、social 雏形 | grant、跨端、真同步 |
-| 同在场 | Electron 桌面为主 | 移动客户端 + 同步协议 |
+| 宪法能力 | 现状（2026-10-03 核查） | 缺口方向 |
+|----------|------------------------|----------|
+| 四环 ① | 场景分类（`scene.py`）、认知路由（`agent.py`）、乐趣识别与主动提议（`explore.propose_exploration`，cue + 主题提取） | 兴趣/情绪实体跨会话沉淀（当前为会话级检测） |
+| 四环 ②③ | **竖切片已落地**：`explore.run_exploration`（本地 SVG 成果 + 同伴台词 + 反馈意图 + affect）、`/v1/explore/run` 路由、前端成果卡片与意图标签（`renderer.js`） | 更多成果类型（playable / 小窗 / 日志）、意图→UI 的更强提示 |
+| 四环 ④ | 探索记忆写入（`character_store.add_memory`）、用户反馈 `praise/redirect/stop` → 记忆 + affect（`explore.record_exploration_reaction`） | 探索史回放、偏好沉淀策略 |
+| 镜中 | 角色卡、资产导入、affect 模拟状态 | 实时化身、探索→装扮联动（仍缺口） |
+| 工坊 | 只读 + 受限创建工具（`agent_tools`：list/read/create，≤4000 字符独占创建） | 子功能打包、注册 API（仍缺口） |
+| 剧场 | controller 六路 / computer_use / browser 底层已实现，带审批闸门 | 产品化审批流、陪玩/共画策略（仍缺口） |
+| 邮局 | 本地四角色协作（`collaboration.py`）、social 雏形 | grant、跨端、真同步（仍缺口） |
+| 同在场 | Electron 桌面为主 | 移动客户端 + 同步协议（仍缺口） |
+| 忆 | `memory.py`（显式记忆/隐私/导入导出）+ `retrieval.py`（本地检索） | 向量化长期记忆（仍缺口） |
 
 详细工程排期见 `.trae/documents/L0-L7_architecture_remediation_plan.md`；**排期服从 CORE_WORLD，不是反过来**。
 
