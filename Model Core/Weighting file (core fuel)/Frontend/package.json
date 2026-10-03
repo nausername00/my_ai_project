@@ -1,0 +1,73 @@
+{
+  "name": "local-ai-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron desktop MVP for the local AI companion",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check main.cjs && node --check preload.cjs && node --check floating-preload.cjs && node --check renderer.js && node --check ollama-setup.cjs && node --check voice-resources.cjs",
+    "test": "node --test ollama-setup.test.cjs voice-resources.test.cjs notifications.test.cjs social.test.cjs layout.test.cjs",
+    "build:backend": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\build-backend.ps1",
+    "dist:win": "npm run build:backend && electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.moling.desktop",
+    "productName": "墨灵",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "floating-preload.cjs",
+      "index.html",
+      "floating.html",
+      "renderer.js",
+      "style.css",
+      "ollama-setup.cjs",
+      "voice-resources.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "release-backend/MolingBackend",
+        "to": "backend"
+      },
+      {
+        "from": "../Character/assets/voices/zh_CN-huayan-medium.onnx",
+        "to": "Character/assets/voices/zh_CN-huayan-medium.onnx"
+      },
+      {
+        "from": "../Character/assets/voices/zh_CN-huayan-medium.onnx.json",
+        "to": "Character/assets/voices/zh_CN-huayan-medium.onnx.json"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "墨灵"
+    },
+    "artifactName": "${productName}-Setup-${version}.${ext}"
+  },
+  "devDependencies": {
+    "electron": "^41.0.0",
+    "electron-builder": "^26.15.3"
+  },
+  "allowScripts": {
+    "electron@41.10.7": true
+  }
+}

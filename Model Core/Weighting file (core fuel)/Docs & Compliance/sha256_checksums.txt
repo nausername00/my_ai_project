@@ -1,0 +1,9 @@
+# SHA-256 校验和说明
+#
+# 仓库中所有模型权重/二进制文件均为 0 字节占位（不入库，由用户自行下载或转换）。
+# 下载模型后，请在此文件记录其校验和以便追溯，例如：
+#
+# 9f2c8e...  qwen2.5-0.5b-instruct-q4_k_m.gguf
+#
+# 生成校验和的命令（Windows PowerShell）：
+#   Get-FileHash -Algorithm SHA256 <模型文件路径>

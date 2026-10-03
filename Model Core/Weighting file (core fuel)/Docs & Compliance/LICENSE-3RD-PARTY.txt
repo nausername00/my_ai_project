@@ -1,0 +1,14 @@
+第三方许可声明（THIRD-PARTY NOTICES）
+====================================
+
+本仓库不捆绑任何大模型权重或语音模型文件；以下依赖仅以可选 extras 形式
+声明（见 pyproject.toml / requirements.txt），安装时由相应包自带许可：
+
+- torch / transformers（MIT / Apache-2.0，Model extra）
+- faster-whisper（MIT，Speech extra）
+- piper-tts（MIT，Speech extra）
+- peft（Apache-2.0，LoRA 微调可选）
+- onnx2tf / ai-edge-litert / tensorrt（各自许可，模型导出可选）
+
+Electron 前端依赖（node_modules）的许可由其各自包声明；
+构建分发时请保留各依赖的 LICENSE/NOTICE 文件。

@@ -1,0 +1,82 @@
+# ======================================================================
+# 墨灵 (Moling) - 项目忽略规则
+# 排除：依赖与构建产物 / Python 缓存 / 模型权重占位 / 用户数据 / 日志
+# ======================================================================
+
+# ----- 依赖与构建产物 -----
+node_modules/
+Frontend/release/
+Frontend/release-backend/
+Frontend/dist/
+Frontend/*.log
+*.log
+
+# ----- Python 缓存 -----
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# ----- 环境与本地配置 -----
+.env
+.env.local
+.env.*
+!.env.example
+
+# ----- 模型权重与二进制占位（模型文件请自行下载/转换，不入库） -----
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.onnx
+*.engine
+*.tflite
+*.mlmodel
+*.trt
+*.npy
+*.parquet
+*.so
+*.dll
+*.dylib
+*.faiss
+*.index
+*.sqlite
+*.db
+
+# ----- 用户数据与运行时文件（角色卡/头像/语音模型为本地数据） -----
+Model Core/Weighting file (core fuel)/Character/assets/voices/
+Model Core/Weighting file (core fuel)/Character/affect.json
+Model Core/Weighting file (core fuel)/Character/memory.json
+Model Core/Weighting file (core fuel)/Character/privacy.json
+Model Core/Weighting file (core fuel)/Character/assets/*.png
+Model Core/Weighting file (core fuel)/Character/assets/*.jpg
+Model Core/Weighting file (core fuel)/Character/assets/*.jpeg
+Model Core/Weighting file (core fuel)/Character/assets/*.webp
+Model Core/Weighting file (core fuel)/Character/characters/*.json
+!Model Core/Weighting file (core fuel)/Character/characters/default.json
+
+# ----- 训练/推理产物与占位目录 -----
+Model Core/Weighting file (core fuel)/Logs & Checkpoints/
+Model Core/Weighting file (core fuel)/Auto-Generated Cache/
+Model Core/Weighting file (core fuel)/Dataset/
+Model Core/Weighting file (core fuel)/Knowledge base and RAG _Retrieval/
+Model Core/Weighting file (core fuel)/Conversion & Export/quantized/
+Model Core/Weighting file (core fuel)/Safe format pure tensors/
+Model Core/Weighting file (core fuel)/transformer_blocks/
+Model Core/Weighting file (core fuel)/Architectural blueprints/
+Model Core/Weighting file (core fuel)/Translation dictionary_Tokenizer  Vocabulary/
+Model Core/Weighting file (core fuel)/Future-Proofing/consciousness/
+Model Core/Weighting file (core fuel)/Future-Proofing/identity/
+Model Core/Weighting file (core fuel)/High-performance backend/
+Model Core/Weighting file (core fuel)/Platform-Specific/
+Model Core/Weighting file (core fuel)/Engineering Config/.git
+
+# ----- IDE 与系统文件 -----
+.trae/
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store

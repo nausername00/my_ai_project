@@ -1,0 +1,16 @@
+# conda 环境定义（与 pyproject.toml 的 extras 对应）
+name: moling
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10
+  - pip
+  # 模型推理（可选）
+  # - torch
+  # - transformers
+  # 语音（可选）
+  # - faster-whisper
+  # - piper-tts
+  # 开发测试
+  - pip:
+      - pytest>=8.0

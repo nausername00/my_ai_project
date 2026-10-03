@@ -1,0 +1,31 @@
+# 墨灵 - 本地服务容器编排示例
+#
+# 注意：桌面端（Electron）通常在宿主机直接运行并拉起 Python 后端。
+# 以下编排适合"仅部署本地 API + 可选 Ollama"的场景。
+# 后端目录见下方 build context 说明。
+
+services:
+  api:
+    build:
+      context: ../
+      dockerfile: ./Engineering Config/Dockerfile
+    environment:
+      MODEL_BACKEND: ollama
+      OLLAMA_MODEL: qwen2.5:0.5b
+      OLLAMA_URL: http://ollama:11434
+    ports:
+      - "8000:8000"
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-models:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+
+volumes:
+  ollama-models:

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>墨灵 API 调试台</title>
+  <!--
+    独立调试页：不依赖 renderer.js / Electron IPC。
+    直接向本地 Python API（app.py）发起 /v1/generate 请求，适合后端联调。
+    默认端口 8000，可手动修改；Electron 主窗口仍使用 index.html。
+  -->
+  <style>
+    body { font-family: system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; max-width: 720px; margin: 32px auto; padding: 0 16px; color: #222; }
+    h1 { font-size: 20px; }
+    textarea { width: 100%; box-sizing: border-box; min-height: 90px; padding: 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 6px; }
+    input, button { font-size: 14px; padding: 8px 12px; border-radius: 6px; }
+    input { border: 1px solid #ccc; width: 160px; }
+    button { background: #4f46e5; color: #fff; border: none; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: wait; }
+    pre { background: #f6f7f9; border-radius: 6px; padding: 12px; overflow: auto; white-space: pre-wrap; }
+    .row { display: flex; gap: 8px; align-items: center; margin: 12px 0; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <h1>墨灵 API 调试台</h1>
+  <div class="row">
+    <label>后端地址</label>
+    <input id="base" value="http://127.0.0.1:8000">
+    <button id="health">GET /health</button>
+  </div>
+  <textarea id="prompt" placeholder="输入提示词…"></textarea>
+  <div class="row">
+    <label>max_tokens</label>
+    <input id="maxTokens" type="number" value="128" min="1" max="4096">
+    <button id="generate">POST /v1/generate</button>
+  </div>
+  <pre id="output">（结果将显示在这里）</pre>
+
+  <script>
+    const baseInput = document.getElementById("base");
+    const output = document.getElementById("output");
+    const promptBox = document.getElementById("prompt");
+    const maxTokens = document.getElementById("maxTokens");
+
+    function baseUrl() {
+      return baseInput.value.trim().replace(/\/+$/, "");
+    }
+
+    async function run(fn) {
+      output.textContent = "请求中…";
+      const buttons = document.querySelectorAll("button");
+      buttons.forEach((b) => (b.disabled = true));
+      try {
+        await fn();
+      } catch (error) {
+        output.textContent = "错误: " + (error && error.message ? error.message : String(error));
+      } finally {
+        buttons.forEach((b) => (b.disabled = false));
+      }
+    }
+
+    document.getElementById("health").addEventListener("click", () =>
+      run(async () => {
+        const response = await fetch(baseUrl() + "/health");
+        output.textContent = JSON.stringify(await response.json(), null, 2);
+      })
+    );
+
+    document.getElementById("generate").addEventListener("click", () =>
+      run(async () => {
+        const response = await fetch(baseUrl() + "/v1/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: promptBox.value || "你好", max_tokens: Number(maxTokens.value) || 128 }),
+        });
+        output.textContent = JSON.stringify(await response.json(), null, 2);
+      })
+    );
+  </script>
+</body>
+</html>

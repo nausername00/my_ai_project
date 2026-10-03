@@ -1,0 +1,37 @@
+# 服务清单示例（Kubernetes / 编排平台的声明式占位）
+# 桌面端默认不依赖容器部署；此文件仅说明服务形态与端口约定。
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: moling-api
+spec:
+  selector:
+    app: moling
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: moling-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: moling
+  template:
+    metadata:
+      labels:
+        app: moling
+    spec:
+      containers:
+        - name: api
+          image: moling-api:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: MODEL_BACKEND
+              value: ollama

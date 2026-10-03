@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'none';"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>墨小灵 · Moling</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">墨</div>
+          <div>
+            <strong>墨小灵</strong>
+            <span>墨灵 · Moling</span>
+          </div>
+        </div>
+        <button class="new-chat" id="new-chat" type="button" aria-label="新对话" title="新对话">
+          <span class="new-chat-icon" aria-hidden="true">＋</span>
+          <span class="new-chat-label">新对话</span>
+        </button>
+        <div class="sidebar-label">工作区</div>
+        <button class="conversation active" id="chat-workspace" type="button" aria-label="和墨灵聊天" title="和墨灵聊天" aria-pressed="true">
+          <span class="workspace-icon" aria-hidden="true">聊</span>
+          <span class="workspace-label">和墨灵聊天</span>
+        </button>
+        <button class="conversation workspace-button" id="translator-workspace" type="button" aria-label="文本翻译器" title="文本翻译器" aria-pressed="false">
+          <span class="workspace-icon" aria-hidden="true">译</span>
+          <span class="workspace-label">文本翻译器</span>
+        </button>
+        <button class="conversation workspace-button" id="collaboration-workspace" type="button" aria-label="智能体协作" title="智能体协作" aria-pressed="false">
+          <span class="workspace-icon" aria-hidden="true">协</span>
+          <span class="workspace-label">智能体协作</span>
+        </button>
+        <div class="sidebar-bottom">
+          <span class="local-indicator"></span>
+          <span>本地服务</span>
+        </div>
+      </aside>
+
+      <section class="main-panel">
+        <header class="topbar">
+          <div class="topbar-title">
+            <div class="character-avatar topbar-avatar" id="topbar-avatar" data-mood="calm">
+              <img id="topbar-avatar-image" alt="" hidden />
+              <span id="topbar-avatar-fallback" aria-hidden="true">墨</span>
+            </div>
+            <div class="topbar-copy">
+              <strong>和墨灵聊天</strong>
+              <span id="model-status">正在连接本地模型…</span>
+              <span class="affect-indicator" id="affect-indicator">模拟状态 · 平静</span>
+            </div>
+          </div>
+          <button class="icon-button" id="settings-toggle" type="button">
+            角色设置
+          </button>
+        </header>
+
+        <section class="model-setup" id="model-setup" aria-live="polite" hidden>
+          <div class="model-setup-copy">
+            <strong id="model-setup-title">本地模型尚未就绪</strong>
+            <span id="model-setup-message"></span>
+            <progress id="model-download-progress" max="100" value="0" hidden></progress>
+          </div>
+          <div class="model-setup-actions">
+            <button class="icon-button" id="ollama-download-link" type="button" hidden>
+              获取 Ollama
+            </button>
+            <button class="save-button" id="download-model-button" type="button" hidden>
+              下载本地模型
+            </button>
+          </div>
+        </section>
+
+        <section class="translator-panel" id="translator-panel" aria-labelledby="translator-title" hidden>
+          <div class="translator-heading">
+            <span class="eyebrow">MOLING TOOL</span>
+            <h1 id="translator-title">文本翻译器</h1>
+            <p>墨灵负责翻译，我会和你一起逐步完善这个工具。</p>
+          </div>
+          <form id="translator-form" class="translator-form">
+            <div class="translator-language-row">
+              <label>源语言
+                <select id="translator-source" name="source_language">
+                  <option value="auto">自动识别</option>
+                  <option value="zh-CN">简体中文</option>
+                  <option value="en-US">英语</option>
+                  <option value="ja-JP">日语</option>
+                  <option value="ko-KR">韩语</option>
+                  <option value="fr-FR">法语</option>
+                  <option value="de-DE">德语</option>
+                  <option value="es-ES">西班牙语</option>
+                </select>
+              </label>
+              <span class="translator-arrow" aria-hidden="true">→</span>
+              <label>目标语言
+                <select id="translator-target" name="target_language">
+                  <option value="zh-CN">简体中文</option>
+                  <option value="en-US" selected>英语</option>
+                  <option value="ja-JP">日语</option>
+                  <option value="ko-KR">韩语</option>
+                  <option value="fr-FR">法语</option>
+                  <option value="de-DE">德语</option>
+                  <option value="es-ES">西班牙语</option>
+                </select>
+              </label>
+            </div>
+            <label class="translator-text-label" for="translator-input">待翻译文本
+              <textarea id="translator-input" name="text" rows="8" maxlength="4000" required placeholder="粘贴要翻译的文本，最多 4000 字"></textarea>
+            </label>
+            <div class="translator-input-footer">
+              <span id="translator-input-count">0 / 4000</span>
+              <button class="icon-button" id="translator-clear" type="button">清空</button>
+            </div>
+            <div class="translator-output-heading">
+              <label for="translator-output">翻译结果</label>
+              <button class="icon-button" id="translator-copy" type="button" disabled>复制结果</button>
+            </div>
+            <textarea id="translator-output" rows="8" readonly placeholder="翻译结果会显示在这里"></textarea>
+            <div class="translator-submit-row">
+              <p id="translator-status" class="form-status" role="status" aria-live="polite"></p>
+              <button class="save-button" id="translator-submit" type="submit">翻译</button>
+            </div>
+          </form>
+          <p class="translator-privacy-note">文本会发送给当前配置的模型服务以生成译文，不会写入聊天记录或角色记忆。连接本机 Ollama 时文本留在本机；如果模型服务配置为远程地址，文本会发送至该服务。</p>
+        </section>
+
+        <section class="collaboration-panel" id="collaboration-panel" aria-labelledby="collaboration-title" hidden>
+          <div class="translator-heading collaboration-heading">
+            <span class="eyebrow">LOCAL AGENT TEAM</span>
+            <h1 id="collaboration-title">智能体协作工作台</h1>
+            <p>角色视角（L1）与模型服务（L2）分离配置。当前评审角色由同一个本机模型分别扮演；外部模型与自动调度尚未接入。</p>
+          </div>
+          <ol class="collaboration-flow" aria-label="协作流程">
+            <li><span>01</span><strong>理解目标</strong><small>生成意图与步骤</small></li>
+            <li><span>02</span><strong>逐次授权</strong><small>读取与新建文件均需你确认</small></li>
+            <li><span>03</span><strong>观察结果</strong><small>展示实际工具返回</small></li>
+            <li><span>04</span><strong>核验与复盘</strong><small>模型评估，不是事实证明</small></li>
+          </ol>
+          <form id="collaboration-form" class="collaboration-form">
+            <div class="collaboration-form-heading">
+              <div>
+                <label for="collaboration-task">当前目标</label>
+                <p>描述希望解决的问题、相关范围和判断完成的标准。</p>
+              </div>
+              <span class="character-card-help">最多 4000 字</span>
+            </div>
+            <textarea id="collaboration-task" maxlength="4000" rows="5" placeholder="例如：检查翻译器下一阶段的布局、模块边界和验收测试"></textarea>
+            <details class="collaboration-role-settings">
+              <summary>
+                <span>评审角色与提示词</span>
+                <span class="collaboration-role-summary">
+                  <span class="character-card-help" id="collaboration-role-count">正在加载…</span>
+                  <span class="character-card-help">每个角色可单独关闭或调整</span>
+                </span>
+              </summary>
+              <div class="collaboration-role-list" id="collaboration-role-list" aria-live="polite"></div>
+              <div class="collaboration-role-footer">
+                <p class="character-card-help">角色配置只保存在此应用的本机浏览器存储中；本次任务只发送给本机模型。</p>
+                <button class="icon-button" id="collaboration-roles-reset" type="button">恢复默认角色</button>
+              </div>
+            </details>
+            <p class="form-status collaboration-role-status" id="collaboration-role-status" role="status" aria-live="polite"></p>
+            <div class="collaboration-form-footer">
+              <span class="character-card-help">不会自动修改文件、联网、联系他人或保存记忆；评审结果目前仅保留在此窗口。</span>
+              <div class="collaboration-actions">
+                <button class="icon-button" id="brain-plan-submit" type="button" disabled>生成可审阅计划</button>
+                <button class="save-button" id="collaboration-submit" type="submit" disabled>等待本机模型就绪</button>
+              </div>
+            </div>
+          </form>
+          <p class="form-status collaboration-status" id="collaboration-status" role="status" aria-live="polite"></p>
+          <section class="brain-plan" id="brain-plan" hidden>
+            <header class="brain-plan-header">
+              <div>
+                <span class="eyebrow">BRAIN KERNEL · PLAN</span>
+                <h2>墨灵的行动计划</h2>
+              </div>
+              <span class="plan-limit">最多 8 步 · 仅规划不会自动执行</span>
+            </header>
+            <p class="brain-plan-summary" id="brain-plan-summary"></p>
+            <p class="brain-plan-target" id="brain-plan-target"></p>
+            <div class="brain-risk-legend" aria-label="风险标签说明">
+              <span><i class="risk-dot risk-local"></i>本地可撤销：可逐次批准读取；新建文件需单独许可</span>
+              <span><i class="risk-dot risk-permission"></i>需要许可：当前没有对应执行工具</span>
+              <span><i class="risk-dot risk-blocked"></i>禁止：不会执行</span>
+            </div>
+            <ol class="brain-plan-steps" id="brain-plan-steps"></ol>
+            <section class="brain-memory-candidates" id="brain-plan-memory" hidden aria-labelledby="brain-plan-memory-title">
+              <h3 id="brain-plan-memory-title">可能值得记住</h3>
+              <ul id="brain-plan-memory-list"></ul>
+              <p>这些只是模型提出的候选，不会自动写入记忆；请先核对，再到角色设置的“记忆”中手动保存。</p>
+            </section>
+            <div class="brain-plan-observations" id="brain-plan-observations"></div>
+            <p class="brain-plan-reflection" id="brain-plan-reflection"></p>
+          </section>
+          <section class="collaboration-synthesis" id="collaboration-synthesis" hidden>
+            <span class="eyebrow">MOLING · SYNTHESIS</span>
+            <h2>墨灵的综合判断</h2>
+            <p class="synthesis-intro" id="collaboration-synthesis-text"></p>
+            <div class="synthesis-sections" id="collaboration-synthesis-sections"></div>
+          </section>
+          <div class="collaboration-results" id="collaboration-results"></div>
+        </section>
+
+        <section class="conversation-view" id="conversation" aria-live="polite">
+          <div class="welcome" id="welcome">
+            <figure class="character-display" id="character-display">
+              <img id="welcome-avatar-image" alt="墨灵角色立绘" hidden />
+              <span id="welcome-avatar-fallback" aria-hidden="true">墨</span>
+            </figure>
+            <div class="welcome-copy">
+              <h1>你好，我是墨小灵</h1>
+              <p>对话由你电脑上的本地模型生成。你可以从一个问题开始。</p>
+              <div class="suggestions">
+                <button type="button" data-prompt="帮我安排今天的计划">安排今天的计划</button>
+                <button type="button" data-prompt="给我一个简单的晚餐建议">想一个晚餐建议</button>
+                <button type="button" data-prompt="用简单的话解释什么是人工智能">解释一个新概念</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <form class="composer" id="composer">
+          <label class="sr-only" for="message-input">发送消息</label>
+          <textarea
+            id="message-input"
+            rows="1"
+            maxlength="8000"
+            placeholder="发消息给墨灵…"
+          ></textarea>
+          <div class="composer-footer">
+            <div class="composer-actions">
+              <button class="icon-button" id="record-button" type="button">开始录音</button>
+              <button class="send-button" id="send-button" type="submit" aria-label="发送">
+                <span>发送</span>
+                <span aria-hidden="true">↑</span>
+              </button>
+            </div>
+            <span id="voice-status" role="status">Enter 发送 · Shift+Enter 换行</span>
+          </div>
+        </form>
+        <div class="notice" id="chat-notice">本地运行 · 当前对话上下文仅保留在本次窗口中，不保存为聊天历史</div>
+      </section>
+
+      <aside class="settings-panel" id="settings-panel" aria-label="角色设置" hidden>
+        <div class="settings-header">
+          <div>
+            <span class="eyebrow">PERSONA</span>
+            <h2>角色卡</h2>
+          </div>
+          <button class="icon-button" id="settings-close" type="button" aria-label="关闭设置">×</button>
+        </div>
+        <nav class="settings-tabs" aria-label="设置分类">
+          <button class="settings-tab active" type="button" data-settings-tab="persona">角色</button>
+          <button class="settings-tab" type="button" data-settings-tab="memories">记忆</button>
+          <button class="settings-tab" type="button" data-settings-tab="affect">模拟状态</button>
+        </nav>
+        <section id="persona-panel">
+          <div class="character-gallery-header">
+            <div>
+              <h3>角色卡</h3>
+              <p class="character-card-help">选择一张卡作为当前对话角色，编辑可调整资料与目标。</p>
+            </div>
+            <button class="icon-button" id="character-create" type="button">＋ 新建</button>
+          </div>
+          <div class="character-card-grid" id="character-card-list" aria-live="polite"></div>
+          <p class="form-status" id="character-card-status" role="status"></p>
+          <p class="character-card-help">角色记忆库目前共享；互动状态按角色分别保存。</p>
+        </section>
+        <section id="memories-panel" hidden>
+          <div class="privacy-setting">
+            <label class="privacy-toggle">
+              <input id="include-memories" type="checkbox" />
+              <span>将可用记忆加入模型提示</span>
+            </label>
+            <p>设为“仅本地”的记录始终不会加入提示。仅在连接本机 Ollama 时，模型请求内容才会留在本机。</p>
+            <p class="privacy-warning">记忆当前以明文 JSON 保存在磁盘；尚未加密，也不会云同步。请勿保存密码或密钥。</p>
+          </div>
+          <div class="memory-actions">
+            <button class="icon-button" id="memory-export" type="button">导出备份</button>
+            <button class="icon-button" id="memory-import" type="button">导入合并</button>
+          </div>
+          <p class="form-status" id="memory-status" role="status"></p>
+          <form id="memory-form" class="memory-form">
+            <label>添加一条记忆<textarea name="content" rows="3" required maxlength="20000"></textarea></label>
+            <label>隐私范围
+              <select name="visibility">
+                <option value="model">参与当前模型提示</option>
+                <option value="private">仅本地保存，不进入提示</option>
+              </select>
+            </label>
+            <button class="save-button" type="submit">保存记忆</button>
+          </form>
+          <div class="memory-list" id="memory-list"></div>
+        </section>
+        <section id="affect-panel" hidden>
+          <div class="affect-settings">
+            <h3>互动状态（模拟）</h3>
+            <p>开心、好奇、担心、害羞等是角色当前的模拟表达状态；温柔、真诚、有主见是稳定人格。当前状态只按文字线索调整或由你手动设置，不会录音分析情绪，也不代表真实感受。</p>
+            <label for="affect-mood">当前表现状态</label>
+            <select id="affect-mood">
+              <option value="calm">平静</option>
+              <option value="happy">开心</option>
+              <option value="curious">好奇</option>
+              <option value="worried">担心</option>
+              <option value="shy">害羞</option>
+              <option value="warm">温暖</option>
+              <option value="caring">关怀</option>
+            </select>
+            <p id="affect-reason" class="affect-reason"></p>
+            <div class="affect-actions">
+              <button class="save-button" id="affect-save" type="button">保存状态</button>
+              <button class="icon-button" id="affect-reset" type="button">重置为平静</button>
+            </div>
+            <p class="form-status" id="affect-status" role="status"></p>
+          </div>
+        </section>
+      </aside>
+      <dialog class="character-editor-dialog" id="character-editor" aria-labelledby="character-editor-title">
+        <div class="character-editor-header">
+          <div>
+            <span class="eyebrow">CHARACTER CARD</span>
+            <h2 id="character-editor-title">编辑角色卡</h2>
+          </div>
+          <button class="icon-button" id="character-editor-close" type="button" aria-label="关闭编辑器">×</button>
+        </div>
+        <form id="character-form">
+            <details class="character-section" open>
+              <summary>身份与分类</summary>
+              <div class="character-section-fields">
+                <label>角色分类
+                  <select name="category">
+                    <option value="陪伴角色">陪伴角色</option>
+                    <option value="学习伙伴">学习伙伴</option>
+                    <option value="助手">助手</option>
+                    <option value="幻想角色">幻想角色</option>
+                    <option value="自定义">自定义</option>
+                    <option value="自建角色">自建角色</option>
+                  </select>
+                </label>
+                <label>正式名<input name="formal_name" required maxlength="60" /></label>
+                <label>昵称<input name="nickname" required maxlength="60" /></label>
+                <label>英文名<input name="english_name" required maxlength="60" /></label>
+                <label>性别<input name="gender" required maxlength="40" /></label>
+                <label>自称<input name="self_reference" required maxlength="40" /></label>
+                <label>对话语言
+                  <select name="language">
+                    <option value="auto">跟随对话语言</option>
+                    <option value="zh-CN">简体中文</option>
+                    <option value="en-US">English</option>
+                    <option value="ja-JP">日本語</option>
+                  </select>
+                </label>
+              </div>
+            </details>
+            <details class="character-section" open>
+              <summary>人格与表达</summary>
+              <p class="character-card-help" id="personality-current">当前使用：自定义人格</p>
+              <button class="icon-button" id="open-personality-picker" type="button">选择人格</button>
+              <p class="character-card-help">选中的人格会填入此角色卡的编辑草稿；选择或预览不会切换当前聊天角色。保存角色卡后生效。</p>
+              <details class="character-custom-fields">
+                <summary>自定义人格细节</summary>
+                <div class="character-section-fields">
+                  <label>内在原则 <span>角色做选择时看重什么</span><textarea name="core_values" rows="3"></textarea></label>
+                  <label>主动驱动力 <span>角色自然想理解、学习、建立关系或创造什么</span><textarea name="inner_drives" rows="3"></textarea></label>
+                  <label>行为倾向 <span>这些原则在日常交流中的具体体现</span><textarea name="behavior_traits" rows="3"></textarea></label>
+                  <label>日常习惯 <span>角色通常如何倾听、回应、学习或复盘</span><textarea name="habits" rows="3"></textarea></label>
+                  <label>喜欢 <span>角色偏好的交流、活动或创作方向</span><textarea name="likes" rows="3"></textarea></label>
+                  <label>不喜欢 <span>角色倾向回避的互动方式，不覆盖安全边界</span><textarea name="dislikes" rows="3"></textarea></label>
+                  <label>关系与行动边界 <span>角色应尊重的选择、隐私和权限边界</span><textarea name="boundaries" rows="3"></textarea></label>
+                  <label>情绪表达范围 <span>可表达的情绪，不代表此刻真实感受</span><textarea name="emotional_range" rows="2"></textarea></label>
+                  <label>说话风格 <span>节奏、温度、直接程度、幽默感等</span><textarea name="communication_style" rows="3"></textarea></label>
+                  <label>标志性表达 <span>可选的惯用表达；不要求每次使用</span><textarea name="signature_lines" rows="3"></textarea></label>
+                </div>
+              </details>
+            </details>
+            <details class="character-section">
+              <summary>智能体自主性与成长</summary>
+              <label class="privacy-toggle">
+                <input id="agent-autonomy-enabled" type="checkbox" />
+                <span>允许墨灵自主形成和跟进低风险本地目标</span>
+              </label>
+              <p class="character-card-help">目标不是用户分配的清单。墨灵会根据内在驱动力和共同经历，在对话后自行复盘并维护目标；可以规划学习、记录、创作和低风险的关系练习。读取屏幕、改动用户文件、联网或联系他人，仍需先取得你的许可。目标和进度保存为本地角色数据。</p>
+              <div class="agent-growth-actions">
+                <button class="icon-button" id="agent-reflect-now" type="button">让墨灵复盘最近对话</button>
+                <span class="character-card-help">只使用当前本地对话，不会联网或联系他人。</span>
+              </div>
+              <div class="agent-goals" id="agent-goals"></div>
+              <p class="form-status" id="agent-reflection-status" role="status"></p>
+            </details>
+            <details class="character-section">
+              <summary>外观与声音</summary>
+              <p class="character-card-help">模型、网格/贴图、动作、表情和情绪映射统一在表现工作台中管理。</p>
+              <button class="icon-button" id="open-model-studio" type="button">打开模型与表现设置</button>
+              <label>角色参考声线
+                <select id="character-voice-select" aria-describedby="character-voice-note">
+                  <option value="">当前应用合成音色 · Piper</option>
+                </select>
+              </label>
+              <button class="icon-button" id="open-voice-studio" type="button">管理声音资源与注册参考声线</button>
+              <p class="character-card-help" id="character-voice-note">参考音频可试听并关联到角色卡，但不会训练或改变当前 Piper 合成音色。</p>
+              <p class="form-status avatar-help" id="avatar-status" role="status"></p>
+            </details>
+            <button class="save-button" type="submit">保存角色卡</button>
+            <p class="form-status" id="character-status" role="status"></p>
+          </form>
+      </dialog>
+      <dialog class="character-editor-dialog personality-picker-dialog" id="personality-picker" aria-labelledby="personality-picker-title">
+        <div class="character-editor-header">
+          <div>
+            <span class="eyebrow">PERSONALITY LIBRARY</span>
+            <h2 id="personality-picker-title">人格卡片</h2>
+          </div>
+          <button class="icon-button" id="personality-picker-close" type="button" aria-label="关闭人格卡片">×</button>
+        </div>
+        <section id="personality-gallery">
+          <p class="character-card-help">打开卡片可查看完整人格档案；选择只应用到当前编辑草稿，返回则不更改。</p>
+          <div class="personality-card-grid" id="personality-card-grid"></div>
+        </section>
+        <section id="personality-detail" class="personality-detail" hidden>
+          <button class="icon-button" id="personality-back" type="button">返回卡片</button>
+          <h3 id="personality-detail-title"></h3>
+          <p id="personality-detail-summary"></p>
+          <div id="personality-detail-fields" class="personality-detail-fields"></div>
+          <div class="personality-detail-actions">
+            <button class="icon-button" id="personality-detail-back" type="button">返回</button>
+            <button class="save-button" id="personality-choose" type="button">选择此人格</button>
+          </div>
+        </section>
+      </dialog>
+      <dialog class="character-editor-dialog voice-studio-dialog" id="voice-studio" aria-labelledby="voice-studio-title">
+        <div class="character-editor-header">
+          <div>
+            <span class="eyebrow">VOICE RESOURCE LIBRARY</span>
+            <h2 id="voice-studio-title">声音资源与参考声线</h2>
+          </div>
+          <button class="icon-button" id="voice-studio-close" type="button" aria-label="关闭声音资源设置">×</button>
+        </div>
+        <p class="character-card-help voice-reference-notice">这里只注册本地参考录音，用于试听、整理和关联角色卡；WAV/MP3 不会自动训练模型，也不会改变当前 Piper 合成声线。请仅导入自己拥有或已获授权使用的录音。</p>
+        <form id="voice-registration-form" class="voice-registration-form">
+          <label>自定义名称
+            <input id="voice-resource-name" maxlength="60" required placeholder="例如：墨灵·温柔中文参考" />
+          </label>
+          <label>参考语言
+            <select id="voice-resource-language">
+              <option value="auto">自动 / 未指定</option>
+              <option value="zh-CN">简体中文</option>
+              <option value="en-US">英语</option>
+              <option value="ja-JP">日语</option>
+              <option value="ko-KR">韩语</option>
+              <option value="fr-FR">法语</option>
+              <option value="de-DE">德语</option>
+              <option value="es-ES">西班牙语</option>
+            </select>
+          </label>
+          <div class="voice-sample-picker">
+            <span id="voice-sample-name">尚未选择 WAV / MP3 样本</span>
+            <button class="icon-button" id="voice-sample-choose" type="button">选择文件</button>
+          </div>
+          <div class="voice-sample-actions">
+            <button class="icon-button" id="voice-sample-preview" type="button" disabled>试听所选样本</button>
+            <button class="save-button" id="voice-resource-register" type="submit" disabled>注册到声音资源</button>
+          </div>
+        </form>
+        <p class="form-status" id="voice-resource-status" role="status" aria-live="polite"></p>
+        <h3>已注册参考声线</h3>
+        <div class="voice-resource-list" id="voice-resource-list" aria-live="polite"></div>
+        <p class="character-card-help">导入文件经校验后仅保存在本机应用数据目录；注册前只暂存在当前窗口内存。参考录音不会加入聊天历史、角色记忆或模型提示；可从列表中删除。</p>
+      </dialog>
+      <dialog class="character-editor-dialog model-studio-dialog" id="model-studio" aria-labelledby="model-studio-title">
+        <div class="character-editor-header">
+          <div>
+            <span class="eyebrow">APPEARANCE STUDIO</span>
+            <h2 id="model-studio-title">角色外观与表现</h2>
+          </div>
+          <button class="icon-button" id="model-studio-close" type="button" aria-label="关闭模型设置">×</button>
+        </div>
+        <div class="model-studio-layout">
+          <section class="model-studio-controls" aria-label="模型资源设置">
+            <label>模型分类
+              <select id="model-format">
+                <option value="mmd">MMD（PMX / PMD）</option>
+                <option value="vrm">VRM</option>
+                <option value="live2d">Live2D</option>
+                <option value="pngtuber">PNGtuber</option>
+              </select>
+            </label>
+            <div class="model-import-row">
+              <label for="model-file-select">模型 / 主素材</label>
+              <button class="icon-button" id="model-assets-import" type="button">导入模型与资源</button>
+              <select id="model-file-select"></select>
+            </div>
+            <p class="character-card-help">可一次选择模型、贴图、动作、表情与物理参数文件；单文件最多 250 MB，单次最多 500 MB。文件仅复制到本地资源目录，不会执行。</p>
+            <div class="avatar-editor">
+              <div class="character-avatar settings-avatar" id="settings-avatar" data-mood="calm">
+                <img id="settings-avatar-image" alt="当前角色立绘预览" hidden />
+                <span id="settings-avatar-fallback" aria-hidden="true">墨</span>
+              </div>
+              <div class="avatar-editor-controls">
+                <input id="avatar-name" name="avatar" maxlength="100" readonly placeholder="尚未选择立绘" />
+                <button class="icon-button" id="avatar-select" type="button">导入静态 PNG 立绘</button>
+                <button class="icon-button" id="avatar-clear" type="button">移除立绘</button>
+              </div>
+            </div>
+            <p class="form-status avatar-help">其他模型格式会登记并预览资源清单；运行时渲染器尚未集成。</p>
+          </section>
+          <section class="model-preview-pane" aria-label="角色组合预览">
+            <h3>组合预览</h3>
+            <div class="model-preview-stage" id="model-preview-stage">
+              <img id="model-preview-image" alt="所选 PNGtuber 素材预览" hidden />
+              <span id="model-preview-fallback">角色预览</span>
+            </div>
+            <strong id="model-preview-name">尚未选择主素材</strong>
+            <div class="model-resource-list" id="model-resource-list"></div>
+            <div class="model-resource-list" id="model-preview-action-tags"></div>
+            <div class="model-preview-mappings" id="model-preview-mappings"></div>
+            <p class="character-card-help" id="model-runtime-note"></p>
+          </section>
+        </div>
+        <section class="model-pose-settings">
+          <label>动作 / 姿态清单 <span>VMD、Motion3 等资源名或动作标签，逗号分隔</span>
+            <textarea id="model-actions" rows="2" placeholder="idle, wave, happy"></textarea>
+          </label>
+          <label>表情清单 <span>Expression、Exp3 等资源名或表情标签，逗号分隔</span>
+            <textarea id="model-expressions" rows="2" placeholder="neutral, smile, surprised"></textarea>
+          </label>
+          <h3>情绪 → 动作 / 表情映射</h3>
+          <div class="emotion-mapping-grid" id="emotion-mapping-grid"></div>
+        </section>
+        <div class="model-studio-footer">
+          <p class="form-status" id="model-studio-status" role="status"></p>
+          <button class="save-button" id="model-studio-save" type="button">保存角色卡与表现设置</button>
+        </div>
+      </dialog>
+    </main>
+    <script src="./renderer.js"></script>
+  </body>
+</html>

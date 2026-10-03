@@ -1,0 +1,13 @@
+/*
+ * tailwind.css — Tailwind 迁移预留
+ *
+ * 当前桌面端全部样式位于 style.css（约 43 KB），运行时无需 Tailwind。
+ * 若后续引入 Tailwind CSS，本文件作为 @tailwind 指令入口：
+ *
+ *   @tailwind base;
+ *   @tailwind components;
+ *   @tailwind utilities;
+ *
+ * 并在构建链中配置 tailwind.config.js 与 PostCSS。
+ */
+/* （占位：当前不使用，样式见 style.css） */

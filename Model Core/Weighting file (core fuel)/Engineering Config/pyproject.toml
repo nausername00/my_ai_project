@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "local-ai-service"
+version = "0.1.0"
+description = "Dependency-light local AI service scaffold"
+requires-python = ">=3.10"
+
+[tool.setuptools]
+package-dir = {"" = "../Source code engine"}
+py-modules = [
+    "agent",
+    "agent_tools",
+    "api",
+    "app",
+    "brain",
+    "browser",
+    "character",
+    "collaboration",
+    "computer_use",
+    "controller",
+    "explore",
+    "finetune",
+    "generate",
+    "inference",
+    "memory",
+    "metrics",
+    "model",
+    "modeling_xxx",
+    "planner",
+    "retrieval",
+    "scene",
+    "social",
+    "speech",
+    "train",
+    "utils",
+    "vision",
+    "visualize",
+]
+
+[project.optional-dependencies]
+model = [
+    "torch>=2.2",
+    "transformers>=4.40",
+]
+speech = [
+    "faster-whisper>=1.2,<2",
+    "piper-tts>=1.8,<2",
+]
+perception = [
+    "mss>=9.0",
+    "pytesseract>=0.3.10",
+    "pillow>=10.0",
+]
+execution = [
+    "pyautogui>=0.9.54",
+    "playwright>=1.40",
+]
+packaging = [
+    "pyinstaller>=6.14,<7",
+]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["Testing & Evaluation/tests"]
+pythonpath = ["Source code engine"]

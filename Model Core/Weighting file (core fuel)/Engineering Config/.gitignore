@@ -1,0 +1,8 @@
+# 子目录 .gitignore（Engineering Config 视角）
+# 完整忽略规则见仓库根目录的 .gitignore。
+
+# 本目录内通常不含用户数据；如在本目录独立使用 git，可参考：
+# __pycache__/
+# *.py[cod]
+# .env
+# *.log

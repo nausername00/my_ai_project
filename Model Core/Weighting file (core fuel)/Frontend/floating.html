@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>墨小灵 · 悬浮窗</title>
+<style>
+  :root {
+    --panel-bg: rgba(22, 24, 32, 0.78);
+    --panel-border: rgba(255, 255, 255, 0.08);
+    --text: #e8eaf0;
+    --text-dim: #9aa3b2;
+    --accent: #7c6fff;
+    --success: #22c55e;
+    --warn: #f59e0b;
+    --error: #ef4444;
+    --info: #3b82f6;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    color: var(--text);
+    background: transparent;
+    user-select: none;
+    overflow: hidden;
+  }
+  #panel {
+    position: absolute;
+    inset: 0;
+    border-radius: 18px;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    display: flex;
+    flex-direction: column;
+    padding: 10px 12px 12px;
+    -webkit-app-region: drag;
+  }
+  #drag-handle {
+    -webkit-app-region: drag;
+    height: 18px;
+    flex: 0 0 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 2px;
+  }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.85;
+    box-shadow: 0 0 8px rgba(124, 111, 255, 0.8);
+  }
+  #toolbar { -webkit-app-region: no-drag; display: flex; gap: 6px; }
+  .tool-btn {
+    width: 20px; height: 20px; border-radius: 50%;
+    border: 1px solid var(--panel-border);
+    background: rgba(255,255,255,0.04);
+    color: var(--text-dim);
+    font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .tool-btn:hover { color: var(--text); background: rgba(255,255,255,0.08); }
+
+  #body {
+    flex: 1 1 auto;
+    display: flex;
+    gap: 10px;
+    min-height: 0;
+    margin-top: 4px;
+  }
+
+  #avatar-wrap {
+    flex: 0 0 64px;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #9f90ff, #4d3fd8 70%);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 20px rgba(124, 111, 255, 0.45);
+    overflow: hidden;
+    font-size: 26px;
+    font-weight: 700;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    transition: transform 0.15s ease;
+  }
+  #avatar-wrap:hover { transform: scale(1.05); }
+  #avatar-wrap.listening {
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(124, 111, 255, 0.45); }
+    50% { box-shadow: 0 0 28px rgba(124, 111, 255, 0.85); }
+  }
+
+  #content {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  #nickname {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    -webkit-app-region: no-drag;
+  }
+  #status {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: -2px;
+    -webkit-app-region: no-drag;
+  }
+
+  #notifications {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-right: 2px;
+    -webkit-app-region: no-drag;
+  }
+  #notifications::-webkit-scrollbar { width: 4px; }
+  #notifications::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+  .note {
+    position: relative;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-left-width: 3px;
+    border-radius: 10px;
+    padding: 6px 8px;
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--text);
+    transition: opacity 0.3s ease;
+  }
+  .note.level-info { border-left-color: var(--info); }
+  .note.level-success { border-left-color: var(--success); }
+  .note.level-warn { border-left-color: var(--warn); }
+  .note.level-error { border-left-color: var(--error); }
+  .note-title {
+    font-weight: 600;
+    font-size: 11.5px;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+  .note-msg {
+    color: var(--text);
+    opacity: 0.92;
+    word-break: break-word;
+  }
+  .note-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 5px;
+  }
+  .note-action {
+    background: rgba(124, 111, 255, 0.18);
+    border: 1px solid rgba(124, 111, 255, 0.4);
+    color: #d5d0ff;
+    font-size: 10.5px;
+    padding: 2px 7px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .note-action:hover { background: rgba(124, 111, 255, 0.3); }
+  .note.dismissed { opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+  <div id="panel">
+    <div id="drag-handle">
+      <div class="dot" title="墨小灵"></div>
+      <div id="toolbar">
+        <button class="tool-btn" id="btn-hide" title="隐藏悬浮窗">−</button>
+      </div>
+    </div>
+    <div id="body">
+      <div id="avatar-wrap" title="点击打开主窗口"><span id="avatar-text">灵</span></div>
+      <div id="content">
+        <div id="nickname">墨小灵</div>
+        <div id="status">在线 · 等待指令</div>
+        <div id="notifications"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const notifications = new Map();
+  const MAX_NOTES = 12;
+  const box = document.getElementById("notifications");
+  const statusEl = document.getElementById("status");
+  const nicknameEl = document.getElementById("nickname");
+  const avatarEl = document.getElementById("avatar-wrap");
+  const avatarText = document.getElementById("avatar-text");
+
+  function formatExpiry(expiresAt) {
+    if (!Number.isFinite(expiresAt)) return "";
+    const remain = Math.max(0, expiresAt - Date.now());
+    const sec = Math.ceil(remain / 1000);
+    if (sec <= 0) return "";
+    if (sec < 60) return sec + "s";
+    const m = Math.floor(sec / 60);
+    return m + "m";
+  }
+
+  function removeNote(id) {
+    const el = document.querySelector(`.note[data-id="${id}"]`);
+    if (!el) return;
+    el.classList.add("dismissed");
+    setTimeout(() => {
+      notifications.delete(id);
+      if (el.parentNode) el.parentNode.removeChild(el);
+    }, 280);
+  }
+
+  function renderNote(note) {
+    const existing = document.querySelector(`.note[data-id="${note.id}"]`);
+    if (existing) return;
+    const div = document.createElement("div");
+    div.className = `note level-${note.level}`;
+    div.dataset.id = note.id;
+    const ttl = formatExpiry(note.expires_at);
+    let titleHtml = "";
+    if (note.title) {
+      titleHtml = `<div class="note-title">${escapeHtml(note.title)}${ttl ? ` <span style="float:right;color:var(--text-dim);font-weight:400;opacity:0.7">${ttl}</span>` : ""}</div>`;
+    }
+    const msgHtml = note.message ? `<div class="note-msg">${escapeHtml(note.message)}</div>` : "";
+    let actionsHtml = "";
+    if (Array.isArray(note.actions) && note.actions.length) {
+      const btns = note.actions.map((a, i) => {
+        const aid = `${note.id}-${i}`;
+        setTimeout(() => {
+          const btn = document.getElementById(aid);
+          if (btn) btn.addEventListener("click", () => triggerAction(note.id, i));
+        }, 0);
+        return `<button class="note-action" id="${aid}">${escapeHtml(a.label)}</button>`;
+      }).join("");
+      actionsHtml = `<div class="note-actions">${btns}</div>`;
+    }
+    div.innerHTML = titleHtml + msgHtml + actionsHtml;
+    if (box.firstChild) box.insertBefore(div, box.firstChild);
+    else box.appendChild(div);
+    notifications.set(note.id, note);
+    while (notifications.size > MAX_NOTES) {
+      const oldest = Array.from(notifications.keys())[0];
+      removeNote(oldest);
+    }
+    if (Number.isFinite(note.expires_at) && note.expires_at > Date.now()) {
+      setTimeout(() => removeNote(note.id), Math.min(note.expires_at - Date.now(), 3600_000));
+    } else if (!note.actions || note.actions.length === 0) {
+      setTimeout(() => removeNote(note.id), 10_000);
+    }
+  }
+
+  function escapeHtml(str) {
+    if (typeof str !== "string") return "";
+    return str.replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[c]));
+  }
+
+  function triggerAction(noteId, actionIndex) {
+    window.floating.sendNotificationAction(noteId, actionIndex)
+      .then(() => removeNote(noteId))
+      .catch((error) => console.error("Could not handle notification action:", error));
+  }
+
+  avatarEl.addEventListener("click", () => {
+    window.floating.showMainWindow().catch((error) => {
+      console.error("Could not show the main window:", error);
+    });
+  });
+
+  document.getElementById("btn-hide").addEventListener("click", () => {
+    window.floating.hideFloating().catch((error) => {
+      console.error("Could not hide the floating window:", error);
+    });
+  });
+
+  function handleNotification(note) {
+    if (!note || typeof note !== "object") return;
+    renderNote(note);
+  }
+
+  window.floating.onNotification(handleNotification);
+
+  (function initDemo() {
+    const welcome = {
+      id: "welcome-" + Date.now(),
+      title: "已就绪",
+      message: "你好！我是墨小灵，悬浮窗已启动。拖拽可移动，点击头像打开主窗口。",
+      level: "success",
+      actions: [{ label: "知道了" }],
+      expires_at: Date.now() + 12000,
+      created_at: Date.now(),
+    };
+    renderNote(welcome);
+  })();
+</script>
+</body>
+</html>

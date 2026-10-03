@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "如果你使用了墨灵（Moling），请按此格式引用本项目。"
+title: "墨灵 (Moling): Local AI Companion"
+abstract: >-
+  Local-first AI companion scaffold: Electron desktop chat UI, dependency-light
+  Python API, and pluggable local inference backends (placeholder / Ollama /
+  transformers / cloud-compatible, cloud disabled by default).
+authors:
+  - name: my_ai_project contributors
+date-released: 2026-10-03
+version: 0.1.0
+license: MIT
+repository-code: https://github.com/nausername00/my_ai_project
+keywords:
+  - local-ai
+  - electron
+  - ollama
+  - companion

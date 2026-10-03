@@ -1,0 +1,12 @@
+{
+  "name": "墨灵",
+  "productName": "墨灵",
+  "version": "0.1.0",
+  "description": "本地 AI 陪伴助手（Local AI Companion）—— Electron 桌面端 + 本地 Python API + Ollama 推理",
+  "main": "main.cjs",
+  "author": "my_ai_project contributors",
+  "license": "MIT",
+  "private": true,
+  "appId": "com.moling.desktop",
+  "platforms": ["win32", "darwin", "linux"]
+}
