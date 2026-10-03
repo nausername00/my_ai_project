@@ -21,6 +21,9 @@
   侧边栏新增「墨灵的作品集」工作区（网格 + 大图预览）；`explore.py` 增补
   `save_exploration_work` / `list_exploration_works` / `read_exploration_work`（含路径注入防护与 SVG 校验），
   `agent_tools` 工具目录仍保持只读 + 受限创建不变
+- 「身边」空间入口：主窗口顶栏新增「悬浮窗」开关（`companion:floating-toggle`），
+  让墨灵以独立透明悬浮窗在窗口外陪伴（通知、头像、拖拽、点击唤醒主窗口）；`preload` 补齐
+  `exploreSave` / `exploreWorks` / `exploreWork` / `floatingToggle` 暴露
 
 ### Changed
 - 默认推理模型从 `qwen2.5:0.5b` 升级为 `qwen2.5:3b`

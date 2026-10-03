@@ -21,6 +21,7 @@ test("collapsed navigation keeps an accessible new-chat action and distinct work
     ["chat-workspace", "和墨灵聊天", "聊"],
     ["translator-workspace", "文本翻译器", "译"],
     ["collaboration-workspace", "智能体协作", "协"],
+    ["gallery-workspace", "墨灵的作品集", "藏"],
   ]) {
     const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const escapedIcon = icon.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -45,7 +46,11 @@ test("collapsed navigation keeps an accessible new-chat action and distinct work
   assert.match(css, /\.new-chat\[hidden\]\s*\{\s*display:\s*none;\s*\}/);
   assert.match(
     renderer,
-    /chatWorkspaceButton\.setAttribute\(\s*"aria-pressed",\s*String\(!isTranslator && !isCollaboration\),\s*\)/,
+    /chatWorkspaceButton\.setAttribute\(\s*"aria-pressed",\s*String\(isChat\)\s*\)/,
+  );
+  assert.match(
+    renderer,
+    /galleryWorkspaceButton\.setAttribute\(\s*"aria-pressed",\s*String\(isGallery\)\s*\)/,
   );
 });
 

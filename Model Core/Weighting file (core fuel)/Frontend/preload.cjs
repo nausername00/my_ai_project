@@ -52,6 +52,10 @@ contextBridge.exposeInMainWorld(
     exploreRun: (payload) => ipcRenderer.invoke("companion:explore-run", payload),
     exploreReact: (payload) =>
       ipcRenderer.invoke("companion:explore-react", payload),
+    exploreSave: (payload) => ipcRenderer.invoke("companion:explore-save", payload),
+    exploreWorks: () => ipcRenderer.invoke("companion:explore-works"),
+    exploreWork: (payload) => ipcRenderer.invoke("companion:explore-work", payload),
+    floatingToggle: () => ipcRenderer.invoke("companion:floating-toggle"),
     translate: (request) =>
       ipcRenderer.invoke("companion:translate", request),
     reflectAgent: (characterId, history) =>

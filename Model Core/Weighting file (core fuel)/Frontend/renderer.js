@@ -2649,6 +2649,22 @@ document.getElementById("settings-toggle").addEventListener("click", () => {
   settingsPanel.hidden = !settingsPanel.hidden;
 });
 
+document.getElementById("floating-toggle").addEventListener("click", async () => {
+  const button = document.getElementById("floating-toggle");
+  button.disabled = true;
+  try {
+    const result = await window.companion.floatingToggle();
+    button.textContent = result.shown ? "收起悬浮窗" : "悬浮窗";
+    button.title = result.shown
+      ? "墨灵正在窗口外陪伴，点击收起"
+      : "让墨灵在窗口外陪伴";
+  } catch (error) {
+    button.title = `悬浮窗切换失败：${error.message}`;
+  } finally {
+    button.disabled = false;
+  }
+});
+
 document.getElementById("settings-close").addEventListener("click", () => {
   settingsPanel.hidden = true;
 });

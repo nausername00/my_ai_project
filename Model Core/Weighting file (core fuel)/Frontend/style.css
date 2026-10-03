@@ -267,6 +267,12 @@ button {
   font-size: 13px;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .topbar-title {
   display: flex;
   align-items: center;
