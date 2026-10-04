@@ -30,6 +30,7 @@ from agent_tools import (
     execute_project_tool,
     TOOL_CATALOG,
 )
+from partners import evaluate_molings, list_partner_status
 from collaboration import list_collaborator_roles, run_collaboration
 from brain import create_brain_plan, verify_tool_observation
 from inference import (
@@ -304,6 +305,9 @@ class ApiHandler(BaseHTTPRequestHandler):
                 {"partners": list_local_partners(self.engine)},
             )
             return
+        if path == "/v1/partners/status":
+            self._send_json(HTTPStatus.OK, list_partner_status(self.engine))
+            return
         if path == "/health":
             self._send_json(
                 HTTPStatus.OK,
@@ -416,6 +420,19 @@ class ApiHandler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path.startswith("/v1/social/") and not self._is_local_request():
             self._send_json(HTTPStatus.FORBIDDEN, {"error": "social API is 127.0.0.1 only"})
+            return
+        if path == "/v1/partners/evaluate":
+            try:
+                payload = self._read_json()
+                scope = payload.get("scope", "all")
+                result = evaluate_molings(
+                    scope=scope,
+                    engine=self.engine,
+                    character_store=self.character_store,
+                )
+                self._send_json(HTTPStatus.OK, result)
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         if path == "/v1/social/collaborate":
             try:

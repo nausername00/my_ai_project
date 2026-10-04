@@ -639,6 +639,12 @@ function registerIpcHandlers() {
     });
     return { canceled: false, ...response };
   });
+  ipcMain.handle("companion:partners-status", () =>
+    callApi("/v1/partners/status"),
+  );
+  ipcMain.handle("companion:partners-evaluate", (_event, scope) =>
+    callApi("/v1/partners/evaluate", "POST", { scope }),
+  );
   ipcMain.handle("companion:explore-run", (_event, payload) =>
     callApi("/v1/explore/run", "POST", payload),
   );

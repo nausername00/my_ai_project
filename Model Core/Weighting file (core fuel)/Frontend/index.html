@@ -37,6 +37,10 @@
           <span class="workspace-icon" aria-hidden="true">协</span>
           <span class="workspace-label">智能体协作</span>
         </button>
+        <button class="conversation workspace-button" id="partners-workspace" type="button" aria-label="伙伴评审" title="让伙伴们评价墨灵" aria-pressed="false">
+          <span class="workspace-icon" aria-hidden="true">评</span>
+          <span class="workspace-label">伙伴评审</span>
+        </button>
         <button class="conversation workspace-button" id="gallery-workspace" type="button" aria-label="墨灵的作品集" title="作品集" aria-pressed="false">
           <span class="workspace-icon" aria-hidden="true">藏</span>
           <span class="workspace-label">墨灵的作品集</span>
@@ -221,6 +225,41 @@
             <div class="synthesis-sections" id="collaboration-synthesis-sections"></div>
           </section>
           <div class="collaboration-results" id="collaboration-results"></div>
+        </section>
+
+        <section class="collaboration-panel" id="partners-panel" aria-labelledby="partners-title" hidden>
+          <div class="translator-heading collaboration-heading">
+            <span class="eyebrow">PARTNER REVIEW · 伙伴评审团</span>
+            <h1 id="partners-title">让伙伴们评价墨灵</h1>
+            <p>本地主引擎 + 外部伙伴（GPT / DeepSeek / 千问）各自独立评审墨灵，再综合成一份报告。外部伙伴需配置 API Key 才启用；未配置的自动跳过并注明，绝不伪造调用。</p>
+          </div>
+          <form id="partners-form" class="collaboration-form">
+            <div class="collaboration-form-heading">
+              <div>
+                <label for="partners-scope">评价范围</label>
+                <p>选择让伙伴们评审墨灵的哪个维度。</p>
+              </div>
+            </div>
+            <select id="partners-scope" class="partners-scope-select">
+              <option value="all">全部维度（角色+功能+体验）</option>
+              <option value="character">角色与宪法</option>
+              <option value="recent_work">近期功能实现</option>
+              <option value="experience">整体陪伴体验</option>
+            </select>
+            <p class="form-status collaboration-role-status" id="partners-status" role="status" aria-live="polite"></p>
+            <div class="collaboration-form-footer">
+              <span class="character-card-help" id="partners-hint">伙伴状态加载中…</span>
+              <div class="collaboration-actions">
+                <button class="save-button" id="partners-submit" type="submit" disabled>等待本机模型就绪</button>
+              </div>
+            </div>
+          </form>
+          <section class="collaboration-synthesis" id="partners-synthesis" hidden>
+            <span class="eyebrow">PARTNER · SYNTHESIS</span>
+            <h2>综合报告</h2>
+            <p class="synthesis-intro" id="partners-synthesis-text"></p>
+          </section>
+          <div class="collaboration-results" id="partners-results"></div>
         </section>
 
         <section class="gallery-panel" id="gallery-panel" aria-labelledby="gallery-title" hidden>

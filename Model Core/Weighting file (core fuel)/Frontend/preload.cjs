@@ -51,6 +51,9 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke("companion:generate", prompt, history),
     discoverFile: () => ipcRenderer.invoke("companion:discover-file"),
     discoverContext: () => ipcRenderer.invoke("companion:discover-context"),
+    partnersStatus: () => ipcRenderer.invoke("companion:partners-status"),
+    partnersEvaluate: (scope) =>
+      ipcRenderer.invoke("companion:partners-evaluate", scope),
     exploreRun: (payload) => ipcRenderer.invoke("companion:explore-run", payload),
     exploreReact: (payload) =>
       ipcRenderer.invoke("companion:explore-react", payload),

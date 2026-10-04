@@ -18,6 +18,16 @@ const chatWorkspaceButton = document.getElementById("chat-workspace");
 const translatorWorkspaceButton = document.getElementById("translator-workspace");
 const translatorPanel = document.getElementById("translator-panel");
 const collaborationWorkspaceButton = document.getElementById("collaboration-workspace");
+const partnersWorkspaceButton = document.getElementById("partners-workspace");
+const partnersPanel = document.getElementById("partners-panel");
+const partnersForm = document.getElementById("partners-form");
+const partnersScope = document.getElementById("partners-scope");
+const partnersSubmit = document.getElementById("partners-submit");
+const partnersStatus = document.getElementById("partners-status");
+const partnersHint = document.getElementById("partners-hint");
+const partnersSynthesis = document.getElementById("partners-synthesis");
+const partnersSynthesisText = document.getElementById("partners-synthesis-text");
+const partnersResults = document.getElementById("partners-results");
 const galleryWorkspaceButton = document.getElementById("gallery-workspace");
 const galleryPanel = document.getElementById("gallery-panel");
 const galleryGrid = document.getElementById("gallery-grid");
@@ -1375,32 +1385,39 @@ function setWorkspace(workspace) {
   currentWorkspace = workspace;
   const isTranslator = workspace === "translator";
   const isCollaboration = workspace === "collaboration";
+  const isPartners = workspace === "partners";
   const isGallery = workspace === "gallery";
-  const isChat = !isTranslator && !isCollaboration && !isGallery;
+  const isChat = !isTranslator && !isCollaboration && !isPartners && !isGallery;
   document.getElementById("conversation").hidden = !isChat;
   document.getElementById("composer").hidden = !isChat;
   document.getElementById("chat-notice").hidden = !isChat;
   translatorPanel.hidden = !isTranslator;
   collaborationPanel.hidden = !isCollaboration;
+  partnersPanel.hidden = !isPartners;
   galleryPanel.hidden = !isGallery;
   document.getElementById("new-chat").hidden = !isChat;
   document.getElementById("affect-indicator").hidden = !isChat;
   chatWorkspaceButton.classList.toggle("active", isChat);
   translatorWorkspaceButton.classList.toggle("active", isTranslator);
   collaborationWorkspaceButton.classList.toggle("active", isCollaboration);
+  partnersWorkspaceButton.classList.toggle("active", isPartners);
   galleryWorkspaceButton.classList.toggle("active", isGallery);
   chatWorkspaceButton.setAttribute("aria-pressed", String(isChat));
   translatorWorkspaceButton.setAttribute("aria-pressed", String(isTranslator));
   collaborationWorkspaceButton.setAttribute("aria-pressed", String(isCollaboration));
+  partnersWorkspaceButton.setAttribute("aria-pressed", String(isPartners));
   galleryWorkspaceButton.setAttribute("aria-pressed", String(isGallery));
   document.querySelector(".topbar-title strong").textContent = isTranslator
     ? "文本翻译器"
     : isCollaboration
       ? "智能体协作"
-      : isGallery
-        ? "墨灵的作品集"
-        : `和${activeCharacterNickname}聊天`;
+      : isPartners
+        ? "伙伴评审"
+        : isGallery
+          ? "墨灵的作品集"
+          : `和${activeCharacterNickname}聊天`;
   if (isGallery) void refreshGallery();
+  if (isPartners) void loadPartnerStatus();
 }
 
 chatWorkspaceButton.addEventListener("click", () => setWorkspace("chat"));
@@ -1410,8 +1427,93 @@ translatorWorkspaceButton.addEventListener("click", () =>
 collaborationWorkspaceButton.addEventListener("click", () =>
   setWorkspace("collaboration"),
 );
+partnersWorkspaceButton.addEventListener("click", () =>
+  setWorkspace("partners"),
+);
 galleryWorkspaceButton.addEventListener("click", () => setWorkspace("gallery"));
 galleryRefresh.addEventListener("click", () => void refreshGallery());
+
+async function loadPartnerStatus() {
+  partnersHint.textContent = "伙伴状态加载中…";
+  try {
+    const status = await window.companion.partnersStatus();
+    const lines = status.partners.map((p) => {
+      if (p.status === "enabled" || p.status === "configured") {
+        return `${p.name}（${p.model}）已启用`;
+      }
+      return `${p.name}：${p.reason}`;
+    });
+    partnersHint.textContent = `伙伴状态：${lines.join("；")}`;
+    partnersSubmit.disabled = status.local_model === "placeholder";
+    partnersSubmit.textContent =
+      status.local_model === "placeholder"
+        ? "等待本机模型就绪"
+        : "让伙伴们开始评价";
+  } catch (error) {
+    partnersHint.textContent = `伙伴状态读取失败：${error.message || error}`;
+  }
+}
+
+async function runPartnerReview(event) {
+  event.preventDefault();
+  const scope = partnersScope.value;
+  partnersStatus.textContent =
+    "伙伴们正在阅读墨灵的档案并各自评审…（已启用的外部伙伴会消耗其 API 额度）";
+  partnersStatus.classList.remove("error");
+  partnersSubmit.disabled = true;
+  try {
+    const result = await window.companion.partnersEvaluate(scope);
+    renderPartnerReview(result);
+    partnersStatus.textContent = `评审完成：${result.enabled_count} 位伙伴参与`;
+  } catch (error) {
+    partnersStatus.textContent = `评审失败：${error.message || error}`;
+    partnersStatus.classList.add("error");
+  } finally {
+    partnersSubmit.disabled = false;
+  }
+}
+
+function renderPartnerReview(result) {
+  partnersResults.replaceChildren();
+  for (const partner of result.partners) {
+    const article = document.createElement("article");
+    article.className = "collaboration-result";
+    article.dataset.status = partner.status;
+    const title = document.createElement("h3");
+    title.textContent =
+      `${partner.name} · ` +
+      (partner.status === "disabled"
+        ? "未参与"
+        : partner.source === "local"
+          ? "本地评审"
+          : "外部评审");
+    const provenance = document.createElement("p");
+    provenance.className = "collaboration-provenance";
+    provenance.textContent =
+      partner.status === "disabled"
+        ? partner.reason
+        : `模型：${partner.model} · ${partner.duration_ms} ms`;
+    const opinion = document.createElement("p");
+    opinion.className = "collaboration-opinion";
+    if (partner.status === "completed") {
+      opinion.textContent = partner.raw;
+    } else if (partner.status === "failed") {
+      opinion.className = "collaboration-opinion error-message";
+      opinion.textContent = `评审未完成：${partner.error}`;
+    } else {
+      opinion.className = "collaboration-opinion error-message";
+      opinion.textContent = `未配置 API Key，本轮跳过：${partner.reason}`;
+    }
+    article.append(title, provenance, opinion);
+    partnersResults.append(article);
+  }
+  partnersSynthesis.hidden = !result.synthesis;
+  if (result.synthesis) {
+    partnersSynthesisText.textContent = result.synthesis;
+  }
+}
+
+partnersForm.addEventListener("submit", runPartnerReview);
 
 function renderCollaborationResults(collaborators) {
   collaborationResults.replaceChildren();

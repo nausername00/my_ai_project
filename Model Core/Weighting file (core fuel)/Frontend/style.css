@@ -1111,6 +1111,21 @@ button {
   overflow-wrap: anywhere;
 }
 
+.partners-scope-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #14161d;
+  color: #e6e4f0;
+  font-size: 13px;
+}
+
+.partners-scope-select:focus {
+  outline: none;
+  border-color: #67d3a8;
+}
+
 .translator-heading h1 {
   margin: 7px 0;
   font-size: 22px;
