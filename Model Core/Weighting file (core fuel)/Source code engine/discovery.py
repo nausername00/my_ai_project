@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from inference import GenerationRequest
@@ -54,6 +55,20 @@ def _discover_feedback_prompt(
     )
 
 
+def _proposal_from_file(name: str, kind: str, excerpt: str) -> dict[str, Any]:
+    """墨灵发现可尝试的主题：以文件名（去扩展名）作为探索方向。"""
+    if kind not in {"text", "code"} or not excerpt.strip():
+        return {"proposed": False, "topic": "", "teaser": ""}
+    topic = Path(name).stem.replace("_", " ").replace("-", " ").strip()[:24]
+    if not topic:
+        return {"proposed": False, "topic": "", "teaser": ""}
+    return {
+        "proposed": True,
+        "topic": topic,
+        "teaser": f"我发现了「{topic}」！要不要我围绕它做一张 mini 概念小海报，我们一起看看感觉？",
+    }
+
+
 def discover_file(
     name: str,
     kind: str,
@@ -84,8 +99,9 @@ def discover_file(
             max_tokens=160,
         )
     )
-    # 内容有惊喜潜力时用 surprised，否则 curious
-    mood = "surprised" if kind == "image" and not excerpt else "curious"
+    # 有可尝试主题时惊喜（发现了新玩艺儿），否则好奇
+    proposal = _proposal_from_file(safe_name, kind, excerpt)
+    mood = "surprised" if proposal["proposed"] else "curious"
     affect = character_store.set_simulated_affect(mood)
     summary = (
         f"[发现] 用户分享了{kind_label(kind)}《{safe_name}》"
@@ -98,6 +114,7 @@ def discover_file(
         "memory": memory,
         "file_name": safe_name,
         "kind": kind,
+        "explore_proposal": proposal,
     }
 
 

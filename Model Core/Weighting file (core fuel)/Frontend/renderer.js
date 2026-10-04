@@ -2761,6 +2761,13 @@ async function handleDiscoverFile() {
       { role: "assistant", content: result.feedback },
     ];
     updateAffect(result.affect);
+    if (result.explore_proposal?.proposed) {
+      attachExploreOffer(
+        reply,
+        result.explore_proposal,
+        `墨灵从文件《${result.name}》里发现了「${result.explore_proposal.topic}」`,
+      );
+    }
   } catch (error) {
     addMessage(`分享失败：${error.message || error}`, "assistant", "error");
   }

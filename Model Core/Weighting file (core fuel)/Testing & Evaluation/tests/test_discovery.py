@@ -38,9 +38,12 @@ class DiscoveryModuleTests(unittest.TestCase):
             )
         self.assertIn("feedback", result)
         self.assertTrue(result["feedback"])
-        self.assertEqual(result["affect"]["mood"], "curious")
+        # 发现可尝试内容 → 惊喜情绪 + 提议做一次 mini 尝试
+        self.assertEqual(result["affect"]["mood"], "surprised")
         self.assertEqual(result["memory"]["source"], "discovery")
         self.assertIn("blender", result["memory"]["content"])
+        self.assertTrue(result["explore_proposal"]["proposed"])
+        self.assertIn("blender", result["explore_proposal"]["topic"])
 
     def test_discover_image_without_perception_is_honest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -54,7 +57,8 @@ class DiscoveryModuleTests(unittest.TestCase):
                 store,
                 approved=True,
             )
-        self.assertEqual(result["affect"]["mood"], "surprised")
+        self.assertEqual(result["affect"]["mood"], "curious")
+        self.assertFalse(result["explore_proposal"]["proposed"])
         self.assertTrue(result["feedback"])
 
     def test_observe_context_requires_permission(self) -> None:
