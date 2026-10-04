@@ -168,6 +168,7 @@ class VoiceResourceStore {
         extension,
         contentType,
         file,
+        sizeBytes: source.byteLength,
         createdAt: new Date().toISOString(),
       };
       try {

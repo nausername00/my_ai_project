@@ -24,6 +24,14 @@
 - 「身边」空间入口：主窗口顶栏新增「悬浮窗」开关（`companion:floating-toggle`），
   让墨灵以独立透明悬浮窗在窗口外陪伴（通知、头像、拖拽、点击唤醒主窗口）；`preload` 补齐
   `exploreSave` / `exploreWorks` / `exploreWork` / `floatingToggle` 暴露
+- 悬浮窗角色同步：主进程新增 `pushCharacterToFloating`，在浮窗就绪、切换/保存角色、
+  心情变化、重新显示浮窗时把昵称、立绘（dataURL）与当前心情推送给浮窗
+  （`companion:character-updated`），悬浮窗头像/昵称/状态随之实时更新
+- 声音资源信息补齐：资源列表显示 格式 · 大小 · 注册日期 · 原始文件名（悬停可见）；
+  注册表单选中样本后显示文件大小；`voice-resources.cjs` 注册时记录 `sizeBytes`
+- 模型资源信息补齐：角色外观与表现设置中导入的资源芯片显示 用途 · 文件名 · 大小
+- 翻译器朗读：翻译结果区新增「朗读译文」与音色选择——默认 Piper 合成朗读，
+  已注册参考声线可下拉试听（明确标注仅试听、不改变朗读音色）
 
 ### Changed
 - 默认推理模型从 `qwen2.5:0.5b` 升级为 `qwen2.5:3b`

@@ -1206,6 +1206,22 @@ button {
   font-size: 12px;
 }
 
+.translator-output-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.translator-output-actions select {
+  max-width: 220px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #1c1f27;
+  color: #d8d7e1;
+  font-size: 11px;
+}
+
 .translator-submit-row {
   align-items: flex-end;
 }

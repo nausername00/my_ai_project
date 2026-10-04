@@ -86,6 +86,7 @@ let activeCharacterNickname = "墨灵";
 let currentWorkspace = "chat";
 let editingCharacterId;
 let modelFiles = [];
+const modelFileSizes = new Map();
 let modelEmotionMapping = {};
 let selectedModelFile = "";
 let saveAppearanceRequested = false;
@@ -856,7 +857,15 @@ function renderModelFiles() {
   for (const asset of modelFiles) {
     const chip = document.createElement("span");
     chip.className = "model-resource-chip";
-    chip.textContent = `${describeModelResource(asset)} · ${asset.split("/").pop()}`;
+    const sizeBytes = modelFileSizes.get(asset);
+    const sizeText =
+      Number.isFinite(sizeBytes) && sizeBytes > 0
+        ? sizeBytes >= 1024 * 1024
+          ? `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`
+          : `${Math.max(1, Math.round(sizeBytes / 1024))} KB`
+        : "";
+    chip.textContent = `${describeModelResource(asset)} · ${asset.split("/").pop()}` +
+      (sizeText ? ` · ${sizeText}` : "");
     chip.title = asset;
     resourceList.append(chip);
   }
@@ -1184,8 +1193,18 @@ function renderVoiceResources() {
     const name = document.createElement("strong");
     name.textContent = resource.name;
     const details = document.createElement("span");
+    const formatSize = (bytes) => {
+      if (!Number.isFinite(bytes) || bytes < 1) return "大小未知";
+      if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+      return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    };
+    const registeredAt = resource.createdAt
+      ? new Date(resource.createdAt).toLocaleDateString("zh-CN")
+      : "日期未知";
     details.textContent =
-      `${voiceLanguageLabels[resource.language]} · ${resource.extension.slice(1).toUpperCase()} · 仅供参考试听`;
+      `${voiceLanguageLabels[resource.language]} · ${resource.extension.slice(1).toUpperCase()} · ` +
+      `${formatSize(resource.sizeBytes)} · 注册于 ${registeredAt} · 仅供参考试听`;
+    details.title = `原始文件：${resource.originalName}`;
     info.append(name, details);
     const actions = document.createElement("div");
     actions.className = "voice-resource-actions";
@@ -1247,6 +1266,7 @@ async function refreshVoiceResources() {
   try {
     voiceResources = await window.companion.listVoiceResources();
     populateCharacterVoiceSelect();
+    populateTranslatorVoiceSelect();
     renderVoiceResources();
   } catch (error) {
     setVoiceResourceStatus(`无法读取本地声线资源：${error.message}`, true);
@@ -1282,7 +1302,9 @@ document.getElementById("voice-sample-choose").addEventListener("click", async (
   try {
     pendingVoiceSample = await window.companion.chooseVoiceReference();
     if (!pendingVoiceSample) return;
-    voiceSampleName.textContent = `${pendingVoiceSample.originalName} · 已在内存中待注册`;
+    const sampleKb = Math.max(1, Math.round(pendingVoiceSample.bytes.byteLength / 1024));
+    voiceSampleName.textContent =
+      `${pendingVoiceSample.originalName} · ${sampleKb} KB · 已在内存中待注册`;
     voiceSamplePreview.disabled = false;
     voiceResourceRegister.disabled = false;
   } catch (error) {
@@ -2090,6 +2112,7 @@ translatorForm.addEventListener("submit", async (event) => {
     if (requestVersion !== translationRequestVersion) return;
     translatorOutput.value = result.translation;
     translatorCopy.disabled = !result.translation;
+    if (translatorSpeak) translatorSpeak.disabled = !result.translation;
     translatorStatus.textContent =
       `翻译完成 · ${result.model} · ${result.inference_ms} ms`;
   } catch (error) {
@@ -2110,6 +2133,87 @@ translatorCopy.addEventListener("click", async () => {
   } catch (error) {
     translatorStatus.textContent = `复制失败：${error.message}`;
     translatorStatus.classList.add("error");
+  }
+});
+
+const translatorVoiceSelect = document.getElementById("translator-voice-select");
+const translatorSpeak = document.getElementById("translator-speak");
+
+function populateTranslatorVoiceSelect() {
+  if (!translatorVoiceSelect) return;
+  translatorVoiceSelect.replaceChildren();
+  const piper = document.createElement("option");
+  piper.value = "";
+  piper.textContent = "当前合成音色 · Piper";
+  translatorVoiceSelect.append(piper);
+  for (const resource of voiceResources) {
+    const option = document.createElement("option");
+    option.value = `reference:${resource.id}`;
+    option.textContent =
+      `${resource.name} · ${voiceLanguageLabels[resource.language]} · 参考声线（仅试听）`;
+    translatorVoiceSelect.append(option);
+  }
+}
+
+function playSynthesizedWav(wavBytes) {
+  const bytes =
+    wavBytes instanceof Uint8Array
+      ? wavBytes
+      : wavBytes instanceof ArrayBuffer
+        ? new Uint8Array(wavBytes)
+        : null;
+  if (
+    !bytes ||
+    bytes.byteLength < 44 ||
+    String.fromCharCode(...bytes.subarray(0, 4)) !== "RIFF" ||
+    String.fromCharCode(...bytes.subarray(8, 12)) !== "WAVE"
+  ) {
+    throw new Error("本机语音服务返回的 WAV 数据格式无效");
+  }
+  const audioUrl = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+  if (activeAudio) {
+    activeAudio.pause();
+    URL.revokeObjectURL(activeAudio.src);
+  }
+  const playback = new Audio(audioUrl);
+  activeAudio = playback;
+  const release = () => {
+    URL.revokeObjectURL(audioUrl);
+    if (activeAudio === playback) activeAudio = undefined;
+  };
+  playback.addEventListener("ended", release, { once: true });
+  playback.addEventListener("error", release, { once: true });
+  return playback.play();
+}
+
+translatorSpeak.addEventListener("click", async () => {
+  const text = translatorOutput.value;
+  if (!text.trim()) {
+    translatorStatus.textContent = "请先翻译文本，再朗读译文。";
+    translatorStatus.classList.add("error");
+    return;
+  }
+  translatorSpeak.disabled = true;
+  try {
+    const selectedVoice = translatorVoiceSelect.value;
+    if (selectedVoice.startsWith("reference:")) {
+      const resourceId = selectedVoice.slice("reference:".length);
+      const sample = await window.companion.getVoiceReference(resourceId);
+      await playVoicePreview(sample);
+      translatorStatus.textContent =
+        "正在试听参考声线（仅供参考试听；朗读仍使用 Piper 合成音色）。";
+      translatorStatus.classList.remove("error");
+      return;
+    }
+    const wav = await window.companion.synthesize(text);
+    await playSynthesizedWav(wav);
+    translatorStatus.textContent = "正在朗读译文（Piper 合成）。";
+    translatorStatus.classList.remove("error");
+  } catch (error) {
+    translatorStatus.textContent = `朗读失败：${error.message}`;
+    translatorStatus.classList.add("error");
+  } finally {
+    translatorSpeak.disabled = false;
   }
 });
 
@@ -2379,6 +2483,7 @@ document.getElementById("model-assets-import").addEventListener("click", async (
     const imported = await window.companion.importModelAssets();
     if (!imported.length) return;
     modelFiles = [...new Set([...modelFiles, ...imported.map((asset) => asset.name)])];
+    for (const asset of imported) modelFileSizes.set(asset.name, asset.bytes);
     const importedActions = imported
       .filter((asset) => /\.(vmd|motion3\.json)$/i.test(asset.originalName))
       .map((asset) => asset.originalName.replace(/\.[^.]+(?:\.json)?$/i, ""));

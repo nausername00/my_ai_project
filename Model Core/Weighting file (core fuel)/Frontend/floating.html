@@ -95,6 +95,11 @@
     -webkit-app-region: no-drag;
     transition: transform 0.15s ease;
   }
+  #avatar-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
   #avatar-wrap:hover { transform: scale(1.05); }
   #avatar-wrap.listening {
     animation: pulse 1.2s ease-in-out infinite;
@@ -192,7 +197,10 @@
       </div>
     </div>
     <div id="body">
-      <div id="avatar-wrap" title="点击打开主窗口"><span id="avatar-text">灵</span></div>
+      <div id="avatar-wrap" title="点击打开主窗口">
+        <img id="avatar-image" alt="角色立绘" hidden />
+        <span id="avatar-text">灵</span>
+      </div>
       <div id="content">
         <div id="nickname">墨小灵</div>
         <div id="status">在线 · 等待指令</div>
@@ -299,7 +307,31 @@
     renderNote(note);
   }
 
+  function applyCharacter(character) {
+    if (!character || typeof character !== "object") return;
+    const image = document.getElementById("avatar-image");
+    const text = document.getElementById("avatar-text");
+    const nickname = document.getElementById("nickname");
+    const status = document.getElementById("status");
+    if (character.nickname) {
+      nickname.textContent = character.nickname;
+      text.textContent = character.nickname.slice(0, 1);
+    }
+    if (typeof character.avatarDataUrl === "string" && character.avatarDataUrl) {
+      image.src = character.avatarDataUrl;
+      image.hidden = false;
+      text.hidden = true;
+    } else {
+      image.hidden = true;
+      text.hidden = false;
+    }
+    status.textContent = character.moodLabel
+      ? `此刻 · ${character.moodLabel}`
+      : "在线 · 等待指令";
+  }
+
   window.floating.onNotification(handleNotification);
+  window.floating.onCharacterUpdated(applyCharacter);
 
   (function initDemo() {
     const welcome = {

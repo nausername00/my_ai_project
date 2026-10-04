@@ -128,7 +128,13 @@
             </div>
             <div class="translator-output-heading">
               <label for="translator-output">翻译结果</label>
-              <button class="icon-button" id="translator-copy" type="button" disabled>复制结果</button>
+              <div class="translator-output-actions">
+                <select id="translator-voice-select" title="朗读音色：Piper 合成，或试听已注册的参考声线">
+                  <option value="">当前合成音色 · Piper</option>
+                </select>
+                <button class="icon-button" id="translator-speak" type="button" disabled>朗读译文</button>
+                <button class="icon-button" id="translator-copy" type="button" disabled>复制结果</button>
+              </div>
             </div>
             <textarea id="translator-output" rows="8" readonly placeholder="翻译结果会显示在这里"></textarea>
             <div class="translator-submit-row">

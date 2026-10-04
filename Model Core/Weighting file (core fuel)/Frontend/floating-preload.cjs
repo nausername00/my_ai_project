@@ -21,5 +21,14 @@ contextBridge.exposeInMainWorld(
     },
     showMainWindow: () => ipcRenderer.invoke("companion:main-window-show"),
     hideFloating: () => ipcRenderer.invoke("companion:floating-hide"),
+    onCharacterUpdated(callback) {
+      if (typeof callback !== "function") {
+        throw new TypeError("character update callback must be a function");
+      }
+      const listener = (_event, character) => callback(character);
+      ipcRenderer.on("companion:character-updated", listener);
+      return () =>
+        ipcRenderer.removeListener("companion:character-updated", listener);
+    },
   }),
 );

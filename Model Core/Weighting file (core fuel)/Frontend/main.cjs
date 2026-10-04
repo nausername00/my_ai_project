@@ -540,12 +540,18 @@ function registerIpcHandlers() {
   ipcMain.handle("companion:create-character", (_event, card) =>
     callApi("/v1/characters", "POST", card),
   );
-  ipcMain.handle("companion:select-character", (_event, characterId) =>
-    callApi("/v1/characters/active", "POST", { id: characterId }),
-  );
-  ipcMain.handle("companion:save-character", (_event, card) =>
-    callApi("/v1/character", "POST", card),
-  );
+  ipcMain.handle("companion:select-character", async (_event, characterId) => {
+    const result = await callApi("/v1/characters/active", "POST", {
+      id: characterId,
+    });
+    pushCharacterToFloating();
+    return result;
+  });
+  ipcMain.handle("companion:save-character", async (_event, card) => {
+    const result = await callApi("/v1/character", "POST", card);
+    pushCharacterToFloating();
+    return result;
+  });
   ipcMain.handle("companion:choose-avatar", chooseAvatar);
   ipcMain.handle("companion:get-avatar", (_event, fileName) => readAvatar(fileName));
   ipcMain.handle("companion:import-model-assets", importModelAssets);
@@ -719,9 +725,11 @@ function registerIpcHandlers() {
     callApi("/v1/privacy", "POST", settings),
   );
   ipcMain.handle("companion:get-affect", () => callApi("/v1/affect"));
-  ipcMain.handle("companion:set-affect", (_event, mood) =>
-    callApi("/v1/affect", "POST", { mood }),
-  );
+  ipcMain.handle("companion:set-affect", async (_event, mood) => {
+    const result = await callApi("/v1/affect", "POST", { mood });
+    pushCharacterToFloating();
+    return result;
+  });
   ipcMain.handle("companion:export-memories", async () => {
     const result = await dialog.showSaveDialog(BrowserWindow.getFocusedWindow() || undefined, {
       defaultPath: "coco-memories.json",
@@ -802,6 +810,7 @@ function registerIpcHandlers() {
         return { shown: false };
       }
       floatingWindow.show();
+      pushCharacterToFloating();
       return { shown: true };
     }
     createFloatingWindow();
@@ -869,6 +878,35 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, "index.html"));
 }
 
+async function pushCharacterToFloating() {
+  if (!floatingWindow || floatingWindow.isDestroyed()) return;
+  try {
+    const { character } = await callApi("/v1/character");
+    let avatarDataUrl = null;
+    if (character?.avatar) {
+      try {
+        avatarDataUrl = await readAvatar(character.avatar);
+      } catch {
+        avatarDataUrl = null;
+      }
+    }
+    let moodLabel = "";
+    try {
+      const affect = await callApi("/v1/affect");
+      moodLabel = affect?.label || affect?.mood || "";
+    } catch {
+      moodLabel = "";
+    }
+    floatingWindow.webContents.send("companion:character-updated", {
+      nickname: character?.nickname || "墨灵",
+      avatarDataUrl,
+      moodLabel,
+    });
+  } catch {
+    // 后端未就绪时静默跳过，浮窗保持初始状态
+  }
+}
+
 function createFloatingWindow() {
   floatingWindowReady = false;
   floatingWindow = new BrowserWindow({
@@ -897,6 +935,7 @@ function createFloatingWindow() {
   floatingWindow.once("ready-to-show", () => {
     floatingWindowReady = true;
     floatingWindow.showInactive();
+    pushCharacterToFloating();
     while (pendingNotifications.length) {
       const note = pendingNotifications.shift();
       if (floatingWindow && !floatingWindow.isDestroyed()) {
