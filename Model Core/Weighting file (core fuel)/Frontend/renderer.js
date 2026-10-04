@@ -4,6 +4,8 @@ const composer = document.getElementById("composer");
 const input = document.getElementById("message-input");
 const sendButton = document.getElementById("send-button");
 const recordButton = document.getElementById("record-button");
+const fileButton = document.getElementById("file-button");
+const observeButton = document.getElementById("observe-button");
 const voiceStatus = document.getElementById("voice-status");
 const modelStatus = document.getElementById("model-status");
 const modelSetup = document.getElementById("model-setup");
@@ -100,6 +102,7 @@ const simulatedEmotions = [
   ["calm", "平静"],
   ["happy", "开心"],
   ["curious", "好奇"],
+  ["surprised", "惊喜"],
   ["worried", "担心"],
   ["shy", "害羞"],
   ["warm", "温暖"],
@@ -2734,6 +2737,60 @@ composer.addEventListener("submit", (event) => {
 });
 
 recordButton.addEventListener("click", toggleRecording);
+
+fileButton.addEventListener("click", handleDiscoverFile);
+
+async function handleDiscoverFile() {
+  if (
+    !window.confirm(
+      "墨灵想打开你选择的文件看看内容，然后好奇地问你几个问题。允许她读这个文件吗？",
+    )
+  ) {
+    return;
+  }
+  try {
+    const result = await window.companion.discoverFile();
+    if (!result || result.canceled) return;
+    const kindLabel = result.kind === "image" ? "图片" : result.kind === "code" ? "代码文件" : "文件";
+    addMessage(`（分享${kindLabel}：${result.name}）`, "user");
+    const reply = addMessage(result.feedback, "assistant");
+    addSpeechControl(reply, result.feedback);
+    conversationHistory = [
+      ...conversationHistory,
+      { role: "user", content: `[分享${kindLabel}：${result.name}]` },
+      { role: "assistant", content: result.feedback },
+    ];
+    updateAffect(result.affect);
+  } catch (error) {
+    addMessage(`分享失败：${error.message || error}`, "assistant", "error");
+  }
+}
+
+observeButton.addEventListener("click", handleObserveContext);
+
+async function handleObserveContext() {
+  if (
+    !window.confirm(
+      "墨灵想看看当前窗口里的内容，然后给出她的称赞和优化建议。允许她看吗？",
+    )
+  ) {
+    return;
+  }
+  try {
+    const result = await window.companion.discoverContext();
+    if (!result || result.canceled) return;
+    const reply = addMessage(result.feedback, "assistant");
+    addSpeechControl(reply, result.feedback);
+    conversationHistory = [
+      ...conversationHistory,
+      { role: "user", content: "[请墨灵看看当前窗口]" },
+      { role: "assistant", content: result.feedback },
+    ];
+    updateAffect(result.affect);
+  } catch (error) {
+    addMessage(`看窗口失败：${error.message || error}`, "assistant", "error");
+  }
+}
 
 input.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {

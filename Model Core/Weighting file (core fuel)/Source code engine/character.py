@@ -211,6 +211,7 @@ class CharacterCard:
                     "calm",
                     "happy",
                     "curious",
+                    "surprised",
                     "worried",
                     "shy",
                     "warm",
@@ -281,6 +282,7 @@ class CharacterStore:
         "calm": "平静",
         "happy": "开心",
         "curious": "好奇",
+        "surprised": "惊喜",
         "worried": "担心",
         "shy": "害羞",
         "warm": "温暖",
@@ -704,7 +706,7 @@ class CharacterStore:
     def set_simulated_affect(self, mood: Any) -> dict[str, str]:
         if not isinstance(mood, str) or mood not in self.SIMULATED_MOODS:
             raise CharacterValidationError(
-                "mood must be calm, happy, curious, worried, shy, warm, or caring"
+                "mood must be calm, happy, curious, surprised, worried, shy, warm, or caring"
             )
         state = {
             "mode": "simulated",

@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 from agent import route_cognition
+from discovery import discover_file, observe_context
 from explore import (
     propose_exploration,
     record_exploration_reaction,
@@ -36,6 +37,7 @@ from inference import (
     InferenceEngine,
     ModelUnavailableError,
 )
+from utils import PermissionDenied
 from character import (
     CharacterCard,
     CharacterStore,
@@ -657,6 +659,50 @@ class ApiHandler(BaseHTTPRequestHandler):
                 )
                 self._send_json(HTTPStatus.OK, result)
             except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/discover/file":
+            try:
+                payload = self._read_json()
+                name = payload.get("name", "")
+                kind = payload.get("kind", "text")
+                excerpt = payload.get("excerpt", "")
+                approved = payload.get("approved", False)
+                if not isinstance(approved, bool):
+                    raise ValueError("approved must be a boolean")
+                if not isinstance(excerpt, str):
+                    raise TypeError("excerpt must be a string")
+                result = discover_file(
+                    name=name,
+                    kind=kind,
+                    excerpt=excerpt,
+                    engine=self.engine,
+                    character_store=self.character_store,
+                    approved=approved,
+                )
+                self._send_json(HTTPStatus.OK, result)
+            except (TypeError, ValueError, json.JSONDecodeError, PermissionDenied) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/discover/context":
+            try:
+                payload = self._read_json()
+                kind = payload.get("kind")
+                context = payload.get("context", "")
+                approved = payload.get("approved", False)
+                if not isinstance(approved, bool):
+                    raise ValueError("approved must be a boolean")
+                if not isinstance(context, str):
+                    raise TypeError("context must be a string")
+                result = observe_context(
+                    kind=kind,
+                    context=context,
+                    engine=self.engine,
+                    character_store=self.character_store,
+                    approved=approved,
+                )
+                self._send_json(HTTPStatus.OK, result)
+            except (TypeError, ValueError, json.JSONDecodeError, PermissionDenied) as error:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         if path == "/v1/explore/save":

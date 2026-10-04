@@ -575,6 +575,70 @@ function registerIpcHandlers() {
   ipcMain.handle("companion:generate", (_event, prompt, history) =>
     callApi("/v1/generate", "POST", { prompt, max_tokens: 128, history }),
   );
+  ipcMain.handle("companion:discover-file", async () => {
+    const picked = await dialog.showOpenDialog({
+      title: "分享一个文件给墨灵",
+      buttonLabel: "分享",
+      properties: ["openFile"],
+      filters: [
+        {
+          name: "文本与代码",
+          extensions: ["txt", "md", "json", "py", "js", "ts", "html", "css", "csv", "log", "xml", "yaml", "yml"],
+        },
+        { name: "图片", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"] },
+        { name: "所有文件", extensions: ["*"] },
+      ],
+    });
+    if (picked.canceled || !picked.filePaths.length) {
+      return { canceled: true };
+    }
+    const filePath = picked.filePaths[0];
+    const name = path.basename(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const imageExts = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
+    const codeExts = new Set([".py", ".js", ".ts", ".html", ".css", ".json", ".yaml", ".yml", ".xml", ".sql"]);
+    const stats = await fs.stat(filePath);
+    let kind = "other";
+    let excerpt = "";
+    if (imageExts.has(ext)) {
+      kind = "image";
+    } else {
+      kind = codeExts.has(ext) ? "code" : ["txt", "md", "csv", "log"].includes(ext) ? "text" : "other";
+      if (stats.size <= 256 * 1024) {
+        try {
+          excerpt = (await fs.readFile(filePath, "utf-8")).slice(0, 2000);
+        } catch {
+          excerpt = "";
+        }
+      }
+    }
+    const response = await callApi("/v1/discover/file", "POST", {
+      name,
+      kind,
+      excerpt,
+      approved: true,
+    });
+    return { canceled: false, name, kind, size: stats.size, ...response };
+  });
+  ipcMain.handle("companion:discover-context", async () => {
+    const win =
+      BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
+    if (!win) return { canceled: true };
+    let pageText = "";
+    try {
+      pageText = await win.webContents.executeJavaScript(
+        `(() => { const t = document.title || ""; const b = (document.body && document.body.innerText || "").slice(0, 2000); return (t + "\\n" + b).trim(); })()`,
+      );
+    } catch {
+      pageText = "";
+    }
+    const response = await callApi("/v1/discover/context", "POST", {
+      kind: "webpage",
+      context: pageText || "（未能读取到可见文本）",
+      approved: true,
+    });
+    return { canceled: false, ...response };
+  });
   ipcMain.handle("companion:explore-run", (_event, payload) =>
     callApi("/v1/explore/run", "POST", payload),
   );

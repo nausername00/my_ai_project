@@ -105,6 +105,10 @@ button {
   color: #c6b1e6;
 }
 
+.topbar-title .affect-indicator[data-mood="surprised"] {
+  color: #ffd9a3;
+}
+
 .topbar-title .affect-indicator[data-mood="shy"] {
   color: #edb4c9;
 }
