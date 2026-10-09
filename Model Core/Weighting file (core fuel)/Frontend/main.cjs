@@ -1060,6 +1060,8 @@ function createFloatingWindow() {
     y: 40,
     frame: false,
     transparent: true,
+    backgroundMaterial: "acrylic",
+    roundedCorners: true,
     resizable: false,
     alwaysOnTop: true,
     skipTaskbar: true,
