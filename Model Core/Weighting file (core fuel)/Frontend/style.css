@@ -722,6 +722,18 @@ button {
   gap: 14px;
 }
 
+.brain-plan-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.brain-plan-controls .quiet-button {
+  margin: 0;
+}
+
 .brain-plan-header h2 {
   margin: 5px 0 0;
   font-size: 15px;
@@ -1124,6 +1136,131 @@ button {
 .partners-scope-select:focus {
   outline: none;
   border-color: #67d3a8;
+}
+
+.reply-tools {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+  color: #b8b8c7;
+  font-size: 11px;
+}
+
+.reply-tools summary {
+  cursor: pointer;
+  color: #cfc5ff;
+}
+
+.reply-evidence-list {
+  display: grid;
+  gap: 8px;
+  padding-left: 18px;
+}
+
+.reply-evidence-list li {
+  display: grid;
+  gap: 3px;
+  overflow-wrap: anywhere;
+}
+
+.reply-evidence-list strong {
+  color: #ded8f6;
+  font-weight: 600;
+}
+
+.reply-tool-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.reply-tool-actions button,
+.quiet-button {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #20212b;
+  color: #d6d1e9;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.reply-tool-actions button:hover,
+.quiet-button:hover {
+  border-color: #8577cb;
+}
+
+.partner-consent-options {
+  display: grid;
+  gap: 9px;
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.partner-consent-options legend {
+  padding: 0 5px;
+  color: #d2cafa;
+  font-size: 12px;
+}
+
+.partner-consent-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #d4d4df;
+  font-size: 12px;
+}
+
+.partner-consent-option input {
+  accent-color: var(--accent);
+}
+
+.partner-preview {
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid #7568b0;
+  border-radius: 10px;
+  background: #1b1a26;
+}
+
+.partner-preview h2 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.partner-preview > p {
+  color: #d2cafa;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.partner-preview-item {
+  margin: 12px 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.partner-preview-item h3,
+.partner-preview-item strong {
+  display: block;
+  margin: 8px 0;
+  font-size: 12px;
+}
+
+.partner-preview-item pre {
+  max-height: 240px;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 7px;
+  background: #111219;
+  color: #d7d6e1;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 11px/1.6 "Segoe UI", "Microsoft YaHei UI", sans-serif;
 }
 
 .translator-heading h1 {
@@ -2529,6 +2666,15 @@ button {
 }
 
 @media (max-width: 900px) {
+  .brain-plan-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .brain-plan-controls {
+    justify-content: flex-start;
+  }
+
   .personality-card-grid,
   .personality-detail-fields,
   .collaboration-results,

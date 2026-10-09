@@ -6,6 +6,7 @@ const sendButton = document.getElementById("send-button");
 const recordButton = document.getElementById("record-button");
 const fileButton = document.getElementById("file-button");
 const observeButton = document.getElementById("observe-button");
+const imageButton = document.getElementById("image-button");
 const voiceStatus = document.getElementById("voice-status");
 const modelStatus = document.getElementById("model-status");
 const modelSetup = document.getElementById("model-setup");
@@ -25,6 +26,11 @@ const partnersScope = document.getElementById("partners-scope");
 const partnersSubmit = document.getElementById("partners-submit");
 const partnersStatus = document.getElementById("partners-status");
 const partnersHint = document.getElementById("partners-hint");
+const partnersExternalOptions = document.getElementById("partners-external-options");
+const partnersPreview = document.getElementById("partners-preview");
+const partnersPreviewPolicy = document.getElementById("partners-preview-policy");
+const partnersPreviewContent = document.getElementById("partners-preview-content");
+const partnersCancelPreview = document.getElementById("partners-cancel-preview");
 const partnersSynthesis = document.getElementById("partners-synthesis");
 const partnersSynthesisText = document.getElementById("partners-synthesis-text");
 const partnersResults = document.getElementById("partners-results");
@@ -42,6 +48,8 @@ const collaborationRoleCount = document.getElementById("collaboration-role-count
 const collaborationRoleStatus = document.getElementById("collaboration-role-status");
 const collaborationSynthesisSections = document.getElementById("collaboration-synthesis-sections");
 const brainPlanSubmit = document.getElementById("brain-plan-submit");
+const brainPlanClear = document.getElementById("brain-plan-clear");
+const miniGamePlanButton = document.getElementById("mini-game-plan");
 const collaborationStatus = document.getElementById("collaboration-status");
 const brainPlan = document.getElementById("brain-plan");
 const brainPlanSummary = document.getElementById("brain-plan-summary");
@@ -58,7 +66,9 @@ let brainObservationPanels = [];
 let collaborationRoles = [];
 let collaborationModelReady = false;
 let collaborationRequestActive = false;
+let brainToolExecutionActive = false;
 let collaborationRoleWarning = "";
+let activePartnerPreviewKey = "";
 const COLLABORATION_ROLE_STORAGE_KEY = "moling.collaboration.roles.v1";
 const collaborationSynthesis = document.getElementById("collaboration-synthesis");
 const collaborationSynthesisText = document.getElementById("collaboration-synthesis-text");
@@ -81,6 +91,12 @@ const affectIndicator = document.getElementById("affect-indicator");
 const affectMood = document.getElementById("affect-mood");
 const affectReason = document.getElementById("affect-reason");
 const affectStatus = document.getElementById("affect-status");
+const voiceMuted = document.getElementById("voice-muted");
+const voicePlaybackRate = document.getElementById("voice-playback-rate");
+const voicePlaybackRateValue = document.getElementById("voice-playback-rate-value");
+const voicePlaybackVolume = document.getElementById("voice-playback-volume");
+const voicePlaybackVolumeValue = document.getElementById("voice-playback-volume-value");
+const voicePreferencesStatus = document.getElementById("voice-preferences-status");
 const avatarInput = document.getElementById("avatar-name");
 const avatarStatus = document.getElementById("avatar-status");
 const characterCardList = document.getElementById("character-card-list");
@@ -108,6 +124,12 @@ let pendingVoiceSample;
 let activeVoicePreview;
 let activeVoicePreviewUrl;
 let selectedPersonalityPreset = "custom";
+const VOICE_PREFERENCES_KEY = "moling.voice.preferences.v1";
+const DEFAULT_VOICE_PREFERENCES = Object.freeze({
+  muted: false,
+  rate: 1,
+  volume: 0.8,
+});
 const simulatedEmotions = [
   ["calm", "平静"],
   ["happy", "开心"],
@@ -237,6 +259,65 @@ function addMessage(text, role, extraClass = "") {
   return message;
 }
 
+function getVoicePreferences() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(VOICE_PREFERENCES_KEY) || "{}");
+    return {
+      muted: saved.muted === true,
+      rate: Number.isFinite(saved.rate)
+        ? Math.min(1.25, Math.max(0.75, saved.rate))
+        : DEFAULT_VOICE_PREFERENCES.rate,
+      volume: Number.isFinite(saved.volume)
+        ? Math.min(1, Math.max(0, saved.volume))
+        : DEFAULT_VOICE_PREFERENCES.volume,
+    };
+  } catch {
+    return { ...DEFAULT_VOICE_PREFERENCES };
+  }
+}
+
+function applyVoicePreferences(audio) {
+  const preferences = getVoicePreferences();
+  audio.muted = preferences.muted;
+  audio.playbackRate = preferences.rate;
+  audio.volume = preferences.volume;
+}
+
+function initializeVoicePreferences() {
+  const preferences = getVoicePreferences();
+  voiceMuted.checked = preferences.muted;
+  voicePlaybackRate.value = String(preferences.rate);
+  voicePlaybackVolume.value = String(preferences.volume);
+  const save = () => {
+    const next = {
+      muted: voiceMuted.checked,
+      rate: Number(voicePlaybackRate.value),
+      volume: Number(voicePlaybackVolume.value),
+    };
+    try {
+      localStorage.setItem(VOICE_PREFERENCES_KEY, JSON.stringify(next));
+      voicePreferencesStatus.textContent = "声音偏好已保存在此浏览器。";
+      voicePreferencesStatus.classList.remove("error");
+    } catch (error) {
+      voicePreferencesStatus.textContent = `无法保存声音偏好：${error.message}`;
+      voicePreferencesStatus.classList.add("error");
+    }
+    voicePlaybackRateValue.textContent = `${next.rate.toFixed(2)}×`;
+    voicePlaybackVolumeValue.textContent = `${Math.round(next.volume * 100)}%`;
+  };
+  for (const control of [voiceMuted, voicePlaybackRate, voicePlaybackVolume]) {
+    control.addEventListener("input", save);
+    control.addEventListener("change", save);
+  }
+  document.getElementById("voice-preferences-reset").addEventListener("click", () => {
+    voiceMuted.checked = DEFAULT_VOICE_PREFERENCES.muted;
+    voicePlaybackRate.value = String(DEFAULT_VOICE_PREFERENCES.rate);
+    voicePlaybackVolume.value = String(DEFAULT_VOICE_PREFERENCES.volume);
+    save();
+  });
+  save();
+}
+
 function svgDataUrl(svgText) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`;
 }
@@ -267,6 +348,8 @@ function attachExploreOffer(anchorMessage, proposal, userPrompt) {
   skipButton.addEventListener("click", () => {
     card.remove();
   });
+
+  initializeVoicePreferences();
 
   tryButton.addEventListener("click", async () => {
     tryButton.disabled = true;
@@ -540,6 +623,7 @@ function addSpeechControl(message, text) {
         URL.revokeObjectURL(activeAudio.src);
       }
       playback = new Audio(audioUrl);
+      applyVoicePreferences(playback);
       activeAudio = playback;
       const releaseAudioUrl = () => {
         URL.revokeObjectURL(audioUrl);
@@ -775,7 +859,7 @@ function updateAgentReflectionButton() {
   button.disabled = conversationHistory.length === 0;
   button.title = button.disabled
     ? "先进行一次对话，墨灵才有可复盘的内容"
-    : "仅使用当前本地对话进行一次自主复盘";
+    : "点击后才会复盘；仅使用当前本地对话";
 }
 
 function renderAgentGoals(goals, reflection = "") {
@@ -794,7 +878,7 @@ function renderAgentGoals(goals, reflection = "") {
   if (!goals.length) {
     const empty = document.createElement("p");
     empty.className = "character-card-help";
-    empty.textContent = "还没有形成长期目标。墨灵会在真实对话后自主复盘，不会因为空白就强行编造目标。";
+    empty.textContent = "还没有形成长期目标。聊天不会自动触发复盘；你可以选择让墨灵只用当前本地对话复盘一次。";
     container.append(empty);
   }
   for (const goal of goals) {
@@ -1174,6 +1258,7 @@ async function playVoicePreview(sample) {
   const blob = new Blob([sample.bytes], { type: sample.contentType });
   activeVoicePreviewUrl = URL.createObjectURL(blob);
   activeVoicePreview = new Audio(activeVoicePreviewUrl);
+  applyVoicePreferences(activeVoicePreview);
   const playbackUrl = activeVoicePreviewUrl;
   activeVoicePreview.addEventListener(
     "ended",
@@ -1437,12 +1522,31 @@ async function loadPartnerStatus() {
   partnersHint.textContent = "伙伴状态加载中…";
   try {
     const status = await window.companion.partnersStatus();
+    partnersExternalOptions.replaceChildren();
     const lines = status.partners.map((p) => {
+      if (p.source === "external" && p.status === "enabled") {
+        return `${p.name}（${p.model}）Key 已配置；仅本次确认后调用`;
+      }
       if (p.status === "enabled" || p.status === "configured") {
         return `${p.name}（${p.model}）已启用`;
       }
       return `${p.name}：${p.reason}`;
     });
+    for (const partner of status.partners.filter((item) => item.source === "external")) {
+      const label = document.createElement("label");
+      label.className = "partner-consent-option";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = partner.id;
+      checkbox.disabled = partner.status !== "enabled";
+      checkbox.addEventListener("change", clearPartnerPreview);
+      const name = document.createElement("span");
+      name.textContent = `${partner.name}（${partner.model}）${
+        partner.status === "enabled" ? "" : " · 未配置"
+      }`;
+      label.append(checkbox, name);
+      partnersExternalOptions.append(label);
+    }
     partnersHint.textContent = `伙伴状态：${lines.join("；")}`;
     partnersSubmit.disabled = status.local_model === "placeholder";
     partnersSubmit.textContent =
@@ -1454,17 +1558,71 @@ async function loadPartnerStatus() {
   }
 }
 
+function selectedExternalPartnerIds() {
+  return Array.from(
+    partnersExternalOptions.querySelectorAll("input[type=checkbox]:checked"),
+    (checkbox) => checkbox.value,
+  );
+}
+
+function clearPartnerPreview() {
+  activePartnerPreviewKey = "";
+  partnersPreview.hidden = true;
+  partnersPreviewContent.replaceChildren();
+  partnersSubmit.textContent = "让伙伴们开始评价";
+}
+
+function renderPartnerPreview(preview) {
+  partnersPreviewPolicy.textContent =
+    `${preview.external_data_policy} 请确认服务方、模型和下方完整提示词；外部服务可能收费并按其政策处理请求。`;
+  partnersPreviewContent.replaceChildren();
+  for (const partner of preview.partners) {
+    const article = document.createElement("article");
+    article.className = "partner-preview-item";
+    const title = document.createElement("h3");
+    title.textContent = `${partner.name} · ${partner.model}`;
+    const systemLabel = document.createElement("strong");
+    systemLabel.textContent = "系统说明";
+    const systemPrompt = document.createElement("pre");
+    systemPrompt.textContent = partner.system_prompt;
+    const promptLabel = document.createElement("strong");
+    promptLabel.textContent = "将发送的评审内容";
+    const prompt = document.createElement("pre");
+    prompt.textContent = partner.prompt;
+    article.append(title, systemLabel, systemPrompt, promptLabel, prompt);
+    partnersPreviewContent.append(article);
+  }
+  partnersPreview.hidden = false;
+}
+
 async function runPartnerReview(event) {
   event.preventDefault();
   const scope = partnersScope.value;
-  partnersStatus.textContent =
-    "伙伴们正在阅读墨灵的档案并各自评审…（已启用的外部伙伴会消耗其 API 额度）";
+  const partnerIds = selectedExternalPartnerIds();
+  const previewKey = JSON.stringify({ scope, partnerIds });
+  partnersStatus.textContent = partnerIds.length
+    ? "正在本机准备脱敏评审内容；尚未向外部发送…"
+    : "本地主引擎正在评审；本次不会调用外部伙伴…";
   partnersStatus.classList.remove("error");
   partnersSubmit.disabled = true;
   try {
-    const result = await window.companion.partnersEvaluate(scope);
+    if (partnerIds.length && activePartnerPreviewKey !== previewKey) {
+      const preview = await window.companion.partnersPreview(scope, partnerIds);
+      renderPartnerPreview(preview);
+      activePartnerPreviewKey = previewKey;
+      partnersSubmit.textContent = "确认发送给所选伙伴并开始评审";
+      partnersStatus.textContent =
+        "预览已在本机生成；尚未外发。检查内容后再次点击确认，或取消本次评审。";
+      return;
+    }
+    const result = await window.companion.partnersEvaluate(
+      scope,
+      partnerIds,
+      partnerIds.length > 0,
+    );
     renderPartnerReview(result);
     partnersStatus.textContent = `评审完成：${result.enabled_count} 位伙伴参与`;
+    clearPartnerPreview();
   } catch (error) {
     partnersStatus.textContent = `评审失败：${error.message || error}`;
     partnersStatus.classList.add("error");
@@ -1472,6 +1630,12 @@ async function runPartnerReview(event) {
     partnersSubmit.disabled = false;
   }
 }
+
+partnersScope.addEventListener("change", clearPartnerPreview);
+partnersCancelPreview.addEventListener("click", () => {
+  clearPartnerPreview();
+  partnersStatus.textContent = "已取消；没有向外部伙伴发送评审内容。";
+});
 
 function renderPartnerReview(result) {
   partnersResults.replaceChildren();
@@ -1482,7 +1646,9 @@ function renderPartnerReview(result) {
     const title = document.createElement("h3");
     title.textContent =
       `${partner.name} · ` +
-      (partner.status === "disabled"
+      (partner.status === "not_requested"
+        ? "本次未选择"
+        : partner.status === "disabled"
         ? "未参与"
         : partner.source === "local"
           ? "本地评审"
@@ -1500,6 +1666,8 @@ function renderPartnerReview(result) {
     } else if (partner.status === "failed") {
       opinion.className = "collaboration-opinion error-message";
       opinion.textContent = `评审未完成：${partner.error}`;
+    } else if (partner.status === "not_requested") {
+      opinion.textContent = "本次未选择，不会向该伙伴发送内容。";
     } else {
       opinion.className = "collaboration-opinion error-message";
       opinion.textContent = `未配置 API Key，本轮跳过：${partner.reason}`;
@@ -1629,15 +1797,23 @@ function updateCollaborationRoleControls() {
   collaborationRoleCount.textContent =
     `${enabledCount} / ${collaborationRoles.length} 个角色已启用`;
   collaborationSubmit.disabled =
-    collaborationRequestActive || !collaborationModelReady || enabledCount === 0;
+    collaborationRequestActive ||
+    brainToolExecutionActive ||
+    !collaborationModelReady ||
+    enabledCount === 0;
   collaborationSubmit.textContent = collaborationRequestActive
     ? "正在处理当前目标…"
+    : brainToolExecutionActive
+      ? "当前工具步骤完成后可继续"
     : !collaborationModelReady
       ? "等待本机模型就绪"
       : enabledCount
         ? `征求 ${enabledCount} 个角色的意见`
         : "至少启用一个评审角色";
-  brainPlanSubmit.disabled = collaborationRequestActive || !collaborationModelReady;
+  brainPlanSubmit.disabled =
+    collaborationRequestActive || brainToolExecutionActive || !collaborationModelReady;
+  miniGamePlanButton.disabled =
+    collaborationRequestActive || brainToolExecutionActive || !collaborationModelReady;
 }
 
 function renderCollaborationRoles() {
@@ -1980,6 +2156,43 @@ brainPlanSubmit.addEventListener("click", async () => {
   }
 });
 
+miniGamePlanButton.addEventListener("click", () => {
+  collaborationTask.value =
+    "请和我共创一个离线可玩的单文件 HTML 小游戏。先规划，不要自动执行。使用原生 HTML/CSS/JavaScript，不加载外部资源或联网；生成内容需在 4000 字符内，作为新文件 Frontend/moling-mini-game.html。计划必须包含完整文件内容并使用 create_project_file；若内容过长就先缩小游戏机制。创建前让我检查路径和完整内容并逐次审批，绝不覆盖已有文件。";
+  updateBrainPlanTaskState();
+  brainPlanSubmit.click();
+});
+
+brainPlanClear.addEventListener("click", () => {
+  const activeStep = brainPlanSteps.querySelector('[data-busy="true"]');
+  if (
+    activeStep &&
+    !window.confirm(
+      "当前已批准的单步工具调用无法中断。清除计划只会阻止后续步骤；正在执行的这一步可能仍会完成。要继续清除吗？",
+    )
+  ) {
+    return;
+  }
+  activeBrainPlan = undefined;
+  brainPlanSteps.querySelectorAll(".brain-step-execute").forEach((button) => {
+    if (button.dataset.busy !== "true") {
+      button.disabled = true;
+      button.dataset.terminal = "true";
+    }
+  });
+  brainPlanObservations
+    .querySelectorAll(".brain-observation-verify")
+    .forEach((button) => {
+      button.disabled = true;
+      button.hidden = true;
+    });
+  if (!activeStep) brainPlan.hidden = true;
+  collaborationStatus.textContent = activeStep
+    ? "计划已清除；已批准的当前步骤仍可能完成，但不会再启动其他计划步骤。"
+    : "计划已清除；没有启动任何后续操作。";
+  collaborationStatus.classList.remove("error");
+});
+
 function updateBrainStepStatus(stepIndex, state, message) {
   const status = brainStepStatusNodes[stepIndex];
   if (!status) return;
@@ -1988,7 +2201,8 @@ function updateBrainStepStatus(stepIndex, state, message) {
 }
 
 async function executeBrainStep(stepIndex) {
-  const step = activeBrainPlan?.steps[stepIndex];
+  const plan = activeBrainPlan;
+  const step = plan?.steps[stepIndex];
   if (
     !step?.tool ||
     !["list_project_files", "read_project_file", "create_project_file"].includes(step.tool) ||
@@ -2002,6 +2216,8 @@ async function executeBrainStep(stepIndex) {
     collaborationStatus.classList.add("error");
     return;
   }
+  brainToolExecutionActive = true;
+  updateCollaborationRoleControls();
   const button = brainPlanSteps.querySelector(
     `.brain-step-execute[data-step-index="${stepIndex}"]`,
   );
@@ -2040,6 +2256,23 @@ async function executeBrainStep(stepIndex) {
   status.setAttribute("aria-live", "polite");
   try {
     const result = await window.companion.executeAgentTool(step.tool, step.arguments);
+    if (activeBrainPlan !== plan) {
+      status.textContent = result.approved
+        ? "计划清除前已批准的当前步骤已完成；观察结果保留，但不会启动其他步骤。"
+        : "计划已清除；当前审批已拒绝，没有执行该步骤。";
+      resultNode.textContent = result.approved
+        ? JSON.stringify(result.observation, null, 2).slice(0, 12000)
+        : "";
+      updateBrainStepStatus(
+        stepIndex,
+        result.approved ? "observed" : "rejected",
+        result.approved ? "已完成 · 计划已清除" : "已拒绝 · 计划已清除",
+      );
+      button.dataset.busy = "false";
+      button.disabled = true;
+      button.textContent = "计划已清除";
+      return;
+    }
     if (!result.approved) {
       status.textContent = isCreate
         ? "你拒绝了本次创建；没有新建文件。"
@@ -2147,7 +2380,9 @@ async function executeBrainStep(stepIndex) {
     }
   } finally {
     button.dataset.busy = "false";
-    button.disabled = false;
+    button.disabled = button.dataset.terminal === "true" || activeBrainPlan !== plan;
+    brainToolExecutionActive = false;
+    updateCollaborationRoleControls();
     updateBrainPlanTaskState();
   }
 }
@@ -2281,6 +2516,7 @@ function playSynthesizedWav(wavBytes) {
     URL.revokeObjectURL(activeAudio.src);
   }
   const playback = new Audio(audioUrl);
+  applyVoicePreferences(playback);
   activeAudio = playback;
   const release = () => {
     URL.revokeObjectURL(audioUrl);
@@ -2763,6 +2999,142 @@ function renderMemories(memories) {
   }
 }
 
+function attachReplyTools(message, evidence) {
+  const tools = document.createElement("div");
+  tools.className = "reply-tools";
+
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = "查看本次回答依据";
+  const sourceList = document.createElement("ul");
+  sourceList.className = "reply-evidence-list";
+  const addEvidence = (label, value) => {
+    if (!value) return;
+    const item = document.createElement("li");
+    const heading = document.createElement("strong");
+    heading.textContent = label;
+    const text = document.createElement("span");
+    text.textContent = value;
+    item.append(heading, text);
+    sourceList.append(item);
+  };
+  addEvidence("本轮输入", evidence?.direct_input);
+  for (const item of evidence?.recent_context || []) {
+    addEvidence(item.role === "user" ? "近期用户消息" : "近期墨灵回复", item.content);
+  }
+  if (evidence?.context_messages_not_shown) {
+    addEvidence(
+      "其他上下文",
+      `本次请求还携带了 ${evidence.context_messages_not_shown} 条更早的历史消息；面板仅展示最近部分。`,
+    );
+  }
+  for (const component of evidence?.prompt_components || []) {
+    addEvidence("提示组成部分", component);
+  }
+  for (const memory of evidence?.model_memories || []) {
+    addEvidence(`已纳入提示的记忆 · ${memory.id}`, memory.content);
+  }
+  addEvidence("记忆使用情况", evidence?.memory_policy);
+  addEvidence("边界", evidence?.limits);
+  if (sourceList.childElementCount === 0) {
+    addEvidence("状态", "此回复没有提供可核对的来源记录。");
+  }
+  details.append(summary, sourceList);
+
+  const actions = document.createElement("div");
+  actions.className = "reply-tool-actions";
+  const correction = document.createElement("button");
+  correction.type = "button";
+  correction.textContent = "纠正理解";
+  correction.addEventListener("click", () => {
+    const correctionText = window.prompt("你希望墨灵如何修正这次理解？");
+    if (!correctionText?.trim()) return;
+    void sendMessage(
+      `我想纠正你刚才的理解：${correctionText.trim()}。请先按这次补充修正，不要自动把它保存为长期偏好。`,
+    );
+  });
+
+  const alternatives = document.createElement("button");
+  alternatives.type = "button";
+  alternatives.textContent = "给我另一种解释";
+  alternatives.addEventListener("click", () => {
+    void sendMessage(
+      "请针对你刚才的回答给出至少一种不同解释；区分我明确说过的内容与你的推测，不要把推测说成事实。",
+    );
+  });
+
+  const forget = document.createElement("button");
+  forget.type = "button";
+  forget.textContent = "这次不要记住";
+  forget.addEventListener("click", () => {
+    void sendMessage(
+      "这次不要把刚才的内容记录为长期记忆或稳定偏好。请只在当前对话范围内回应，并说明当前聊天内容不会自动写入长期记忆。",
+    );
+  });
+
+  actions.append(correction, alternatives, forget);
+  tools.append(details, actions);
+  message.append(tools);
+}
+
+async function handleAnalyzeImage() {
+  imageButton.disabled = true;
+  try {
+    const result = await window.companion.analyzeImage();
+    if (result.canceled) return;
+    const message = addMessage(
+      `我看了你主动选择的图片「${result.name}」。这次分析不会自动保存图片或写入长期记忆；模型可能看错，下面请你核对。`,
+      "assistant",
+    );
+    const preview = document.createElement("img");
+    preview.className = "image-analysis-preview";
+    preview.src = result.image_data_url;
+    preview.alt = `本次分析的图片：${result.name}`;
+    const analysis = document.createElement("section");
+    analysis.className = "image-analysis-result";
+    const heading = document.createElement("strong");
+    heading.textContent = result.analysis.observed || result.analysis.summary;
+    analysis.append(heading);
+    if (result.analysis.possible_interpretations) {
+      const interpretation = document.createElement("p");
+      interpretation.textContent =
+        `可能解释（不保证正确）：${result.analysis.possible_interpretations}`;
+      analysis.append(interpretation);
+    }
+    const uncertainty = document.createElement("p");
+    uncertainty.textContent = `不确定处：${result.analysis.uncertainty}`;
+    analysis.append(uncertainty);
+    if (result.analysis.clarifying_question) {
+      const question = document.createElement("p");
+      question.textContent = `想确认：${result.analysis.clarifying_question}`;
+      analysis.append(question);
+    }
+    const metadata = document.createElement("small");
+    metadata.textContent =
+      `本机模型：${result.analysis.engine} · 图片仅用于本次分析 · OCR/视觉描述可能有误`;
+    analysis.append(metadata);
+    const correction = document.createElement("button");
+    correction.type = "button";
+    correction.className = "reply-tool-action";
+    correction.textContent = "模型看错了";
+    correction.addEventListener("click", () => {
+      const note = window.prompt("哪一处描述不准确？这次纠正不会保存为长期记忆。");
+      if (note?.trim()) {
+        void sendMessage(
+          `你刚才分析我主动选择的图片时看错了：${note.trim()}。请承认不确定之处，并只根据我这次的纠正重新描述，不要推断我的情绪或意图，也不要把纠正保存为长期记忆。`,
+        );
+      }
+    });
+    analysis.append(correction);
+    message.append(preview, analysis);
+    conversation.scrollTop = conversation.scrollHeight;
+  } catch (error) {
+    addMessage(`图片分析没有完成：${error.message || error}`, "assistant", "error-message");
+  } finally {
+    imageButton.disabled = false;
+  }
+}
+
 async function sendMessage(text) {
   const prompt = text.trim();
   if (!prompt || sendButton.disabled) return;
@@ -2778,6 +3150,7 @@ async function sendMessage(text) {
     pending.textContent = result.text;
     pending.classList.remove("pending");
     addSpeechControl(pending, result.text);
+    attachReplyTools(pending, result.evidence);
     modelStatus.textContent = `本地模型 · ${result.model}`;
     conversationHistory = [
       ...historyForRequest,
@@ -2789,7 +3162,6 @@ async function sendMessage(text) {
     if (result.explore_proposal?.proposed) {
       attachExploreOffer(pending, result.explore_proposal, prompt);
     }
-    void reflectOnConversation(currentCharacterId, conversationHistory);
   } catch (error) {
     pending.textContent = `暂时无法生成：${error.message}`;
     pending.classList.add("error-message");
@@ -2841,6 +3213,7 @@ composer.addEventListener("submit", (event) => {
 recordButton.addEventListener("click", toggleRecording);
 
 fileButton.addEventListener("click", handleDiscoverFile);
+imageButton.addEventListener("click", handleAnalyzeImage);
 
 async function handleDiscoverFile() {
   if (

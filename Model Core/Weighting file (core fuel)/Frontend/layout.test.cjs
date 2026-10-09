@@ -73,12 +73,39 @@ test("collaboration actions require a ready local model and show the enabled-rol
   );
   assert.match(
     renderer,
-    /collaborationRequestActive \|\| !collaborationModelReady \|\| enabledCount === 0/,
+    /collaborationRequestActive \|\|[\s\S]*?brainToolExecutionActive[\s\S]*?!collaborationModelReady[\s\S]*?enabledCount === 0/,
   );
   assert.match(
     renderer,
     /`\$\{enabledCount\} \/ \$\{collaborationRoles\.length\} 个角色已启用`/,
   );
+});
+
+test("voice preferences and user-selected image analysis are visible, local-first controls", () => {
+  assert.match(html, /id="voice-muted"/);
+  assert.match(html, /id="voice-playback-rate"/);
+  assert.match(html, /id="voice-playback-volume"/);
+  assert.match(html, /id="voice-preferences-reset"/);
+  assert.match(html, /id="image-button"[^>]*title="选择一张图片，单次分析"/);
+  assert.match(renderer, /function applyVoicePreferences\(audio\)/);
+  assert.match(renderer, /localStorage\.setItem\(VOICE_PREFERENCES_KEY/);
+  assert.match(main, /showOpenDialog/);
+  assert.match(main, /\/v1\/vision\/analyze/);
+  assert.match(renderer, /possible_interpretations/);
+  assert.match(renderer, /模型看错了/);
+});
+
+test("plans can be cleared safely and offer a review-first offline mini-game task", () => {
+  assert.match(html, /id="brain-plan-clear"[^>]*>清除计划 · 停止后续步骤/);
+  assert.match(html, /id="mini-game-plan"[^>]*>共创一个小游戏/);
+  assert.match(
+    renderer,
+    /当前已批准的单步工具调用无法中断。清除计划只会阻止后续步骤/,
+  );
+  assert.match(renderer, /计划清除前已批准的当前步骤已完成/);
+  assert.match(renderer, /不加载外部资源或联网/);
+  assert.match(renderer, /绝不覆盖已有文件/);
+  assert.match(renderer, /create_project_file/);
 });
 
 test("starting a plan or collaboration clears stale results from the other flow", () => {
@@ -161,4 +188,31 @@ test("new project files show the exact proposal and require one-time native appr
   assert.match(main, /以下为将写入的完整内容：/);
   assert.match(main, /buttons: \["本次允许", "拒绝"\]/);
   assert.match(main, /if \(approval\.response !== 0\)/);
+});
+
+test("chat replies expose evidence and user-controlled correction actions", () => {
+  assert.match(renderer, /查看本次回答依据/);
+  assert.match(renderer, /本轮输入/);
+  assert.match(renderer, /纠正理解/);
+  assert.match(renderer, /给我另一种解释/);
+  assert.match(renderer, /这次不要记住/);
+  assert.match(renderer, /attachReplyTools\(pending, result\.evidence\)/);
+  const sendMessage = renderer.match(/async function sendMessage\(text\) \{([\s\S]*?)\n\}/)?.[1] || "";
+  assert.doesNotMatch(sendMessage, /reflectOnConversation/);
+  assert.match(html, /聊天不会自动触发复盘/);
+  assert.match(css, /\.reply-tools\s*\{/);
+});
+
+test("external partner reviews require a local preview and per-run confirmation", () => {
+  assert.match(html, /默认只使用本地主引擎/);
+  assert.match(html, /id="partners-external-options"/);
+  assert.match(html, /id="partners-preview"/);
+  assert.match(renderer, /正在本机准备脱敏评审内容；尚未向外部发送/);
+  assert.match(renderer, /确认发送给所选伙伴并开始评审/);
+  assert.match(renderer, /partnersEvaluate\(\s*scope,\s*partnerIds,\s*partnerIds\.length > 0/);
+  assert.match(renderer, /已取消；没有向外部伙伴发送评审内容/);
+  assert.match(main, /external_consent: externalConsent/);
+  assert.match(main, /\/v1\/partners\/preview/);
+  assert.match(main, /"\/v1\/partners\/evaluate": \["POST"\]/);
+  assert.match(main, /"\/v1\/partners\/status": \["GET"\]/);
 });

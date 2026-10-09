@@ -49,11 +49,19 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke("companion:delete-voice-reference", id),
     generate: (prompt, history) =>
       ipcRenderer.invoke("companion:generate", prompt, history),
+    analyzeImage: () => ipcRenderer.invoke("companion:analyze-image"),
     discoverFile: () => ipcRenderer.invoke("companion:discover-file"),
     discoverContext: () => ipcRenderer.invoke("companion:discover-context"),
     partnersStatus: () => ipcRenderer.invoke("companion:partners-status"),
-    partnersEvaluate: (scope) =>
-      ipcRenderer.invoke("companion:partners-evaluate", scope),
+    partnersPreview: (scope, partnerIds) =>
+      ipcRenderer.invoke("companion:partners-preview", scope, partnerIds),
+    partnersEvaluate: (scope, partnerIds, externalConsent) =>
+      ipcRenderer.invoke(
+        "companion:partners-evaluate",
+        scope,
+        partnerIds,
+        externalConsent,
+      ),
     exploreRun: (payload) => ipcRenderer.invoke("companion:explore-run", payload),
     exploreReact: (payload) =>
       ipcRenderer.invoke("companion:explore-react", payload),

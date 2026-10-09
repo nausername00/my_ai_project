@@ -188,6 +188,7 @@
             <div class="collaboration-form-footer">
               <span class="character-card-help">不会自动修改文件、联网、联系他人或保存记忆；评审结果目前仅保留在此窗口。</span>
               <div class="collaboration-actions">
+                <button class="icon-button" id="mini-game-plan" type="button" disabled>共创一个小游戏</button>
                 <button class="icon-button" id="brain-plan-submit" type="button" disabled>生成可审阅计划</button>
                 <button class="save-button" id="collaboration-submit" type="submit" disabled>等待本机模型就绪</button>
               </div>
@@ -200,7 +201,10 @@
                 <span class="eyebrow">BRAIN KERNEL · PLAN</span>
                 <h2>墨灵的行动计划</h2>
               </div>
-              <span class="plan-limit">最多 8 步 · 仅规划不会自动执行</span>
+              <div class="brain-plan-controls">
+                <span class="plan-limit">最多 8 步 · 仅规划不会自动执行</span>
+                <button class="quiet-button" id="brain-plan-clear" type="button">清除计划 · 停止后续步骤</button>
+              </div>
             </header>
             <p class="brain-plan-summary" id="brain-plan-summary"></p>
             <p class="brain-plan-target" id="brain-plan-target"></p>
@@ -231,7 +235,7 @@
           <div class="translator-heading collaboration-heading">
             <span class="eyebrow">PARTNER REVIEW · 伙伴评审团</span>
             <h1 id="partners-title">让伙伴们评价墨灵</h1>
-            <p>本地主引擎 + 外部伙伴（GPT / DeepSeek / 千问）各自独立评审墨灵，再综合成一份报告。外部伙伴需配置 API Key 才启用；未配置的自动跳过并注明，绝不伪造调用。</p>
+            <p>默认只使用本地主引擎。选择外部伙伴后，墨灵会先在本机展示将发送的完整评审内容；只有你再次确认，才会把脱敏摘要发给所选服务。长期记忆、私人对话和情绪状态不会发送。</p>
           </div>
           <form id="partners-form" class="collaboration-form">
             <div class="collaboration-form-heading">
@@ -246,6 +250,16 @@
               <option value="recent_work">近期功能实现</option>
               <option value="experience">整体陪伴体验</option>
             </select>
+            <fieldset class="partner-consent-options">
+              <legend>可选外部伙伴（逐次授权）</legend>
+              <div id="partners-external-options"></div>
+            </fieldset>
+            <section id="partners-preview" class="partner-preview" aria-label="外部评审数据预览" hidden>
+              <h2>发送前预览</h2>
+              <p id="partners-preview-policy"></p>
+              <div id="partners-preview-content"></div>
+              <button class="quiet-button" id="partners-cancel-preview" type="button">取消本次外部评审</button>
+            </section>
             <p class="form-status collaboration-role-status" id="partners-status" role="status" aria-live="polite"></p>
             <div class="collaboration-form-footer">
               <span class="character-card-help" id="partners-hint">伙伴状态加载中…</span>
@@ -304,6 +318,7 @@
           <div class="composer-footer">
             <div class="composer-actions">
               <button class="icon-button" id="file-button" type="button" title="发文件给墨灵">发文件</button>
+              <button class="icon-button" id="image-button" type="button" title="选择一张图片，单次分析">选图片</button>
               <button class="icon-button" id="observe-button" type="button" title="让墨灵看看当前窗口">看窗口</button>
               <button class="icon-button" id="record-button" type="button">开始录音</button>
               <button class="send-button" id="send-button" type="submit" aria-label="发送">
@@ -370,7 +385,23 @@
         </section>
         <section id="affect-panel" hidden>
           <div class="affect-settings">
-            <h3>互动状态（模拟）</h3>
+          <h3>声音偏好（仅保存在此浏览器）</h3>
+          <p>合成音色仍由当前本地语音引擎决定；这些选项调整播放方式，不会训练声线或上传录音。</p>
+          <label class="privacy-toggle">
+            <input id="voice-muted" type="checkbox" />
+            <span>静音语音播放</span>
+          </label>
+          <label for="voice-playback-rate">播放速度 <span id="voice-playback-rate-value">1.00×</span>
+            <input id="voice-playback-rate" type="range" min="0.75" max="1.25" step="0.05" value="1" />
+          </label>
+          <label for="voice-playback-volume">播放音量 <span id="voice-playback-volume-value">80%</span>
+            <input id="voice-playback-volume" type="range" min="0" max="1" step="0.05" value="0.8" />
+          </label>
+          <button class="icon-button" id="voice-preferences-reset" type="button">恢复声音默认设置</button>
+          <p id="voice-preferences-status" class="form-status" role="status"></p>
+          </div>
+          <div class="affect-settings">
+          <h3>互动状态（模拟）</h3>
             <p>开心、好奇、担心、害羞等是角色当前的模拟表达状态；温柔、真诚、有主见是稳定人格。当前状态只按文字线索调整或由你手动设置，不会录音分析情绪，也不代表真实感受。</p>
             <label for="affect-mood">当前表现状态</label>
             <select id="affect-mood">
@@ -455,7 +486,7 @@
                 <input id="agent-autonomy-enabled" type="checkbox" />
                 <span>允许墨灵自主形成和跟进低风险本地目标</span>
               </label>
-              <p class="character-card-help">目标不是用户分配的清单。墨灵会根据内在驱动力和共同经历，在对话后自行复盘并维护目标；可以规划学习、记录、创作和低风险的关系练习。读取屏幕、改动用户文件、联网或联系他人，仍需先取得你的许可。目标和进度保存为本地角色数据。</p>
+              <p class="character-card-help">目标不是用户分配的清单。聊天不会自动触发复盘；你可以手动发起一次仅基于当前本地对话的复盘，维护学习、记录、创作和低风险关系练习等自有目标。读取屏幕、改动用户文件、联网或联系他人，仍需先取得你的许可。目标和进度保存为本地角色数据。</p>
               <div class="agent-growth-actions">
                 <button class="icon-button" id="agent-reflect-now" type="button">让墨灵复盘最近对话</button>
                 <span class="character-card-help">只使用当前本地对话，不会联网或联系他人。</span>

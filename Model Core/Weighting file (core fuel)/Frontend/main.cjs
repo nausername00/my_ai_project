@@ -70,6 +70,64 @@ function initializeDataPaths() {
   );
 }
 
+async function chooseAndAnalyzeImage() {
+  const picked = await dialog.showOpenDialog({
+    title: "选择一张要让墨灵单次分析的图片",
+    buttonLabel: "选择图片",
+    properties: ["openFile"],
+    filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "webp"] }],
+  });
+  if (picked.canceled || !picked.filePaths.length) return { canceled: true };
+
+  const filePath = picked.filePaths[0];
+  const extension = path.extname(filePath).toLowerCase();
+  const contentTypeByExtension = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+  };
+  const contentType = contentTypeByExtension[extension];
+  const stats = await fs.stat(filePath);
+  if (!contentType || stats.size < 1 || stats.size > 10 * 1024 * 1024) {
+    throw new Error("请选择 10 MB 以内的 PNG、JPEG 或 WebP 图片。");
+  }
+
+  const approval = await dialog.showMessageBox(
+    BrowserWindow.getFocusedWindow() || mainWindow,
+    {
+      type: "question",
+      title: "确认单次图片分析",
+      message: "墨灵只会分析你刚选择的这张图片。",
+      detail:
+        `文件：${path.basename(filePath)}\n` +
+        `大小：${Math.ceil(stats.size / 1024)} KB\n\n` +
+        "图片会发送给当前配置的本地模型，仅用于本次分析；不保存到角色记忆或作品集，也不会发送给外部伙伴。图片内容可能被模型误读，请自行核对。",
+      buttons: ["本次允许", "取消"],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    },
+  );
+  if (approval.response !== 0) return { canceled: true };
+
+  const bytes = await fs.readFile(filePath);
+  if (bytes.byteLength !== stats.size || bytes.byteLength > 10 * 1024 * 1024) {
+    throw new Error("图片在确认后发生变化或超过大小限制，请重新选择。");
+  }
+  const result = await callApi("/v1/vision/analyze", "POST", {
+    image_base64: bytes.toString("base64"),
+    content_type: contentType,
+  });
+  return {
+    canceled: false,
+    name: path.basename(filePath),
+    content_type: contentType,
+    image_data_url: `data:${contentType};base64,${bytes.toString("base64")}`,
+    analysis: result,
+  };
+}
+
 function findFreePort() {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -193,6 +251,10 @@ async function callApi(route, method = "GET", body, extraHeaders = {}) {
     "/v1/social/collaborate": ["POST"],
     "/v1/agent/tool/execute": ["POST"],
     "/v1/agent/tool/verify": ["POST"],
+    "/v1/partners/status": ["GET"],
+    "/v1/partners/preview": ["GET"],
+    "/v1/partners/evaluate": ["POST"],
+    "/v1/vision/analyze": ["POST"],
     "/v1/memory": ["GET", "POST"],
     "/v1/memory/export": ["GET"],
     "/v1/memory/import": ["POST"],
@@ -575,6 +637,7 @@ function registerIpcHandlers() {
   ipcMain.handle("companion:generate", (_event, prompt, history) =>
     callApi("/v1/generate", "POST", { prompt, max_tokens: 128, history }),
   );
+  ipcMain.handle("companion:analyze-image", chooseAndAnalyzeImage);
   ipcMain.handle("companion:discover-file", async () => {
     const picked = await dialog.showOpenDialog({
       title: "分享一个文件给墨灵",
@@ -642,8 +705,19 @@ function registerIpcHandlers() {
   ipcMain.handle("companion:partners-status", () =>
     callApi("/v1/partners/status"),
   );
-  ipcMain.handle("companion:partners-evaluate", (_event, scope) =>
-    callApi("/v1/partners/evaluate", "POST", { scope }),
+  ipcMain.handle("companion:partners-preview", (_event, scope, partnerIds) => {
+    const params = new URLSearchParams({ scope });
+    for (const partnerId of partnerIds) params.append("partner_id", partnerId);
+    return callApi(`/v1/partners/preview?${params.toString()}`);
+  });
+  ipcMain.handle(
+    "companion:partners-evaluate",
+    (_event, scope, partnerIds, externalConsent) =>
+      callApi("/v1/partners/evaluate", "POST", {
+        scope,
+        external_partner_ids: partnerIds,
+        external_consent: externalConsent,
+      }),
   );
   ipcMain.handle("companion:explore-run", (_event, payload) =>
     callApi("/v1/explore/run", "POST", payload),
