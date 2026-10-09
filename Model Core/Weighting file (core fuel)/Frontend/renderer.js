@@ -254,6 +254,15 @@ function addMessage(text, role, extraClass = "") {
   const message = document.createElement("div");
   message.className = `message ${role} ${extraClass}`.trim();
   message.textContent = text;
+  if (role === "assistant") {
+    const stamp = document.createElement("span");
+    stamp.className = "message-stamp";
+    stamp.textContent = new Date().toLocaleTimeString("zh-CN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    message.append(stamp);
+  }
   conversation.append(message);
   conversation.scrollTop = conversation.scrollHeight;
   return message;

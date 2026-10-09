@@ -3041,3 +3041,16 @@ dialog.character-editor-dialog {
 .form-status {
   color: var(--muted);
 }
+
+/* ---------- 消息时间戳 ---------- */
+.message-stamp {
+  display: block;
+  margin-top: 7px;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  opacity: 0.62;
+  text-align: right;
+  user-select: none;
+}
