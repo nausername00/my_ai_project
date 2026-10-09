@@ -2783,3 +2783,261 @@ button {
     gap: 2px;
   }
 }
+
+/* ============================================================
+   设计系统增强 v2 · P2 界面美化（2026-10-10）
+   纯增量层：不修改既有规则，通过变量覆盖与附加规则增强
+   ============================================================ */
+:root {
+  --ok: #4aa86e;
+  --warn: #d9a53b;
+  --danger: #e0655f;
+  --info: #6aa9e8;
+  --surface-0: #0f1116;
+  --surface-3: #2a2f3a;
+  --brand-grad: linear-gradient(135deg, #a99bff 0%, #7a6cf0 55%, #5f7cf0 100%);
+  --brand-glow: 0 6px 26px rgba(155, 140, 255, 0.26);
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.32);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.42);
+}
+
+/* 全局滚动条 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #343a47;
+  border-radius: 8px;
+  border: 2px solid #111318;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #454c5c;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 应用底色：顶部品牌光晕，增加层次 */
+body {
+  background:
+    radial-gradient(1100px 420px at 18% -8%, rgba(155, 140, 255, 0.13), transparent 62%),
+    radial-gradient(900px 380px at 88% -6%, rgba(95, 124, 240, 0.09), transparent 60%),
+    #111318;
+}
+
+/* ---------- 侧栏 ---------- */
+.sidebar {
+  background: linear-gradient(180deg, #171a21 0%, #13151b 100%);
+  box-shadow: inset -1px 0 0 rgba(45, 50, 61, 0.6);
+}
+.brand-mark {
+  background: var(--brand-grad);
+  box-shadow: var(--brand-glow);
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+.brand:hover .brand-mark {
+  transform: scale(1.06) rotate(-3deg);
+}
+.conversation {
+  border-radius: 10px;
+  transition: background 160ms ease, color 160ms ease, transform 120ms ease;
+}
+.conversation.active {
+  background: linear-gradient(90deg, rgba(155, 140, 255, 0.16), rgba(155, 140, 255, 0.05));
+  box-shadow: inset 3px 0 0 var(--accent);
+  color: #ece8ff;
+}
+.conversation:active {
+  transform: scale(0.98);
+}
+.workspace-icon {
+  transition: background 160ms ease, color 160ms ease;
+}
+.sidebar-bottom {
+  border-top: 1px solid rgba(45, 50, 61, 0.55);
+  padding-top: 10px;
+}
+.local-indicator {
+  box-shadow: 0 0 0 3px rgba(74, 168, 110, 0.18);
+}
+
+/* ---------- 顶栏 ---------- */
+.topbar {
+  background: rgba(24, 27, 34, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 1px 0 rgba(45, 50, 61, 0.5);
+}
+.character-avatar {
+  box-shadow: var(--shadow-sm);
+  transition: border-color 220ms ease, box-shadow 220ms ease, transform 180ms ease;
+}
+.character-avatar:hover {
+  transform: translateY(-1px);
+}
+.topbar-avatar {
+  box-shadow: 0 0 0 3px rgba(155, 140, 255, 0.14);
+}
+.affect-indicator {
+  transition: background 180ms ease, border-color 180ms ease;
+}
+
+/* ---------- 聊天气泡增强 ---------- */
+.conversation-view {
+  padding-bottom: 8px;
+}
+.message {
+  border: 1px solid rgba(45, 50, 61, 0.9);
+  background: linear-gradient(150deg, #1e222c 0%, #191c24 100%);
+  box-shadow: var(--shadow-sm);
+  transition: transform 140ms ease, box-shadow 180ms ease;
+}
+.message:hover {
+  box-shadow: var(--shadow-md);
+}
+.message.user {
+  border-color: rgba(155, 140, 255, 0.38);
+  background: linear-gradient(135deg, #322c4d 0%, #2a2540 100%);
+  box-shadow: 0 3px 12px rgba(70, 58, 130, 0.24);
+}
+.message.pending {
+  animation: pendingPulse 1.6s ease-in-out infinite;
+}
+@keyframes pendingPulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+.message-audio {
+  border-radius: 10px;
+  transition: background 160ms ease, transform 120ms ease;
+}
+.message-audio:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+/* ---------- 欢迎页 ---------- */
+.welcome {
+  position: relative;
+}
+.character-display {
+  border-radius: 26px;
+  background: radial-gradient(120px 90px at 50% 30%, rgba(155, 140, 255, 0.22), transparent 70%), var(--surface-1);
+  box-shadow: var(--shadow-md);
+  transition: transform 200ms ease, box-shadow 240ms ease;
+}
+.character-display:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+}
+.welcome-copy h1 {
+  background: var(--brand-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.suggestions button {
+  border: 1px solid rgba(155, 140, 255, 0.24);
+  background: rgba(155, 140, 255, 0.07);
+  border-radius: 999px;
+  transition: background 160ms ease, border-color 160ms ease, transform 120ms ease;
+}
+.suggestions button:hover {
+  background: rgba(155, 140, 255, 0.16);
+  border-color: rgba(155, 140, 255, 0.45);
+  transform: translateY(-1px);
+}
+
+/* ---------- 输入区 ---------- */
+.composer {
+  border: 1px solid rgba(45, 50, 61, 0.9);
+  background: rgba(26, 29, 36, 0.9);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 16px;
+  box-shadow: var(--shadow-md);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+.composer:focus-within {
+  border-color: rgba(155, 140, 255, 0.5);
+  box-shadow: 0 0 0 3px rgba(155, 140, 255, 0.14), var(--shadow-md);
+}
+
+/* ---------- 按钮统一 ---------- */
+.icon-button,
+.quiet-button {
+  transition: background 160ms ease, color 160ms ease, transform 120ms ease, border-color 160ms ease;
+}
+.icon-button:hover:not(:disabled),
+.quiet-button:hover:not(:disabled) {
+  background: var(--surface-3);
+  color: #f2f0ff;
+}
+.icon-button:active:not(:disabled),
+.quiet-button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.save-button {
+  background: var(--brand-grad);
+  box-shadow: var(--brand-glow);
+  transition: transform 140ms ease, box-shadow 200ms ease, filter 160ms ease;
+}
+.save-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 8px 30px rgba(155, 140, 255, 0.36);
+  transform: translateY(-1px);
+}
+.save-button:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+.send-button {
+  background: var(--brand-grad);
+  box-shadow: var(--brand-glow);
+  transition: transform 140ms ease, filter 160ms ease;
+}
+.send-button:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+.send-button:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+/* ---------- 面板标题与徽章 ---------- */
+.eyebrow {
+  letter-spacing: 0.14em;
+}
+.translator-heading h1,
+.collaboration-heading h1,
+.gallery-heading h1 {
+  background: var(--brand-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---------- 弹窗 ---------- */
+dialog.character-editor-dialog {
+  border-radius: 18px;
+  box-shadow: var(--shadow-lg);
+}
+.character-section summary {
+  border-radius: var(--r-md);
+  transition: background 160ms ease;
+}
+.character-section summary:hover {
+  background: rgba(155, 140, 255, 0.06);
+}
+
+/* ---------- 状态色增强 ---------- */
+.form-status[class*="error"] {
+  color: var(--danger);
+}
+.form-status {
+  color: var(--muted);
+}
