@@ -106,6 +106,8 @@ const voiceStudio = document.getElementById("voice-studio");
 const voiceResourceList = document.getElementById("voice-resource-list");
 const voiceResourceStatus = document.getElementById("voice-resource-status");
 const characterVoiceSelect = document.getElementById("character-voice-select");
+const characterVoicePreview = document.getElementById("character-voice-preview");
+const characterVoicePreviewStatus = document.getElementById("character-voice-preview-status");
 const voiceSampleName = document.getElementById("voice-sample-name");
 const voiceSamplePreview = document.getElementById("voice-sample-preview");
 const voiceResourceRegister = document.getElementById("voice-resource-register");
@@ -120,11 +122,16 @@ let selectedModelFile = "";
 let saveAppearanceRequested = false;
 let translationRequestVersion = 0;
 let voiceResources = [];
+let speechVoices = [];
+let lastReferenceVoice = "";
 let pendingVoiceSample;
 let activeVoicePreview;
 let activeVoicePreviewUrl;
 let selectedPersonalityPreset = "custom";
 const VOICE_PREFERENCES_KEY = "moling.voice.preferences.v1";
+const LOCAL_VOICE_PREFIX = "voice:";
+const VOICE_PREVIEW_TEXT =
+  "你好，我是墨灵。很高兴认识你，这是当前声线的试听。";
 const DEFAULT_VOICE_PREFERENCES = Object.freeze({
   muted: false,
   rate: 1,
@@ -832,7 +839,10 @@ function fillCharacterForm(card) {
   }
   updatePersonalityCurrentLabel();
   avatarInput.value = card.avatar || "";
-  populateCharacterVoiceSelect(card.voice || "");
+  populateCharacterVoiceSelect(
+    loadCharacterVoicePreference(editingCharacterId) || card.voice || "",
+  );
+  lastReferenceVoice = card.voice || "";
   for (const field of [
     "core_values",
     "inner_drives",
@@ -1232,12 +1242,28 @@ function populateCharacterVoiceSelect(selectedVoice = characterVoiceSelect.value
   defaultVoice.value = "";
   defaultVoice.textContent = "当前应用合成音色 · Piper";
   characterVoiceSelect.append(defaultVoice);
-  for (const resource of voiceResources) {
-    const option = document.createElement("option");
-    option.value = `reference:${resource.id}`;
-    option.textContent =
-      `${resource.name} · ${voiceLanguageLabels[resource.language]} · 参考录音`;
-    characterVoiceSelect.append(option);
+  if (speechVoices.length) {
+    const localGroup = document.createElement("optgroup");
+    localGroup.label = "本地声线（可试听）";
+    for (const voice of speechVoices) {
+      const option = document.createElement("option");
+      option.value = `${LOCAL_VOICE_PREFIX}${voice.name}`;
+      option.textContent = `${voice.display}${voice.default ? " · 当前默认" : ""}`;
+      localGroup.append(option);
+    }
+    characterVoiceSelect.append(localGroup);
+  }
+  if (voiceResources.length) {
+    const referenceGroup = document.createElement("optgroup");
+    referenceGroup.label = "参考声线（录音试听）";
+    for (const resource of voiceResources) {
+      const option = document.createElement("option");
+      option.value = `reference:${resource.id}`;
+      option.textContent =
+        `${resource.name} · ${voiceLanguageLabels[resource.language]} · 参考录音`;
+      referenceGroup.append(option);
+    }
+    characterVoiceSelect.append(referenceGroup);
   }
   if (
     selectedVoice &&
@@ -1245,10 +1271,110 @@ function populateCharacterVoiceSelect(selectedVoice = characterVoiceSelect.value
   ) {
     const unavailable = document.createElement("option");
     unavailable.value = selectedVoice;
-    unavailable.textContent = "已移除的参考声线（请选择其他资源）";
+    unavailable.textContent = "已移除的声线（请选择其他资源）";
     characterVoiceSelect.append(unavailable);
   }
   characterVoiceSelect.value = selectedVoice || "";
+  updateCharacterVoicePreviewState();
+}
+
+function characterVoiceStorageKey(characterId) {
+  return `moling.characterVoice.${characterId || "default"}.v1`;
+}
+
+function loadCharacterVoicePreference(characterId) {
+  try {
+    return localStorage.getItem(characterVoiceStorageKey(characterId)) || "";
+  } catch {
+    return "";
+  }
+}
+
+function saveCharacterVoicePreference(characterId, value) {
+  try {
+    if (value) {
+      localStorage.setItem(characterVoiceStorageKey(characterId), value);
+    } else {
+      localStorage.removeItem(characterVoiceStorageKey(characterId));
+    }
+  } catch {
+    // localStorage unavailable: preference simply will not persist
+  }
+}
+
+async function loadSpeechVoices() {
+  try {
+    const payload = await window.companion.speechVoices();
+    speechVoices = Array.isArray(payload?.voices) ? payload.voices : [];
+  } catch {
+    speechVoices = [];
+  }
+  populateCharacterVoiceSelect();
+  return speechVoices;
+}
+
+function updateCharacterVoicePreviewState() {
+  const value = characterVoiceSelect.value;
+  const isLocalVoice = value.startsWith(LOCAL_VOICE_PREFIX);
+  characterVoicePreview.disabled = !isLocalVoice;
+  if (!value) {
+    characterVoicePreviewStatus.textContent = "选择本地声线后可试听合成音色。";
+  } else if (isLocalVoice) {
+    characterVoicePreviewStatus.textContent = "";
+  } else {
+    characterVoicePreviewStatus.textContent =
+      "参考声线是录音试听，不会改变合成音色。";
+  }
+}
+
+async function previewSelectedVoice() {
+  const value = characterVoiceSelect.value;
+  if (!value.startsWith(LOCAL_VOICE_PREFIX)) {
+    characterVoicePreviewStatus.textContent = "请先选择一个本地声线。";
+    return;
+  }
+  const voiceName = value.slice(LOCAL_VOICE_PREFIX.length);
+  characterVoicePreview.disabled = true;
+  characterVoicePreviewStatus.textContent = "正在合成试听…";
+  let audioUrl;
+  let playback;
+  try {
+    const audio = await window.companion.synthesize(VOICE_PREVIEW_TEXT, voiceName);
+    const wavBytes =
+      audio instanceof Uint8Array
+        ? audio
+        : audio instanceof ArrayBuffer
+          ? new Uint8Array(audio)
+          : null;
+    if (
+      !wavBytes ||
+      wavBytes.byteLength < 44 ||
+      String.fromCharCode(...wavBytes.subarray(0, 4)) !== "RIFF" ||
+      String.fromCharCode(...wavBytes.subarray(8, 12)) !== "WAVE"
+    ) {
+      throw new Error("本机语音服务返回的 WAV 数据格式无效");
+    }
+    stopVoicePreview();
+    audioUrl = URL.createObjectURL(new Blob([wavBytes], { type: "audio/wav" }));
+    playback = new Audio(audioUrl);
+    applyVoicePreferences(playback);
+    activeVoicePreview = playback;
+    activeVoicePreviewUrl = audioUrl;
+    const releasePreview = () => {
+      if (activeVoicePreviewUrl === audioUrl) stopVoicePreview();
+    };
+    playback.addEventListener("ended", releasePreview, { once: true });
+    playback.addEventListener("error", releasePreview, { once: true });
+    await playback.play();
+    characterVoicePreviewStatus.textContent = "试听播放中…";
+  } catch (error) {
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    characterVoicePreviewStatus.textContent = `试听失败：${error.message}`;
+  } finally {
+    characterVoicePreview.disabled = !characterVoiceSelect.value.startsWith(
+      LOCAL_VOICE_PREFIX,
+    );
+  }
 }
 
 function stopVoicePreview() {
@@ -3492,9 +3618,20 @@ characterForm.addEventListener("submit", async (event) => {
       .map((line) => line.trim())
       .filter(Boolean),
     avatar: avatarInput.value.trim() || null,
-    voice: characterVoiceSelect.value || null,
     id: editingCharacterId,
   };
+  const selectedVoiceValue = characterVoiceSelect.value;
+  const localVoiceSelected = selectedVoiceValue.startsWith(LOCAL_VOICE_PREFIX);
+  saveCharacterVoicePreference(
+    editingCharacterId,
+    localVoiceSelected ? selectedVoiceValue : "",
+  );
+  if (localVoiceSelected) {
+    card.voice = lastReferenceVoice || null;
+  } else {
+    card.voice = selectedVoiceValue || null;
+    lastReferenceVoice = selectedVoiceValue || "";
+  }
   try {
     await window.companion.saveCharacter(card);
     characterForm.dataset.dirty = "false";
@@ -3592,6 +3729,15 @@ document.addEventListener("DOMContentLoaded", () => {
   loadMemories();
   loadAffect();
   refreshVoiceResources();
+  void loadSpeechVoices();
+  characterVoicePreview.addEventListener("click", previewSelectedVoice);
+  characterVoiceSelect.addEventListener("change", () => {
+    const value = characterVoiceSelect.value;
+    if (!value.startsWith(LOCAL_VOICE_PREFIX)) {
+      lastReferenceVoice = value;
+    }
+    updateCharacterVoicePreviewState();
+  });
 });
 
 characterForm.addEventListener("input", () => {

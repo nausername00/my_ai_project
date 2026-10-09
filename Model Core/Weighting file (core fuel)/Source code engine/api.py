@@ -371,6 +371,17 @@ class ApiHandler(BaseHTTPRequestHandler):
         if path == "/v1/speech/status":
             self._send_json(HTTPStatus.OK, self.speech_service.status())
             return
+        if path == "/v1/speech/voices":
+            self._send_json(
+                HTTPStatus.OK,
+                {
+                    "voices": self.speech_service.list_voices(),
+                    "default_voice": self.speech_service.piper_voice_path.stem
+                    if self.speech_service.piper_voice_path.is_file()
+                    else None,
+                },
+            )
+            return
         if path == "/v1/engine/list":
             self._send_json(
                 HTTPStatus.OK,
@@ -1112,7 +1123,12 @@ class ApiHandler(BaseHTTPRequestHandler):
         if path == "/v1/speech":
             try:
                 payload = self._read_json()
-                audio = self.speech_service.synthesize_wav(payload["text"])
+                if not isinstance(payload, dict) or "text" not in payload:
+                    raise SpeechInputError("text is required")
+                audio = self.speech_service.synthesize_wav(
+                    payload["text"],
+                    voice=payload.get("voice"),
+                )
             except (KeyError, TypeError, SpeechInputError, ValueError, json.JSONDecodeError) as error:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
                 return

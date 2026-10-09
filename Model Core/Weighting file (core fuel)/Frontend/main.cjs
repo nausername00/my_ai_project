@@ -230,6 +230,7 @@ async function callApi(route, method = "GET", body, extraHeaders = {}) {
   const staticRoutes = {
     "/health": ["GET"],
     "/v1/speech/status": ["GET"],
+    "/v1/speech/voices": ["GET"],
     "/v1/character": ["GET", "POST"],
     "/v1/characters": ["GET", "POST"],
     "/v1/characters/active": ["POST"],
@@ -320,14 +321,18 @@ async function transcribeAudio(audio, contentType) {
   return data;
 }
 
-async function synthesizeSpeech(text) {
+async function synthesizeSpeech(text, voice) {
   if (typeof text !== "string" || text.length > 2000) {
     throw new Error("语音文本无效或超过 2000 个字符");
+  }
+  const body = { text };
+  if (typeof voice === "string" && voice.trim()) {
+    body.voice = voice.trim();
   }
   const response = await fetch(`${apiBaseUrl}/v1/speech`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(180_000),
   });
   if (!response.ok) {
@@ -591,11 +596,12 @@ function registerIpcHandlers() {
     shell.openExternal("https://ollama.com/download/windows"),
   );
   ipcMain.handle("companion:speech-status", () => callApi("/v1/speech/status"));
+  ipcMain.handle("companion:speech-voices", () => callApi("/v1/speech/voices"));
   ipcMain.handle("companion:transcribe", (_event, audio, contentType) =>
     transcribeAudio(audio, contentType),
   );
-  ipcMain.handle("companion:synthesize", (_event, text) =>
-    synthesizeSpeech(text),
+  ipcMain.handle("companion:synthesize", (_event, text, voice) =>
+    synthesizeSpeech(text, voice),
   );
   ipcMain.handle("companion:get-character", () => callApi("/v1/character"));
   ipcMain.handle("companion:list-characters", () => callApi("/v1/characters"));

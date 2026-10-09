@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from app import create_server
 from inference import ModelUnavailableError
-from speech import SpeechUnavailableError
+from speech import SpeechInputError, SpeechService, SpeechUnavailableError
 
 
 class ApiTests(unittest.TestCase):
@@ -255,6 +255,41 @@ class ApiTests(unittest.TestCase):
         self.assertTrue(all(partner["source"] == "local" for partner in partners["partners"]))
         self.assertTrue(all(partner["external"] is False for partner in partners["partners"]))
         self.assertTrue(all(partner["instruction"] for partner in partners["partners"]))
+
+    def test_speech_voices_endpoint_lists_local_catalog(self) -> None:
+        self.connection.request("GET", "/v1/speech/voices")
+        response = self.connection.getresponse()
+        payload = json.loads(response.read())
+
+        self.assertEqual(response.status, 200)
+        self.assertIsInstance(payload["voices"], list)
+        self.assertIn("default_voice", payload)
+        for voice in payload["voices"]:
+            self.assertIn("name", voice)
+            self.assertIn("display", voice)
+            self.assertIn("language", voice)
+            self.assertIn("available", voice)
+            self.assertIn("default", voice)
+
+    def test_speech_endpoint_rejects_unknown_voice_without_synthesis(self) -> None:
+        self.connection.request(
+            "POST",
+            "/v1/speech",
+            json.dumps({"text": "你好", "voice": "voice_that_does_not_exist"}),
+        )
+        response = self.connection.getresponse()
+        body = json.loads(response.read())
+
+        self.assertEqual(response.status, 400)
+        self.assertIn("not available", body["error"])
+
+    def test_speech_endpoint_requires_text(self) -> None:
+        self.connection.request("POST", "/v1/speech", json.dumps({"voice": "zh_CN-huayan-medium"}))
+        response = self.connection.getresponse()
+        body = json.loads(response.read())
+
+        self.assertEqual(response.status, 400)
+        self.assertIn("text", body["error"])
 
     def test_partner_preview_is_local_and_redacted(self) -> None:
         self.server.RequestHandlerClass.character_store.add_memory(
@@ -1761,3 +1796,52 @@ class ApiTests(unittest.TestCase):
         response = self.connection.getresponse()
         self.assertEqual(response.status, 503)
         self.assertIn("unavailable", json.loads(response.read())["error"])
+
+
+class SpeechServiceTests(unittest.TestCase):
+    """Unit tests for the local voice catalog; never load a Piper model."""
+
+    def test_list_voices_returns_catalog_with_expected_fields(self) -> None:
+        service = SpeechService()
+        voices = service.list_voices()
+
+        self.assertIsInstance(voices, list)
+        for voice in voices:
+            self.assertIn("name", voice)
+            self.assertIn("display", voice)
+            self.assertIn("language", voice)
+            self.assertIn("default", voice)
+            self.assertIn("available", voice)
+            self.assertTrue(voice["available"])
+            self.assertTrue(voice["name"])
+            self.assertTrue(voice["display"])
+        self.assertTrue(any(voice["default"] for voice in voices))
+
+    def test_list_voices_default_matches_configured_voice(self) -> None:
+        service = SpeechService()
+        voices = service.list_voices()
+
+        defaults = [voice for voice in voices if voice["default"]]
+        self.assertEqual(len(defaults), 1)
+        self.assertEqual(defaults[0]["name"], service.piper_voice_path.stem)
+
+    def test_synthesize_unknown_voice_fails_before_loading_model(self) -> None:
+        service = SpeechService()
+        with self.assertRaises(SpeechInputError) as ctx:
+            service.synthesize_wav("你好", voice="voice_that_does_not_exist")
+        self.assertIn("not available", str(ctx.exception))
+
+    def test_synthesize_voice_name_normalizes_onnx_suffix(self) -> None:
+        service = SpeechService()
+        with self.assertRaises(SpeechInputError) as ctx:
+            service.synthesize_wav("你好", voice="missing_voice.onnx")
+        self.assertIn("not available", str(ctx.exception))
+
+    def test_synthesize_rejects_invalid_voice_types(self) -> None:
+        service = SpeechService()
+        for bad_voice in ("", "   ", 123, None):
+            with self.subTest(voice=bad_voice):
+                if bad_voice is None:
+                    continue  # None means "use default" and is valid
+                with self.assertRaises(SpeechInputError):
+                    service.synthesize_wav("你好", voice=bad_voice)

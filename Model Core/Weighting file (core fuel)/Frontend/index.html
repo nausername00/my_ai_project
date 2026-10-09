@@ -503,8 +503,12 @@
                   <option value="">当前应用合成音色 · Piper</option>
                 </select>
               </label>
+              <div class="voice-preview-row">
+                <button class="icon-button" id="character-voice-preview" type="button" disabled>试听所选声线</button>
+                <span class="character-card-help" id="character-voice-preview-status" role="status"></span>
+              </div>
               <button class="icon-button" id="open-voice-studio" type="button">管理声音资源与注册参考声线</button>
-              <p class="character-card-help" id="character-voice-note">参考音频可试听并关联到角色卡，但不会训练或改变当前 Piper 合成音色。</p>
+              <p class="character-card-help" id="character-voice-note">可从本地声线目录挑选并试听合成音色；选择会记住在此浏览器，不会上传音频。</p>
               <p class="form-status avatar-help" id="avatar-status" role="status"></p>
             </details>
             <button class="save-button" type="submit">保存角色卡</button>

@@ -5,6 +5,7 @@ import importlib
 import io
 import os
 from pathlib import Path
+import re
 import tempfile
 from threading import RLock
 import wave
@@ -17,6 +18,41 @@ class SpeechInputError(ValueError):
 
 class SpeechUnavailableError(RuntimeError):
     """Raised when an optional speech runtime or model is unavailable."""
+
+
+_LANGUAGE_LABELS: dict[str, str] = {
+    "zh_CN": "中文",
+    "zh": "中文",
+    "en_US": "英文",
+    "en": "英文",
+    "ja_JP": "日文",
+    "ko_KR": "韩文",
+    "fr_FR": "法文",
+    "de_DE": "德文",
+    "es_ES": "西文",
+    "ru_RU": "俄文",
+}
+
+_VOICE_LANG_RE = re.compile(r"^(?P<lang>[a-z]{2}(?:_[A-Z]{2})?)[-_]")
+
+
+def _voice_language(voice_name: str) -> str:
+    match = _VOICE_LANG_RE.match(voice_name)
+    if not match:
+        return ""
+    return match.group("lang")
+
+
+def _voice_display(voice_name: str) -> str:
+    language = _voice_language(voice_name)
+    lang_label = _LANGUAGE_LABELS.get(language, "多语言" if language else "本地声线")
+    rest = voice_name
+    match = _VOICE_LANG_RE.match(voice_name)
+    if match:
+        rest = voice_name[match.end():]
+    parts = [part for part in rest.replace("-", "_").split("_") if part]
+    friendly = " ".join(parts) if parts else voice_name
+    return f"{lang_label} · {friendly}"
 
 
 class SpeechService:
@@ -59,6 +95,7 @@ class SpeechService:
         self.language = language or os.getenv("WHISPER_LANGUAGE", "zh")
         self._whisper: Any = None
         self._voice: Any = None
+        self._voice_cache: dict[str, Any] = {}
         self._load_lock = RLock()
 
     def status(self) -> dict[str, Any]:
@@ -72,8 +109,46 @@ class SpeechService:
             and self.piper_voice_path.with_suffix(
                 self.piper_voice_path.suffix + ".json"
             ).is_file(),
+            "voice_count": len(self.list_voices()),
             "processing": "local",
         }
+
+    def list_voices(self) -> list[dict[str, Any]]:
+        """List locally installed Piper voices as a试听-able catalog.
+
+        A voice is listed only when both ``<name>.onnx`` and its matching
+        ``<name>.onnx.json`` config exist in the local voices directory.
+        This is a pure file scan; it never loads a model.
+        """
+        voices_dir = self.piper_voice_path.parent
+        entries: list[dict[str, Any]] = []
+        if voices_dir.is_dir():
+            for onnx in sorted(voices_dir.glob("*.onnx")):
+                config_path = onnx.with_suffix(onnx.suffix + ".json")
+                if not config_path.is_file():
+                    continue
+                name = onnx.stem
+                entries.append(
+                    {
+                        "name": name,
+                        "display": _voice_display(name),
+                        "language": _voice_language(name),
+                        "default": onnx.resolve() == self.piper_voice_path.resolve(),
+                        "available": True,
+                    }
+                )
+        if not entries and self.piper_voice_path.is_file():
+            name = self.piper_voice_path.stem
+            entries.append(
+                {
+                    "name": name,
+                    "display": _voice_display(name),
+                    "language": _voice_language(name),
+                    "default": True,
+                    "available": True,
+                }
+            )
+        return entries
 
     def transcribe_audio(self, audio: bytes, suffix: str) -> dict[str, Any]:
         if not audio:
@@ -111,7 +186,7 @@ class SpeechService:
             "duration_seconds": round(info.duration, 2),
         }
 
-    def synthesize_wav(self, text: str) -> bytes:
+    def synthesize_wav(self, text: str, voice: str | None = None) -> bytes:
         if not isinstance(text, str):
             raise SpeechInputError("text must be a string")
         text = text.strip()
@@ -121,11 +196,11 @@ class SpeechService:
             raise SpeechInputError(
                 f"text must not exceed {self.MAX_TEXT_LENGTH} characters"
             )
-        voice = self._get_voice()
+        voice_engine = self._get_voice(voice)
         output = io.BytesIO()
         try:
             with wave.open(output, "wb") as wav_file:
-                voice.synthesize_wav(text, wav_file)
+                voice_engine.synthesize_wav(text, wav_file)
         except (OSError, RuntimeError, ValueError) as error:
             raise SpeechUnavailableError(f"local speech synthesis failed: {error}") from error
         return output.getvalue()
@@ -156,20 +231,33 @@ class SpeechService:
                 ) from error
         return self._whisper
 
-    def _get_voice(self) -> Any:
-        if self._voice is not None:
-            return self._voice
-        config_path = self.piper_voice_path.with_suffix(
-            self.piper_voice_path.suffix + ".json"
-        )
-        if not self.piper_voice_path.is_file() or not config_path.is_file():
-            raise SpeechUnavailableError(
-                "Piper voice model is missing; set PIPER_VOICE_PATH to a local "
-                "Piper .onnx file with its matching .onnx.json config"
+    def _voice_path_for(self, voice_name: str | None) -> Path:
+        if voice_name is None:
+            return self.piper_voice_path
+        if not isinstance(voice_name, str) or not voice_name.strip():
+            raise SpeechInputError("voice name must be a non-empty string")
+        stripped = voice_name.strip()
+        if stripped.endswith(".onnx"):
+            stripped = stripped[: -len(".onnx")]
+        candidate = self.piper_voice_path.parent / f"{stripped}.onnx"
+        config_path = candidate.with_suffix(candidate.suffix + ".json")
+        if not candidate.is_file() or not config_path.is_file():
+            raise SpeechInputError(
+                f"voice '{voice_name}' is not available in the local voice directory"
             )
+        return candidate
+
+    def _get_voice(self, voice_name: str | None = None) -> Any:
+        voice_path = self._voice_path_for(voice_name)
+        cache_key = str(voice_path.resolve())
+        cached = self._voice_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        config_path = voice_path.with_suffix(voice_path.suffix + ".json")
         with self._load_lock:
-            if self._voice is not None:
-                return self._voice
+            cached = self._voice_cache.get(cache_key)
+            if cached is not None:
+                return cached
             try:
                 piper_module = importlib.import_module("piper")
             except ImportError as error:
@@ -177,16 +265,17 @@ class SpeechService:
                     "speech synthesis dependencies are missing; install the 'speech' extra"
                 ) from error
             try:
-                self._voice = piper_module.PiperVoice.load(
-                    self.piper_voice_path,
+                voice_engine = piper_module.PiperVoice.load(
+                    voice_path,
                     config_path=config_path,
                     use_cuda=False,
                 )
             except (OSError, RuntimeError, ValueError) as error:
                 raise SpeechUnavailableError(
-                    f"could not load Piper voice '{self.piper_voice_path.name}': {error}"
+                    f"could not load Piper voice '{voice_path.name}': {error}"
                 ) from error
-        return self._voice
+            self._voice_cache[cache_key] = voice_engine
+        return voice_engine
 
     # ------------------------------------------------------------------
     # Streaming / VAD loop (L0 real-time perception interface)

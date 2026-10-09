@@ -17,9 +17,11 @@ contextBridge.exposeInMainWorld(
       return () => ipcRenderer.removeListener("companion:model-progress", listener);
     },
     speechStatus: () => ipcRenderer.invoke("companion:speech-status"),
+    speechVoices: () => ipcRenderer.invoke("companion:speech-voices"),
     transcribe: (audio, contentType) =>
       ipcRenderer.invoke("companion:transcribe", audio, contentType),
-    synthesize: (text) => ipcRenderer.invoke("companion:synthesize", text),
+    synthesize: (text, voice) =>
+      ipcRenderer.invoke("companion:synthesize", text, voice),
     getCharacter: () => ipcRenderer.invoke("companion:get-character"),
     saveCharacter: (card) => ipcRenderer.invoke("companion:save-character", card),
     listCharacters: () => ipcRenderer.invoke("companion:list-characters"),

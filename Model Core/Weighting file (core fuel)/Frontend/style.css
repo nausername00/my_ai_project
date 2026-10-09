@@ -1947,6 +1947,22 @@ button {
   line-height: 1.5;
 }
 
+.voice-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.voice-preview-row .icon-button {
+  flex: 0 0 auto;
+}
+
+.voice-preview-row .character-card-help {
+  flex: 1 1 180px;
+}
+
 .character-section {
   padding: 10px;
   border: 1px solid var(--line);
