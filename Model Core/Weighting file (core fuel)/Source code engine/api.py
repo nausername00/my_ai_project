@@ -2,6 +2,8 @@
 
 import hmac
 import ipaddress
+import base64
+import binascii
 import json
 import math
 from collections import deque
@@ -10,7 +12,7 @@ from http.server import BaseHTTPRequestHandler
 import re
 from time import perf_counter
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 from agent import route_cognition
@@ -30,7 +32,11 @@ from agent_tools import (
     execute_project_tool,
     TOOL_CATALOG,
 )
-from partners import evaluate_molings, list_partner_status
+from partners import (
+    evaluate_molings,
+    list_partner_status,
+    preview_external_reviews,
+)
 from collaboration import list_collaborator_roles, run_collaboration
 from brain import create_brain_plan, verify_tool_observation
 from inference import (
@@ -47,6 +53,7 @@ from character import (
 )
 from social import collaborate_with_partners, get_social_status, list_local_partners
 from speech import SpeechInputError, SpeechService, SpeechUnavailableError
+from vision import VisionError, analyze_image
 
 
 TRANSLATION_LANGUAGES = {
@@ -81,6 +88,7 @@ class ApiHandler(BaseHTTPRequestHandler):
     tool_capability = ""
     tool_catalog: dict[str, Any] = {}
     MAX_AUDIO_BYTES = 25_000_000
+    MAX_IMAGE_BYTES = 10 * 1024 * 1024
     NOTIFICATION_MAX = 100
     _notifications: "deque[dict[str, Any]]" = deque(maxlen=100)
     IDENTITY_QUESTION_PATTERNS = tuple(
@@ -308,6 +316,16 @@ class ApiHandler(BaseHTTPRequestHandler):
         if path == "/v1/partners/status":
             self._send_json(HTTPStatus.OK, list_partner_status(self.engine))
             return
+        if path == "/v1/partners/preview":
+            try:
+                query = parse_qs(urlsplit(self.path).query, strict_parsing=True)
+                scope = query.get("scope", ["all"])[0]
+                partner_ids = query.get("partner_id", [])
+                preview = preview_external_reviews(scope, partner_ids)
+                self._send_json(HTTPStatus.OK, preview)
+            except (TypeError, ValueError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
         if path == "/health":
             self._send_json(
                 HTTPStatus.OK,
@@ -424,15 +442,64 @@ class ApiHandler(BaseHTTPRequestHandler):
         if path == "/v1/partners/evaluate":
             try:
                 payload = self._read_json()
+                if set(payload) - {
+                    "scope",
+                    "external_partner_ids",
+                    "external_consent",
+                }:
+                    raise ValueError("伙伴评审请求包含不支持的字段")
                 scope = payload.get("scope", "all")
                 result = evaluate_molings(
                     scope=scope,
                     engine=self.engine,
                     character_store=self.character_store,
+                    external_partner_ids=payload.get("external_partner_ids", []),
+                    external_consent=payload.get("external_consent", False),
                 )
                 self._send_json(HTTPStatus.OK, result)
             except (TypeError, ValueError, json.JSONDecodeError) as error:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/vision/analyze":
+            try:
+                payload = self._read_json(max_bytes=14_000_000)
+                encoded = payload.get("image_base64")
+                content_type = payload.get("content_type")
+                if not isinstance(encoded, str) or not encoded:
+                    raise ValueError("image_base64 must be a non-empty string")
+                if content_type not in {"image/png", "image/jpeg", "image/webp"}:
+                    raise ValueError("only PNG, JPEG, and WebP images are supported")
+                try:
+                    image = base64.b64decode(encoded, validate=True)
+                except (binascii.Error, ValueError) as error:
+                    raise ValueError("image_base64 is invalid") from error
+                if not image or len(image) > self.MAX_IMAGE_BYTES:
+                    raise ValueError("image must be between 1 byte and 10 MB")
+                if not self._has_supported_image_signature(image, content_type):
+                    raise ValueError("image contents do not match the declared format")
+                backend = getattr(self.engine, "backend", None)
+                endpoint = getattr(backend, "endpoint", None)
+                if endpoint and urlsplit(endpoint).hostname not in {
+                    "localhost",
+                    "127.0.0.1",
+                    "::1",
+                }:
+                    raise ValueError("image analysis is restricted to a local model")
+                if self.engine.model_name == "placeholder":
+                    raise ValueError("当前模型不支持图片理解，请配置本地视觉模型")
+                result = analyze_image(
+                    image,
+                    self.engine,
+                    approved=True,
+                    purpose="用户主动选择的图片单次分析",
+                )
+                if result.get("error"):
+                    raise ModelUnavailableError(result["error"])
+                self._send_json(HTTPStatus.OK, result)
+            except (TypeError, ValueError, json.JSONDecodeError, VisionError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            except ModelUnavailableError as error:
+                self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(error)})
             return
         if path == "/v1/social/collaborate":
             try:
@@ -1203,6 +1270,9 @@ class ApiHandler(BaseHTTPRequestHandler):
                         "inference_ms": 0.0,
                         "explore_proposal": explore_hint,
                         "response_kind": "self_reflection",
+                        "evidence": self._build_response_evidence(
+                            prompt, [], uses_model_prompt=False
+                        ),
                     },
                 )
                 return
@@ -1220,6 +1290,9 @@ class ApiHandler(BaseHTTPRequestHandler):
                         "cognition_mode": cognitive_route.mode,
                         "inference_ms": 0.0,
                         "explore_proposal": explore_hint,
+                        "evidence": self._build_response_evidence(
+                            prompt, [], uses_model_prompt=False
+                        ),
                     },
                 )
                 return
@@ -1230,6 +1303,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                     self.character_store.build_system_prompt(simulated_affect)
                     + "\n\n当前回应策略："
                     + cognitive_route.instruction
+                    + "\n\n依据与纠正：如果用户追问依据，区分用户明确说过的内容、可见上下文、已提供的记忆和你的推测；不要伪造引文、来源或概率。用户纠正时先承认并按本次修正回应；除非用户明确要求保存，否则不要把纠正写入长期记忆。"
                 ),
                 history=tuple(validated_history),
             )
@@ -1251,8 +1325,67 @@ class ApiHandler(BaseHTTPRequestHandler):
                 "cognition_mode": cognitive_route.mode,
                 "inference_ms": inference_ms,
                 "explore_proposal": explore_hint,
+                "evidence": self._build_response_evidence(
+                    prompt, validated_history
+                ),
             },
         )
+
+    def _build_response_evidence(
+        self,
+        prompt: str,
+        history: list[tuple[str, str]],
+        *,
+        uses_model_prompt: bool = True,
+    ) -> dict[str, Any]:
+        privacy = self.character_store.get_privacy_settings()
+        memories = (
+            [
+                {
+                    "id": item["id"],
+                    "content": item["content"][:240],
+                }
+                for item in self.character_store.list_memories()
+                if item["visibility"] == "model"
+            ][-20:]
+            if privacy["include_memories_in_prompt"]
+            and uses_model_prompt
+            else []
+        )
+        shown_history = history[-6:] if uses_model_prompt else []
+        return {
+            "direct_input": prompt,
+            "recent_context": [
+                {"role": role, "content": content[-500:]}
+                for role, content in shown_history
+            ],
+            "context_messages_not_shown": max(0, len(history) - len(shown_history)),
+            "model_memories": memories,
+            "prompt_components": [
+                "当前用户输入",
+                (
+                    "当前角色卡与已保存的实现状态"
+                    if not uses_model_prompt
+                    else "角色卡、模拟表达状态与认知回应策略"
+                ),
+                *(
+                    [
+                        "本次请求携带的对话历史（依据面板仅展示最近 6 条，每条最多 500 字符）",
+                        "已列出的可见长期记忆（如有）",
+                    ]
+                    if uses_model_prompt
+                    else []
+                ),
+            ],
+            "memory_policy": (
+                "已将可见性为 model 的记忆加入角色提示。"
+                if uses_model_prompt and memories
+                else "本次回复由固定角色信息直接生成，没有使用长期记忆。"
+                if not uses_model_prompt
+                else "本次没有把长期记忆加入角色提示。"
+            ),
+            "limits": "角色卡和上下文会影响回答；模型生成的解释不是独立事实核验。",
+        }
 
     def do_PUT(self) -> None:
         path = urlsplit(self.path).path
@@ -1297,9 +1430,23 @@ class ApiHandler(BaseHTTPRequestHandler):
             return
         self._send_json(HTTPStatus.OK, {"deleted": memory_id})
 
-    def _read_json(self) -> dict[str, Any]:
+    @staticmethod
+    def _has_supported_image_signature(image: bytes, content_type: str) -> bool:
+        if content_type == "image/png":
+            return image.startswith(b"\x89PNG\r\n\x1a\n")
+        if content_type == "image/jpeg":
+            return image.startswith(b"\xff\xd8\xff")
+        if content_type == "image/webp":
+            return (
+                len(image) >= 12
+                and image[:4] == b"RIFF"
+                and image[8:12] == b"WEBP"
+            )
+        return False
+
+    def _read_json(self, max_bytes: int = 1_048_576) -> dict[str, Any]:
         content_length = int(self.headers.get("Content-Length", "0"))
-        if content_length > 1_048_576:
+        if content_length > max_bytes:
             raise ValueError("request body is too large")
         payload = json.loads(self.rfile.read(content_length))
         if not isinstance(payload, dict):

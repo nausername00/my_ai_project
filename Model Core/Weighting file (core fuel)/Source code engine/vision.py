@@ -302,6 +302,10 @@ def analyze_image(
                 "若需要真实内容描述，请传入支持多模态的 inference engine "
                 "并确保已批准 analyze_image 权限。"
             ),
+            "observed": "",
+            "possible_interpretations": "",
+            "uncertainty": "没有启用视觉模型，未进行内容识别。",
+            "clarifying_question": "",
             "labels": [],
             "has_text": None,
         }
@@ -317,12 +321,24 @@ def analyze_image(
         }
     req = GenerationRequest(
         prompt=(
-            "请用 2-4 句中文描述这张图的内容、主角、布局、显眼文字或 UI；"
-            "最后输出三行短标签。格式：\nsummary: ...\nlabels: tag1,tag2,tag3\nhas_text: yes/no"
+            "谨慎分析用户主动提供的图片。先只描述直接可见的物体、布局和可辨文字，"
+            "再把任何解释明确标为可能性；看不清或存在多种解释时说明不确定并提出一个简短澄清问题。"
+            "不要推断人物的情绪、身份、人格、关系或心理状态，也不要把推测说成事实。"
+            "不得输出百分比置信度。按以下字段逐行输出：\n"
+            "summary: 一句简短总结\n"
+            "observed: 直接可见的内容\n"
+            "possible_interpretations: 可能解释；没有则留空\n"
+            "uncertainty: 不确定之处；没有则写无明显歧义\n"
+            "clarifying_question: 有歧义时问一个问题；否则留空\n"
+            "labels: tag1,tag2,tag3\nhas_text: yes/no/uncertain"
         ),
         max_tokens=max_tokens,
         temperature=0.1,
-        system_prompt="你是保守的视觉分析师，禁止编造看不到的细节。",
+        system_prompt=(
+            "你是保守的视觉描述助手。仅陈述图片中可直接观察到的内容；"
+            "不可由面部、姿势或作品诊断情绪、身份、人格、关系或意图。"
+            "把解释与观察分开；证据不清时明确说不确定并询问，不给未经校准的概率。"
+        ),
     )
     try:
         raw = engine.generate(req, image=data).strip()
@@ -336,11 +352,23 @@ def analyze_image(
             "error": str(exc),
         }
     summary = ""
+    observed = ""
+    possible_interpretations = ""
+    uncertainty = ""
+    clarifying_question = ""
     labels: list[str] = []
     has_text: bool | None = None
     for line in raw.splitlines():
         if line.lower().startswith("summary:"):
             summary = line.split(":", 1)[1].strip()
+        elif line.lower().startswith("observed:"):
+            observed = line.split(":", 1)[1].strip()
+        elif line.lower().startswith("possible_interpretations:"):
+            possible_interpretations = line.split(":", 1)[1].strip()
+        elif line.lower().startswith("uncertainty:"):
+            uncertainty = line.split(":", 1)[1].strip()
+        elif line.lower().startswith("clarifying_question:"):
+            clarifying_question = line.split(":", 1)[1].strip()
         elif line.lower().startswith("labels:"):
             labels = [s.strip() for s in line.split(":", 1)[1].split(",") if s.strip()]
         elif line.lower().startswith("has_text:"):
@@ -348,10 +376,18 @@ def analyze_image(
             has_text = tail in {"yes", "true", "1", "y"}
     if not summary:
         summary = raw[:400]
+    if not observed:
+        observed = summary
+    if not uncertainty:
+        uncertainty = "模型没有单独说明不确定之处；请把描述视为可能出错的识别结果。"
     return {
         **base,
         "engine": model_name,
         "summary": summary,
+        "observed": observed,
+        "possible_interpretations": possible_interpretations,
+        "uncertainty": uncertainty,
+        "clarifying_question": clarifying_question,
         "labels": labels[:10],
         "has_text": has_text,
     }

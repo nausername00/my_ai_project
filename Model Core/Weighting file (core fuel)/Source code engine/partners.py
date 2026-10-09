@@ -25,6 +25,7 @@ __all__ = [
     "EXTERNAL_PARTNERS",
     "list_partner_status",
     "build_moling_profile",
+    "preview_external_reviews",
     "evaluate_molings",
 ]
 
@@ -96,6 +97,20 @@ FORMAT_REQUIREMENT = (
     "建议：\n1) …\n2) …"
 )
 
+EXTERNAL_REVIEW_PROFILE = (
+    "【墨灵公开评审摘要】\n"
+    "产品定位：以本地优先、用户授权、诚实表达边界为原则的数字同伴。\n"
+    "设计重点：关系先于任务；用户可查看、纠正和管理记忆；"
+    "感知与外部行动需要明确授权；情绪表达为模拟，不宣称意识。\n"
+    "实现范围：仓库包含本地推理适配、角色与记忆管理、探索成果闭环、"
+    "受限工具审批、语音路径、视觉适配器和可选伙伴评议；"
+    "具体实现成熟度应以提供的代码/测试证据为准，不能仅凭此摘要声称已验证。"
+)
+EXTERNAL_REVIEW_SYSTEM_PROMPT = (
+    "你是公正的外部评审伙伴，给出可核验、可执行的评价，不要声称做过任何实际操作。"
+    "仅根据收到的公开评审摘要和任务作判断；资料不足时明确指出，不要猜测用户的私人情况。"
+)
+
 
 def _external_partner_backend(
     partner: dict[str, Any],
@@ -110,6 +125,51 @@ def _external_partner_backend(
         base_url=partner["base_url"],
         api_key=key,
     )
+
+
+def _validate_external_partner_ids(partner_ids: Any) -> list[str]:
+    if not isinstance(partner_ids, list):
+        raise ValueError("external_partner_ids must be an array")
+    known_ids = {partner["id"] for partner in EXTERNAL_PARTNERS}
+    if any(not isinstance(item, str) or item not in known_ids for item in partner_ids):
+        raise ValueError("external_partner_ids contains an unknown partner")
+    if len(set(partner_ids)) != len(partner_ids):
+        raise ValueError("external_partner_ids must be unique")
+    return partner_ids
+
+
+def preview_external_reviews(
+    scope: str,
+    partner_ids: Any,
+) -> dict[str, Any]:
+    """Return the exact non-personal prompts proposed for external review."""
+    if scope not in SCOPE_LABELS:
+        raise ValueError("scope must be character, recent_work, experience, or all")
+    selected_ids = _validate_external_partner_ids(partner_ids)
+    previews = []
+    for partner in EXTERNAL_PARTNERS:
+        if partner["id"] not in selected_ids:
+            continue
+        previews.append(
+            {
+                "id": partner["id"],
+                "name": partner["name"],
+                "model": os.getenv(f"{partner['env_key']}_MODEL", "").strip()
+                or partner["model"],
+                "system_prompt": EXTERNAL_REVIEW_SYSTEM_PROMPT,
+                "prompt": (
+                    f"{EXTERNAL_REVIEW_PROFILE}\n"
+                    f"评审维度：{SCOPE_INSTRUCTIONS[scope]}\n"
+                    f"{FORMAT_REQUIREMENT}"
+                ),
+            }
+        )
+    return {
+        "scope": scope,
+        "scope_label": SCOPE_LABELS[scope],
+        "external_data_policy": "仅发送下方公开评审摘要与评审任务；不发送用户记忆、对话、目标或情绪状态。",
+        "partners": previews,
+    }
 
 
 def list_partner_status(
@@ -241,10 +301,17 @@ def evaluate_molings(
     scope: str,
     engine: InferenceEngine,
     character_store: Any,
+    external_partner_ids: Any = None,
+    external_consent: bool = False,
 ) -> dict[str, Any]:
     """让所有可用伙伴评审墨灵，并生成综合报告。"""
     if scope not in SCOPE_LABELS:
         raise ValueError("scope must be character, recent_work, experience, or all")
+    selected_external_ids = _validate_external_partner_ids(
+        [] if external_partner_ids is None else external_partner_ids
+    )
+    if selected_external_ids and external_consent is not True:
+        raise ValueError("外部评审必须在本次请求中明确确认授权")
     profile = build_moling_profile(character_store)
     profile_text = _profile_text(profile)
     instruction = SCOPE_INSTRUCTIONS[scope]
@@ -287,6 +354,24 @@ def evaluate_molings(
 
     # 2) 已配置的外部伙伴
     for partner in EXTERNAL_PARTNERS:
+        if partner["id"] not in selected_external_ids:
+            review_results.append(
+                {
+                    "id": partner["id"],
+                    "name": partner["name"],
+                    "source": "external",
+                    "model": partner["model"],
+                    "status": "not_requested",
+                    "reason": "本次未选择此外部伙伴",
+                    "duration_ms": 0,
+                    "raw": "",
+                    "verdict": "",
+                    "highlights": [],
+                    "gaps": [],
+                    "suggestions": [],
+                }
+            )
+            continue
         backend = _external_partner_backend(partner)
         if backend is None:
             review_results.append(
@@ -312,13 +397,10 @@ def evaluate_molings(
         try:
             text = backend.generate(
                 GenerationRequest(
-                    prompt=(
-                        f"你是一个外部 AI 伙伴，正在评价另一位 AI 伙伴「墨灵」。\n"
-                        f"{profile_text}\n"
-                        f"评审维度：{instruction}\n"
-                        f"{FORMAT_REQUIREMENT}"
-                    ),
-                    system_prompt="你是公正的评审伙伴，给出可核验、可执行的评价，不要声称做过任何实际操作。",
+                    prompt=preview_external_reviews(
+                        scope, [partner["id"]]
+                    )["partners"][0]["prompt"],
+                    system_prompt=EXTERNAL_REVIEW_SYSTEM_PROMPT,
                     max_tokens=420,
                 )
             )

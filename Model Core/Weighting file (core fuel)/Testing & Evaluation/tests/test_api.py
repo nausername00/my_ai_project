@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import tempfile
@@ -47,6 +48,125 @@ class ApiTests(unittest.TestCase):
         payload = json.loads(response.read())
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["model"], "placeholder")
+
+    def test_vision_analysis_rejects_invalid_image_formats(self) -> None:
+        for content_type, image in (
+            ("image/gif", b"GIF89a"),
+            ("image/png", b"not a png"),
+        ):
+            with self.subTest(content_type=content_type):
+                self.connection.request(
+                    "POST",
+                    "/v1/vision/analyze",
+                    json.dumps(
+                        {
+                            "content_type": content_type,
+                            "image_base64": base64.b64encode(image).decode("ascii"),
+                        }
+                    ),
+                    {"Content-Type": "application/json"},
+                )
+                response = self.connection.getresponse()
+                result = json.loads(response.read())
+                self.assertEqual(response.status, 400)
+                self.assertIn("image", result["error"].lower())
+
+    def test_vision_analysis_uses_local_model_and_does_not_persist_image(self) -> None:
+        class LocalVisionEngine:
+            model_name = "local-vision"
+
+            class Backend:
+                endpoint = "http://127.0.0.1:11434"
+
+            backend = Backend()
+
+        image = b"\x89PNG\r\n\x1a\nsample"
+        previous_engine = self.server.RequestHandlerClass.engine
+        self.server.RequestHandlerClass.engine = LocalVisionEngine()
+        try:
+            with patch(
+                "api.analyze_image",
+                return_value={
+                    "summary": "一张示例图片",
+                    "observed": ["一个圆形"],
+                    "possible_interpretations": [],
+                    "uncertainty": "背景细节不清",
+                },
+            ) as analyze:
+                self.connection.request(
+                    "POST",
+                    "/v1/vision/analyze",
+                    json.dumps(
+                        {
+                            "content_type": "image/png",
+                            "image_base64": base64.b64encode(image).decode("ascii"),
+                        }
+                    ),
+                    {"Content-Type": "application/json"},
+                )
+                response = self.connection.getresponse()
+                result = json.loads(response.read())
+        finally:
+            self.server.RequestHandlerClass.engine = previous_engine
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(result["observed"], ["一个圆形"])
+        analyze.assert_called_once()
+        self.assertEqual(analyze.call_args.args[0], image)
+        self.assertFalse(Path(os.environ["CHARACTER_MEMORY_PATH"]).exists())
+
+    def test_vision_analysis_fails_clearly_without_supported_local_model(self) -> None:
+        image = b"\x89PNG\r\n\x1a\nsample"
+        self.connection.request(
+            "POST",
+            "/v1/vision/analyze",
+            json.dumps(
+                {
+                    "content_type": "image/png",
+                    "image_base64": base64.b64encode(image).decode("ascii"),
+                }
+            ),
+            {"Content-Type": "application/json"},
+        )
+        response = self.connection.getresponse()
+        result = json.loads(response.read())
+
+        self.assertEqual(response.status, 400)
+        self.assertIn("配置本地视觉模型", result["error"])
+
+    def test_vision_analysis_rejects_remote_model_endpoint(self) -> None:
+        class RemoteVisionEngine:
+            model_name = "remote-vision"
+
+            class Backend:
+                endpoint = "https://example.com/model"
+
+            backend = Backend()
+
+        image = b"\x89PNG\r\n\x1a\nsample"
+        previous_engine = self.server.RequestHandlerClass.engine
+        self.server.RequestHandlerClass.engine = RemoteVisionEngine()
+        try:
+            with patch("api.analyze_image") as analyze:
+                self.connection.request(
+                    "POST",
+                    "/v1/vision/analyze",
+                    json.dumps(
+                        {
+                            "content_type": "image/png",
+                            "image_base64": base64.b64encode(image).decode("ascii"),
+                        }
+                    ),
+                    {"Content-Type": "application/json"},
+                )
+                response = self.connection.getresponse()
+                result = json.loads(response.read())
+        finally:
+            self.server.RequestHandlerClass.engine = previous_engine
+
+        self.assertEqual(response.status, 400)
+        self.assertIn("local model", result["error"])
+        analyze.assert_not_called()
 
     def test_local_notification_post_and_get(self) -> None:
         self.connection.request(
@@ -135,6 +255,42 @@ class ApiTests(unittest.TestCase):
         self.assertTrue(all(partner["source"] == "local" for partner in partners["partners"]))
         self.assertTrue(all(partner["external"] is False for partner in partners["partners"]))
         self.assertTrue(all(partner["instruction"] for partner in partners["partners"]))
+
+    def test_partner_preview_is_local_and_redacted(self) -> None:
+        self.server.RequestHandlerClass.character_store.add_memory(
+            "PRIVATE_PARTNER_REVIEW_MEMORY",
+            "user",
+            "model",
+        )
+        self.connection.request(
+            "GET",
+            "/v1/partners/preview?scope=all&partner_id=deepseek",
+        )
+        response = self.connection.getresponse()
+        preview = json.loads(response.read())
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual([item["id"] for item in preview["partners"]], ["deepseek"])
+        self.assertIn("公开评审摘要", preview["partners"][0]["prompt"])
+        self.assertNotIn("PRIVATE_PARTNER_REVIEW_MEMORY", preview["partners"][0]["prompt"])
+
+    def test_partner_evaluation_rejects_external_call_without_explicit_consent(self) -> None:
+        self.connection.request(
+            "POST",
+            "/v1/partners/evaluate",
+            json.dumps(
+                {
+                    "scope": "all",
+                    "external_partner_ids": ["deepseek"],
+                }
+            ).encode("utf-8"),
+            {"Content-Type": "application/json"},
+        )
+        response = self.connection.getresponse()
+        result = json.loads(response.read())
+
+        self.assertEqual(response.status, 400)
+        self.assertIn("明确确认授权", result["error"])
 
     def test_social_collaboration_runs_selected_local_partners(self) -> None:
         class SocialEngine:
@@ -1072,6 +1228,45 @@ class ApiTests(unittest.TestCase):
         response = self.connection.getresponse()
         self.assertEqual(response.status, 200)
         self.assertIn("hello", json.loads(response.read())["text"])
+
+    def test_generate_response_reports_used_context_and_memory_sources(self) -> None:
+        self.server.RequestHandlerClass.character_store.add_memory(
+            "我喜欢先看简短总结",
+            "user",
+            "model",
+        )
+        self.server.RequestHandlerClass.character_store.add_memory(
+            "只在本地保存的私密内容",
+            "user",
+            "private",
+        )
+        self.connection.request(
+            "POST",
+            "/v1/generate",
+            json.dumps(
+                {
+                    "prompt": "请按我的习惯回答",
+                    "history": [{"role": "user", "content": "之前的上下文"}],
+                },
+                ensure_ascii=False,
+            ).encode("utf-8"),
+            {"Content-Type": "application/json; charset=utf-8"},
+        )
+        response = self.connection.getresponse()
+        result = json.loads(response.read())
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(result["evidence"]["direct_input"], "请按我的习惯回答")
+        self.assertEqual(
+            result["evidence"]["recent_context"],
+            [{"role": "user", "content": "之前的上下文"}],
+        )
+        cited_memories = result["evidence"]["model_memories"]
+        self.assertEqual([item["content"] for item in cited_memories], ["我喜欢先看简短总结"])
+        self.assertNotIn(
+            "只在本地保存的私密内容",
+            json.dumps(result["evidence"], ensure_ascii=False),
+        )
 
     def test_translate_endpoint_uses_only_translation_input_and_returns_latency(self) -> None:
         class CapturingEngine:

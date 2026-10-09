@@ -27,7 +27,7 @@ class VisionTests(unittest.TestCase):
         )
 
         self.assertEqual(engine.image, image)
-        self.assertIn("描述这张图", engine.request.prompt)
+        self.assertIn("谨慎分析用户主动提供的图片", engine.request.prompt)
         self.assertEqual(result["summary"], "一张测试图片")
         self.assertEqual(result["labels"], ["test", "local"])
         self.assertTrue(result["has_text"])
