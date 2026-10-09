@@ -7,6 +7,9 @@ tests; the desktop app defaults to the installed local Ollama model.
 **Product north star (中文):** [CORE_WORLD.md](./CORE_WORLD.md) — companion vision,
 five-heart architecture, four-loop relationship cycle, and six-space layout.
 Engineering layers (L0–L7) implement that constitution; they do not replace it.
+**Implementation roadmap:** [MOLING_ROADMAP.md](./MOLING_ROADMAP.md) — phased,
+evidence-based improvements for agency, correctability, privacy, voice, vision,
+and partner reviews.
 
 ## Run
 
@@ -71,6 +74,21 @@ The service exposes:
 - `GET /health`
 - `POST /v1/translate` with text and source/target language codes
 - `POST /v1/generate` with `{"prompt": "...", "max_tokens": 128}`
+- Chat responses include an `evidence` object showing the current input,
+  recent conversation context, model-visible memory references, and the limits
+  of that evidence. The desktop offers correction and alternative-interpretation
+  actions. Conversation reflection is user-triggered; it does not run after
+  every chat turn, and ordinary chat text is not automatically added to the
+  long-term memory list.
+- `GET /v1/partners/status` lists configured review providers.
+  `GET /v1/partners/preview?scope=all&partner_id=deepseek` returns the exact
+  proposed external system prompt and review prompt. External providers are
+  never called just because an API key exists: `POST /v1/partners/evaluate`
+  defaults to local-only review and requires both selected
+  `external_partner_ids` and `external_consent: true` for that request.
+  External prompts use a fixed, non-personal product summary; private memories,
+  user dialogue, goals, and simulated affect are excluded. The desktop shows
+  this prompt locally and requires a second confirmation before sending it.
 - Exact name/identity questions use the configured character card. Compound
   self-reflection questions get a factual local status card covering the saved
   persona, currently registered plan tools, recent shipped capability areas,
@@ -112,7 +130,24 @@ The service exposes:
 - The Python vision adapter can pass an explicitly approved image to a
   loopback Ollama vision model (maximum 10 MB). The default `qwen2.5:3b` is
   text-only; screen capture is not exposed through the API or desktop UI, and
-  there is no automatic screen monitoring.
+  there is no automatic screen monitoring. `POST /v1/vision/analyze` only
+  accepts a user-selected PNG, JPEG, or WebP image after the desktop's
+  per-image confirmation, checks its declared type against its file signature,
+  and returns observed content separately from possible interpretations and
+  uncertainty. Images are request-scoped and are not added to long-term memory.
+  If the configured local model cannot process images, the request fails
+  explicitly rather than returning a text-only guess.
+- Voice preferences in the desktop settings control local playback mute,
+  speed, and volume and can be reset; they are stored in browser-local storage.
+  These controls do not select a different synthesized voice, train or clone a
+  voice, or upload recordings. Reference audio remains audition material.
+- A brain plan can be cleared to disable its future tool steps. A tool call
+  already approved and in progress cannot be interrupted; the UI warns before
+  clearing and preserves its eventual result. The collaboration workspace also
+  has a review-first offline mini-game prompt: it asks the local planner to
+  propose a self-contained HTML file, shows its complete contents before
+  execution, and still requires the existing per-file confirmation. It does
+  not load external resources or automatically open the generated file.
 - `GET /v1/social/status` and `GET /v1/social/partners` report the local
   collaboration service and its built-in architecture, code, UI, and testing
   review partners. `POST /v1/social/collaborate` accepts a `task` and optional

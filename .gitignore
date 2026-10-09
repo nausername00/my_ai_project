@@ -83,3 +83,10 @@ Works/
 .vscode/
 Thumbs.db
 .DS_Store
+
+# ----- 补充：IDE/系统/素材源/运行时用户数据（2026-10-10 补录）-----
+.vs/
+Web.config
+Model Core/Weighting file (core fuel)/Character/assets/models/
+Model Core/Weighting file (core fuel)/Character/affect-*.json
+Model Core/Weighting file (core fuel)/Is it feasible/
