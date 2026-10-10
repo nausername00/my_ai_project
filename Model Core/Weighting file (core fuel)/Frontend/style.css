@@ -2494,6 +2494,45 @@ button {
   min-height: 16px;
 }
 
+#mini-game-draft-dialog {
+  width: min(680px, 92vw);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #1a1b24;
+  color: var(--text);
+  padding: 16px;
+}
+
+#mini-game-draft-dialog h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+#mini-game-draft-source {
+  width: 100%;
+  box-sizing: border-box;
+  background: #14151d;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  font-family: ui-monospace, Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.mini-game-draft-status {
+  min-height: 1.4em;
+}
+
 .model-resource-chip {
   max-width: 100%;
   padding: 4px 7px;

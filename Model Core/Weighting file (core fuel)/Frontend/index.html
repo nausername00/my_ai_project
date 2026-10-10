@@ -190,11 +190,25 @@
               <div class="collaboration-actions">
                 <button class="icon-button" id="mini-game-plan" type="button" disabled>共创一个小游戏</button>
                 <button class="icon-button" id="mini-game-preview" type="button" disabled>预览小游戏</button>
+                <button class="icon-button" id="mini-game-draft-manage" type="button" disabled>草案：查看/编辑</button>
+                <button class="icon-button" id="mini-game-draft-promote" type="button" disabled>保存到项目</button>
+                <button class="icon-button" id="mini-game-draft-discard" type="button" disabled>丢弃草案</button>
                 <button class="icon-button" id="brain-plan-submit" type="button" disabled>生成可审阅计划</button>
                 <button class="save-button" id="collaboration-submit" type="submit" disabled>等待本机模型就绪</button>
               </div>
             </div>
           </form>
+          <p class="form-status mini-game-draft-status" id="mini-game-draft-status" role="status" aria-live="polite"></p>
+          <dialog id="mini-game-draft-dialog">
+            <h3>小游戏草案源码</h3>
+            <p class="character-card-help">草案保存在项目目录之外，不会进入项目或记忆；保存到项目需再次确认，且只新建、不覆盖。</p>
+            <textarea id="mini-game-draft-source" rows="14" spellcheck="false" placeholder="草案为空"></textarea>
+            <div class="dialog-actions">
+              <button class="icon-button" id="mini-game-draft-save" type="button">保存草案</button>
+              <button class="icon-button" id="mini-game-draft-reset" type="button">重置为生成版本</button>
+              <button class="icon-button" id="mini-game-draft-close" type="button">关闭</button>
+            </div>
+          </dialog>
           <p class="form-status collaboration-status" id="collaboration-status" role="status" aria-live="polite"></p>
           <section class="brain-plan" id="brain-plan" hidden>
             <header class="brain-plan-header">

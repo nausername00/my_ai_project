@@ -283,6 +283,29 @@ test("character studio offers an 8-emotion portrait tour with a voice sample", (
   assert.match(css, /\.emotion-tour-actions\s*\{/);
 });
 
+test("mini-game drafts live outside the project with edit/reset/discard and confirmed promote", () => {
+  assert.match(html, /id="mini-game-draft-manage"/);
+  assert.match(html, /id="mini-game-draft-promote"/);
+  assert.match(html, /id="mini-game-draft-discard"/);
+  assert.match(html, /id="mini-game-draft-dialog"/);
+  assert.match(html, /id="mini-game-draft-source"/);
+  assert.match(html, /保存到项目需再次确认，且只新建、不覆盖/);
+  assert.match(renderer, /async function refreshMiniGameDraftState\(\)/);
+  assert.match(renderer, /miniGameDraftStatus\(\)/);
+  assert.match(renderer, /miniGameDraftRead\(\)/);
+  assert.match(renderer, /miniGameDraftWrite\(/);
+  assert.match(renderer, /miniGameDraftReset\(\)/);
+  assert.match(renderer, /miniGameDraftPromote\(\)/);
+  assert.match(renderer, /miniGameDraftDiscard\(\)/);
+  assert.match(renderer, /目标路径（仅新建，不覆盖）/);
+  assert.match(main, /companion:mini-game-draft-status/);
+  assert.match(main, /companion:mini-game-draft-promote/);
+  assert.match(main, /companion:mini-game-draft-discard/);
+  assert.match(main, /seedDraft\(miniGameDraftsDir\(\), arguments_\.content\)/);
+  assert.match(main, /miniGameWorkingPath\(draftsDir\)/);
+  assert.match(css, /#mini-game-draft-dialog\s*\{/);
+});
+
 test("external partner reviews require a local preview and per-run confirmation", () => {
   assert.match(html, /默认只使用本地主引擎/);
   assert.match(html, /id="partners-external-options"/);

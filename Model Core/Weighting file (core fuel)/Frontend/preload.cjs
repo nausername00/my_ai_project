@@ -100,6 +100,13 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke("companion:create-agent-trace", task, scope),
     miniGameExists: () => ipcRenderer.invoke("companion:mini-game-exists"),
     openMiniGame: () => ipcRenderer.invoke("companion:open-mini-game"),
+    miniGameDraftStatus: () => ipcRenderer.invoke("companion:mini-game-draft-status"),
+    miniGameDraftRead: () => ipcRenderer.invoke("companion:mini-game-draft-read"),
+    miniGameDraftWrite: (content) =>
+      ipcRenderer.invoke("companion:mini-game-draft-write", content),
+    miniGameDraftReset: () => ipcRenderer.invoke("companion:mini-game-draft-reset"),
+    miniGameDraftDiscard: () => ipcRenderer.invoke("companion:mini-game-draft-discard"),
+    miniGameDraftPromote: () => ipcRenderer.invoke("companion:mini-game-draft-promote"),
     verifyAgentTool: (request) =>
       ipcRenderer.invoke("companion:verify-agent-tool", request),
     listMemories: () => ipcRenderer.invoke("companion:list-memories"),

@@ -2654,7 +2654,143 @@ async function refreshMiniGamePreviewState() {
   } catch {
     miniGamePreviewButton.disabled = true;
   }
+  await refreshMiniGameDraftState();
 }
+
+const miniGameDraftManageButton = document.getElementById("mini-game-draft-manage");
+const miniGameDraftPromoteButton = document.getElementById("mini-game-draft-promote");
+const miniGameDraftDiscardButton = document.getElementById("mini-game-draft-discard");
+const miniGameDraftStatusEl = document.getElementById("mini-game-draft-status");
+const miniGameDraftDialog = document.getElementById("mini-game-draft-dialog");
+const miniGameDraftSource = document.getElementById("mini-game-draft-source");
+
+function setMiniGameDraftStatus(text, isError = false) {
+  miniGameDraftStatusEl.textContent = text;
+  miniGameDraftStatusEl.classList.toggle("error", isError);
+}
+
+async function refreshMiniGameDraftState() {
+  try {
+    const status = await window.companion.miniGameDraftStatus();
+    const hasDraft = status.hasWorking || status.hasOriginal;
+    miniGameDraftManageButton.disabled = !hasDraft;
+    miniGameDraftPromoteButton.disabled = !status.hasWorking;
+    miniGameDraftDiscardButton.disabled = !hasDraft;
+    if (status.projectExists) {
+      setMiniGameDraftStatus("项目内已有小游戏文件；草案保存在项目之外，保存到项目会因冲突被拒绝（仅新建、不覆盖）。");
+    } else if (hasDraft) {
+      setMiniGameDraftStatus("已有项目外草案；可查看/编辑、预览、丢弃，或确认后保存到项目。");
+    } else {
+      setMiniGameDraftStatus("尚无草案；在“共创一个小游戏”生成后，内容会先保存在项目目录之外。");
+    }
+  } catch (error) {
+    miniGameDraftManageButton.disabled = true;
+    miniGameDraftPromoteButton.disabled = true;
+    miniGameDraftDiscardButton.disabled = true;
+    setMiniGameDraftStatus(error.message, true);
+  }
+}
+
+async function openMiniGameDraftEditor() {
+  try {
+    const { working, original } = await window.companion.miniGameDraftRead();
+    miniGameDraftSource.value = working || original || "";
+    miniGameDraftDialog.showModal();
+  } catch (error) {
+    setMiniGameDraftStatus(error.message, true);
+  }
+}
+
+miniGameDraftManageButton.addEventListener("click", () => {
+  void openMiniGameDraftEditor();
+});
+
+document.getElementById("mini-game-draft-close").addEventListener("click", () => {
+  miniGameDraftDialog.close();
+});
+
+document.getElementById("mini-game-draft-save").addEventListener("click", async () => {
+  try {
+    const result = await window.companion.miniGameDraftWrite(
+      miniGameDraftSource.value,
+    );
+    if (result?.saved) {
+      setMiniGameDraftStatus("草案已保存（仍在项目目录之外）。");
+      await refreshMiniGameDraftState();
+    }
+  } catch (error) {
+    setMiniGameDraftStatus(error.message, true);
+  }
+});
+
+document.getElementById("mini-game-draft-reset").addEventListener("click", async () => {
+  try {
+    const result = await window.companion.miniGameDraftReset();
+    if (result?.reset) {
+      const { working } = await window.companion.miniGameDraftRead();
+      miniGameDraftSource.value = working || "";
+      setMiniGameDraftStatus("已重置为墨灵生成的版本。");
+    }
+  } catch (error) {
+    setMiniGameDraftStatus(error.message, true);
+  }
+});
+
+miniGameDraftPromoteButton.addEventListener("click", async () => {
+  try {
+    const status = await window.companion.miniGameDraftStatus();
+    const { working } = await window.companion.miniGameDraftRead();
+    if (!working || !working.trim()) {
+      setMiniGameDraftStatus("草案为空，无法保存到项目。", true);
+      return;
+    }
+    const confirmed = window.confirm(
+      "确认把当前草案保存到项目？\n\n" +
+        "目标路径（仅新建，不覆盖）：\n" +
+        `${status.projectPath}\n\n` +
+        "草案内容（前 400 字预览）：\n" +
+        "--- 内容开始 ---\n" +
+        `${working.slice(0, 400)}\n` +
+        "--- 内容结束 ---\n\n" +
+        "安全说明：此操作把草案写入项目目录；确认后不可自动撤销。",
+    );
+    if (!confirmed) {
+      setMiniGameDraftStatus("已取消保存到项目；草案仍保留在项目之外。");
+      return;
+    }
+    const result = await window.companion.miniGameDraftPromote();
+    if (result?.written) {
+      setMiniGameDraftStatus(`已保存到项目：${result.path}`);
+      await refreshMiniGamePreviewState();
+    } else if (result?.conflict) {
+      setMiniGameDraftStatus("保存被拒绝：目标文件已存在（仅新建、不覆盖）。", true);
+    } else {
+      setMiniGameDraftStatus(`保存失败：${result?.error || "未知错误"}`, true);
+    }
+  } catch (error) {
+    setMiniGameDraftStatus(error.message, true);
+  }
+});
+
+miniGameDraftDiscardButton.addEventListener("click", async () => {
+  if (!window.confirm("确定丢弃当前草案？丢弃后不可恢复；项目内已有文件不受影响。")) {
+    return;
+  }
+  try {
+    const result = await window.companion.miniGameDraftDiscard();
+    if (result?.discarded) {
+      miniGameDraftDialog.close();
+      setMiniGameDraftStatus("草案已丢弃；项目目录没有新增文件。");
+      await refreshMiniGamePreviewState();
+    }
+  } catch (error) {
+    setMiniGameDraftStatus(error.message, true);
+  }
+});
+
+miniGameDraftDialog.addEventListener("click", (event) => {
+  if (event.target === miniGameDraftDialog) miniGameDraftDialog.close();
+});
 
 miniGamePreviewButton.addEventListener("click", async () => {
   try {

@@ -25,6 +25,17 @@ const {
   getAvatarCandidates,
 } = require("./avatar-display.js");
 const { applyMiniGamePolicy } = require("./mini-game-policy.cjs");
+const {
+  seedDraft,
+  draftStatus,
+  readDraft,
+  writeWorking,
+  resetWorking,
+  discardDrafts,
+  promoteWorking,
+  originalPath: miniGameOriginalPath,
+  workingPath: miniGameWorkingPath,
+} = require("./mini-game-drafts.cjs");
 const { pathToFileURL } = require("node:url");
 
 const projectRoot = path.resolve(__dirname, "..");
@@ -884,6 +895,29 @@ function registerIpcHandlers() {
       if (approval.response !== 0) {
         return { approved: false, observation: null };
       }
+      // J1：小游戏 HTML 不直接写入项目，改为项目目录之外的草案；
+      // 用户后续在“共创一个小游戏”面板里编辑并二次确认后才保存到项目。
+      const isMiniGameTarget =
+        isCreate &&
+        path.basename(requestedTarget).toLowerCase() === "moling-mini-game.html";
+      if (isMiniGameTarget) {
+        try {
+          await seedDraft(miniGameDraftsDir(), arguments_.content);
+          return {
+            approved: true,
+            drafted: true,
+            observation:
+              "已把生成内容保存为项目目录之外的草案（尚未写入项目）。" +
+              "可在“共创一个小游戏”面板查看、编辑、预览或丢弃；保存到项目需要你再次确认。",
+          };
+        } catch (error) {
+          return {
+            approved: true,
+            drafted: false,
+            observation: `草案保存失败：${error.message}`,
+          };
+        }
+      }
       const executeBody = { tool, arguments: arguments_ };
       if (typeof traceId === "string" && traceId.trim()) {
         executeBody.trace_id = traceId.trim();
@@ -919,25 +953,74 @@ function registerIpcHandlers() {
     return callApi("/v1/agent/traces", "POST", body);
   });
   const miniGamePath = () => path.join(__dirname, "moling-mini-game.html");
+  const miniGameDraftsDir = () =>
+    path.join(app.getPath("userData"), "mini-game-drafts");
   ipcMain.handle("companion:mini-game-exists", async () => {
     try {
       await fs.access(miniGamePath());
       return true;
     } catch {
-      return false;
+      try {
+        await fs.access(miniGameWorkingPath(miniGameDraftsDir()));
+        return true;
+      } catch {
+        return false;
+      }
     }
   });
+  // J1：草案生命周期（项目目录之外）。生成内容先落草案，保存到项目需用户二次确认且仅新建。
+  ipcMain.handle("companion:mini-game-draft-status", async () => {
+    const status = await draftStatus(
+      miniGameDraftsDir(),
+      miniGamePath(),
+    );
+    return {
+      ...status,
+      draftsDir: miniGameDraftsDir(),
+      projectPath: miniGamePath(),
+    };
+  });
+  ipcMain.handle("companion:mini-game-draft-read", async () =>
+    readDraft(miniGameDraftsDir()),
+  );
+  ipcMain.handle("companion:mini-game-draft-write", async (_event, content) => {
+    if (typeof content !== "string") {
+      throw new Error("草案内容必须为文本。");
+    }
+    return writeWorking(miniGameDraftsDir(), content);
+  });
+  ipcMain.handle("companion:mini-game-draft-reset", async () =>
+    resetWorking(miniGameDraftsDir()),
+  );
+  ipcMain.handle("companion:mini-game-draft-discard", async () =>
+    discardDrafts(miniGameDraftsDir()),
+  );
+  ipcMain.handle("companion:mini-game-draft-promote", async () =>
+    promoteWorking(miniGameDraftsDir(), miniGamePath()),
+  );
   ipcMain.handle("companion:open-mini-game", async () => {
+    // J1：优先打开草案（项目外）；无草案时回退到项目文件。
+    let target = miniGamePath();
+    const draftsDir = miniGameDraftsDir();
     try {
-      await fs.access(miniGamePath());
+      await fs.access(miniGameWorkingPath(draftsDir));
+      target = miniGameWorkingPath(draftsDir);
     } catch {
-      throw new Error("小游戏文件尚未生成；先在“共创一个小游戏”计划中创建 Frontend/moling-mini-game.html。");
+      /* 无草案，用项目文件 */
+    }
+    try {
+      await fs.access(target);
+    } catch {
+      throw new Error(
+        "小游戏尚未生成；先在“共创一个小游戏”计划中生成草案，或将草案保存到项目。",
+      );
     }
     if (miniGameWindow && !miniGameWindow.isDestroyed()) {
       miniGameWindow.show();
       miniGameWindow.focus();
       return { opened: true };
     }
+    const targetUrl = pathToFileURL(target).href;
     miniGameWindow = new BrowserWindow({
       width: 900,
       height: 700,
@@ -957,15 +1040,14 @@ function registerIpcHandlers() {
     miniGameWindow.on("closed", () => {
       miniGameWindow = null;
     });
-    // J0：预览窗口强制隔离策略——网络 / 导航 / 弹窗 / 下载 / 权限全部拒绝，
-    // 只允许加载本预览文件本身。
+    // J0：预览窗口强制隔离策略——只允许加载当前预览目标文件本身。
     const previewSession = session.fromPartition("moling-mini-game-preview");
     applyMiniGamePolicy({
       webContents: miniGameWindow.webContents,
       session: previewSession,
-      allowedFileUrl: pathToFileURL(miniGamePath()).href,
+      allowedFileUrl: targetUrl,
     });
-    miniGameWindow.loadFile(miniGamePath());
+    miniGameWindow.loadFile(target);
     return { opened: true };
   });
   ipcMain.handle("companion:verify-agent-tool", (_event, request) =>
