@@ -1179,6 +1179,15 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  margin-top: 8px;
+}
+
+.image-analysis-type {
+  margin: 6px 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #b9a8ff;
+  letter-spacing: 0.02em;
 }
 
 .reply-tool-actions button,

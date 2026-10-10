@@ -98,6 +98,7 @@ test("voice preferences and user-selected image analysis are visible, local-firs
   assert.match(renderer, /getCharacterSynthesisVoice\(\)/);
   assert.match(index, /voice-playback\.js[\s\S]*renderer\.js/);
   assert.ok(packageManifest.build.files.includes("voice-playback.js"));
+  assert.ok(packageManifest.build.files.includes("avatar-display.js"));
   assert.match(renderer, /translatorVoiceSelect\.append\(option\)/);
   assert.match(renderer, /无法读取本地声线目录/);
   assert.match(main, /showOpenDialog/);
@@ -111,10 +112,18 @@ test("voice preferences and user-selected image analysis are visible, local-firs
 test("floating character presentation follows current affect and rejects stale updates", () => {
   assert.match(main, /ipcMain\.handle\("companion:set-affect", async[\s\S]*?pushCharacterToFloating\(\)/);
   assert.match(main, /updateVersion !== floatingCharacterUpdateVersion/);
-  assert.match(main, /emotionPortrait \|\| character\?\.avatar/);
+  assert.match(main, /getAvatarCandidates\(\{/);
+  assert.match(main, /avatarFallbackDataUrl: portraitDataUrls\[1\]/);
   assert.match(floating, /characterUpdateVersion/);
   assert.match(floating, /image\.onerror = \(\) => \{[\s\S]*?updateVersion !== characterUpdateVersion/);
   assert.match(floating, /image\.removeAttribute\("src"\)/);
+  assert.match(floating, /模拟状态 · \$\{character\.moodLabel\}/);
+  assert.match(index, /id="avatar-display-mode"/);
+  assert.match(index, /value="follow">跟随模拟状态切换立绘/);
+  assert.match(index, /value="base">固定显示基础立绘/);
+  assert.match(renderer, /AVATAR_DISPLAY_MODE_KEY/);
+  assert.match(renderer, /setAvatarDisplayMode\(nextMode\)/);
+  assert.match(main, /companion:set-avatar-display-mode/);
 });
 
 test("plans can be cleared honestly and offer a review-first offline mini-game task", () => {
@@ -250,6 +259,16 @@ test("chat replies expose evidence and user-controlled correction actions", () =
   assert.match(css, /\.reply-tools\s*\{/);
 });
 
+test("image analysis classifies the image type and offers read/organize/list actions", () => {
+  assert.match(renderer, /const IMAGE_TYPE_LABELS = \{/);
+  assert.match(renderer, /图片类型：\$\{IMAGE_TYPE_LABELS/);
+  assert.match(renderer, /为你朗读这段分析/);
+  assert.match(renderer, /帮你整理信息/);
+  assert.match(renderer, /列出可见内容/);
+  assert.match(renderer, /analysis\.append\(analysisActions\)/);
+  assert.match(css, /\.image-analysis-type/);
+});
+
 test("external partner reviews require a local preview and per-run confirmation", () => {
   assert.match(html, /默认只使用本地主引擎/);
   assert.match(html, /id="partners-external-options"/);
@@ -267,7 +286,8 @@ test("external partner reviews require a local preview and per-run confirmation"
 test("assistant messages carry a mood-aware avatar that refreshes on affect change", () => {
   assert.match(renderer, /refreshMessageAvatar\(avatar\)/);
   assert.match(renderer, /refreshAllMessageAvatars\(\)/);
-  assert.match(renderer, /const portrait = runtimeEmotionAvatars\[mood\] \|\| baseAvatarFileName/);
+  assert.match(renderer, /const portraits = window\.MolingAvatarDisplay\.getAvatarCandidates/);
+  assert.match(renderer, /portraitIndex < portraits\.length/);
   assert.match(renderer, /message-avatar-fallback/);
   assert.match(css, /\.message-avatar \{/);
   assert.match(css, /\.message\.assistant \.message-body/);

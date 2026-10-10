@@ -159,6 +159,7 @@ const affectIndicator = document.getElementById("affect-indicator");
 const affectMood = document.getElementById("affect-mood");
 const affectReason = document.getElementById("affect-reason");
 const affectStatus = document.getElementById("affect-status");
+const avatarDisplayModeSelect = document.getElementById("avatar-display-mode");
 const voiceMuted = document.getElementById("voice-muted");
 const voicePlaybackRate = document.getElementById("voice-playback-rate");
 const voicePlaybackRateValue = document.getElementById("voice-playback-rate-value");
@@ -190,6 +191,8 @@ let emotionAvatars = {};
 let runtimeEmotionAvatars = {};
 let baseAvatarFileName = null;
 let avatarLoadVersion = 0;
+let appearanceRequestVersion = 0;
+let avatarDisplayMode = window.MolingAvatarDisplay.MODES.FOLLOW;
 let selectedModelFile = "";
 let saveAppearanceRequested = false;
 let translationRequestVersion = 0;
@@ -203,6 +206,7 @@ let speechVoiceLoadError = "";
 let selectedPersonalityPreset = "custom";
 const VOICE_PREFERENCES_KEY = "moling.voice.preferences.v1";
 const LOCAL_VOICE_PREFIX = "voice:";
+const AVATAR_DISPLAY_MODE_KEY = "moling.avatar.display-mode.v1";
 const VOICE_PREVIEW_TEXT =
   "你好，我是墨灵。很高兴认识你，这是当前声线的试听。";
 const DEFAULT_VOICE_PREFERENCES = Object.freeze({
@@ -310,6 +314,16 @@ const personalityPresets = {
     signature_lines: [],
   },
 };
+const IMAGE_TYPE_LABELS = {
+  scenery: "风景/场景",
+  character: "角色/人物",
+  document: "文档/报告",
+  table: "表格/清单",
+  bill: "账单/票据",
+  note: "记录/笔记",
+  other: "其他图片",
+};
+
 const personalityFieldLabels = {
   core_values: "内在原则",
   inner_drives: "主动驱动力",
@@ -361,21 +375,33 @@ function addMessage(text, role, extraClass = "") {
 
 function refreshMessageAvatar(avatarNode) {
   const mood = affectMood?.value || "calm";
-  const portrait = runtimeEmotionAvatars[mood] || baseAvatarFileName;
+  const portraits = window.MolingAvatarDisplay.getAvatarCandidates({
+    baseAvatar: baseAvatarFileName,
+    emotionAvatars: runtimeEmotionAvatars,
+    mood,
+    mode: avatarDisplayMode,
+  });
   avatarNode.dataset.mood = mood;
   avatarNode.replaceChildren();
-  if (portrait) {
+  if (portraits.length) {
+    let portraitIndex = 0;
     const img = document.createElement("img");
     img.alt = "";
-    img.src = portrait;
     img.addEventListener("error", () => {
-      avatarNode.replaceChildren();
-      const fallback = document.createElement("span");
-      fallback.className = "message-avatar-fallback";
-      fallback.textContent = activeCharacterNickname.slice(0, 1);
-      avatarNode.append(fallback);
+      if (!img.isConnected) return;
+      portraitIndex += 1;
+      if (portraitIndex < portraits.length) {
+        img.src = portraits[portraitIndex];
+      } else {
+        avatarNode.replaceChildren();
+        const fallback = document.createElement("span");
+        fallback.className = "message-avatar-fallback";
+        fallback.textContent = activeCharacterNickname.slice(0, 1);
+        avatarNode.append(fallback);
+      }
     });
     avatarNode.append(img);
+    img.src = portraits[portraitIndex];
   } else {
     const fallback = document.createElement("span");
     fallback.className = "message-avatar-fallback";
@@ -1285,7 +1311,11 @@ async function updateModelPreview() {
       : `${format.toUpperCase()} 资源已登记并纳入卡片；对应运行时渲染器尚未集成，当前只显示资源清单与静态立绘。`;
 }
 
-function setAvatarTargets(dataUrl, requestVersion = avatarLoadVersion) {
+function setAvatarTargets(
+  dataUrl,
+  requestVersion = avatarLoadVersion,
+  allowEmotionFallback = true,
+) {
   for (const [containerId, imageId, fallbackId] of [
     ["character-display", "welcome-avatar-image", "welcome-avatar-fallback"],
     ["topbar-avatar", "topbar-avatar-image", "topbar-avatar-fallback"],
@@ -1295,9 +1325,26 @@ function setAvatarTargets(dataUrl, requestVersion = avatarLoadVersion) {
     const fallback = document.getElementById(fallbackId);
     image.onerror = () => {
       if (requestVersion !== avatarLoadVersion) return;
+      const mood = affectMood.value;
+      const emotionPortrait = runtimeEmotionAvatars[mood];
+      if (
+        allowEmotionFallback &&
+        avatarDisplayMode === window.MolingAvatarDisplay.MODES.FOLLOW &&
+        emotionPortrait &&
+        emotionPortrait !== baseAvatarFileName
+      ) {
+        void loadAvatar(baseAvatarFileName, false).catch(async (error) => {
+          await loadAvatar(null);
+          avatarStatus.textContent = `情绪立绘和基础立绘均无法加载：${error.message}`;
+          avatarStatus.classList.add("error");
+        });
+        return;
+      }
       image.hidden = true;
       fallback.hidden = false;
-      avatarStatus.textContent = "图片无法解码，请选择有效的 PNG、JPEG 或 WebP 文件。";
+      avatarStatus.textContent = allowEmotionFallback
+        ? "角色立绘无法解码，已显示文字头像。"
+        : "情绪立绘和基础立绘均无法解码，已显示文字头像。";
       avatarStatus.classList.add("error");
     };
     image.hidden = !dataUrl;
@@ -1308,15 +1355,15 @@ function setAvatarTargets(dataUrl, requestVersion = avatarLoadVersion) {
   }
 }
 
-async function loadAvatar(fileName) {
+async function loadAvatar(fileName, allowEmotionFallback = true) {
   const requestVersion = ++avatarLoadVersion;
   if (!fileName) {
-    setAvatarTargets(null, requestVersion);
+    setAvatarTargets(null, requestVersion, false);
     return;
   }
   const dataUrl = await window.companion.getAvatar(fileName);
   if (requestVersion === avatarLoadVersion) {
-    setAvatarTargets(dataUrl, requestVersion);
+    setAvatarTargets(dataUrl, requestVersion, allowEmotionFallback);
   }
 }
 
@@ -3392,26 +3439,78 @@ function setMemoryStatus(message, isError = false) {
 }
 
 async function applyEmotionAvatar(mood) {
-  const portrait = runtimeEmotionAvatars[mood] || null;
-  const target = portrait || baseAvatarFileName;
-  const requestVersion = avatarLoadVersion + 1;
-  try {
-    await loadAvatar(target);
-  } catch (error) {
-    if (requestVersion !== avatarLoadVersion) return;
-    if (portrait && baseAvatarFileName && portrait !== baseAvatarFileName) {
-      try {
-        await loadAvatar(baseAvatarFileName);
-      } catch {
-        await loadAvatar(null);
-      }
-    } else {
-      await loadAvatar(null);
+  const requestVersion = ++appearanceRequestVersion;
+  const portraits = window.MolingAvatarDisplay.getAvatarCandidates({
+    baseAvatar: baseAvatarFileName,
+    emotionAvatars: runtimeEmotionAvatars,
+    mood,
+    mode: avatarDisplayMode,
+  });
+  let lastError;
+  for (const portrait of portraits) {
+    try {
+      await loadAvatar(portrait);
+      if (requestVersion !== appearanceRequestVersion) return;
+      avatarStatus.classList.remove("error");
+      return;
+    } catch (error) {
+      if (requestVersion !== appearanceRequestVersion) return;
+      lastError = error;
     }
-    avatarStatus.textContent = `无法加载当前情绪立绘：${error.message}`;
+  }
+  if (requestVersion !== appearanceRequestVersion) return;
+  await loadAvatar(null);
+  if (lastError) {
+    avatarStatus.textContent = `无法加载角色立绘：${lastError.message}`;
     avatarStatus.classList.add("error");
+  } else {
+    avatarStatus.classList.remove("error");
   }
 }
+
+async function initializeAvatarDisplayMode() {
+  try {
+    avatarDisplayMode = window.MolingAvatarDisplay.normalizeMode(
+      localStorage.getItem(AVATAR_DISPLAY_MODE_KEY),
+    );
+  } catch (error) {
+    affectStatus.textContent = `无法读取立绘偏好，将暂时跟随模拟状态：${error.message}`;
+    affectStatus.classList.add("error");
+  }
+  avatarDisplayModeSelect.value = avatarDisplayMode;
+  try {
+    await window.companion.setAvatarDisplayMode(avatarDisplayMode);
+  } catch (error) {
+    affectStatus.textContent = `无法同步悬浮窗立绘偏好：${error.message}`;
+    affectStatus.classList.add("error");
+  }
+}
+
+avatarDisplayModeSelect.addEventListener("change", async () => {
+  const nextMode = window.MolingAvatarDisplay.normalizeMode(
+    avatarDisplayModeSelect.value,
+  );
+  avatarDisplayMode = nextMode;
+  avatarDisplayModeSelect.value = nextMode;
+  let persistenceError;
+  try {
+    localStorage.setItem(AVATAR_DISPLAY_MODE_KEY, nextMode);
+  } catch (error) {
+    persistenceError = error;
+  }
+  await applyEmotionAvatar(affectMood.value);
+  refreshAllMessageAvatars();
+  try {
+    await window.companion.setAvatarDisplayMode(nextMode);
+    affectStatus.textContent = persistenceError
+      ? `本次会话已切换立绘方式，但无法保存偏好：${persistenceError.message}`
+      : "立绘显示偏好已保存，并同步到悬浮窗。";
+    affectStatus.classList.toggle("error", Boolean(persistenceError));
+  } catch (error) {
+    affectStatus.textContent = `主窗口已切换立绘方式，但悬浮窗同步失败：${error.message}`;
+    affectStatus.classList.add("error");
+  }
+});
 
 function updateAffect(state) {
   affectMood.value = state.mood;
@@ -3424,6 +3523,10 @@ function updateAffect(state) {
   const characterDisplay = document.getElementById("character-display");
   if (characterDisplay) characterDisplay.dataset.mood = state.mood;
   refreshAllMessageAvatars();
+  window.companion.setAvatarDisplayMode(avatarDisplayMode).catch((error) => {
+    affectStatus.textContent = `悬浮窗立绘状态同步失败：${error.message}`;
+    affectStatus.classList.add("error");
+  });
 }
 
 async function loadAffect() {
@@ -3649,6 +3752,70 @@ async function handleAnalyzeImage() {
     metadata.textContent =
       `本机模型：${result.analysis.engine} · 图片仅用于本次分析 · OCR/视觉描述可能有误`;
     analysis.append(metadata);
+    const imageTypeLabel = document.createElement("p");
+    imageTypeLabel.className = "image-analysis-type";
+    imageTypeLabel.textContent = `图片类型：${IMAGE_TYPE_LABELS[result.analysis.image_type] || "其他图片"}`;
+    analysis.append(imageTypeLabel);
+    const readAloud = document.createElement("button");
+    readAloud.type = "button";
+    readAloud.className = "reply-tool-action";
+    readAloud.textContent = "为你朗读这段分析";
+    readAloud.addEventListener("click", () => {
+      readAloud.disabled = true;
+      const textToRead = [result.analysis.summary, result.analysis.observed]
+        .filter(Boolean)
+        .join("。");
+      if (!textToRead) {
+        readAloud.disabled = false;
+        return;
+      }
+      window.companion
+        .synthesize(textToRead, getCharacterSynthesisVoice())
+        .then((audio) => {
+          const bytes =
+            audio instanceof Uint8Array
+              ? audio
+              : audio instanceof ArrayBuffer
+                ? new Uint8Array(audio)
+                : null;
+          if (!bytes || bytes.byteLength < 44) throw new Error("语音数据无效");
+          const url = URL.createObjectURL(
+            new Blob([bytes], { type: "audio/wav" }),
+          );
+          const playback = new Audio(url);
+          applyVoicePreferences(playback);
+          playback.addEventListener("ended", () => URL.revokeObjectURL(url), { once: true });
+          playback.addEventListener("error", () => URL.revokeObjectURL(url), { once: true });
+          return playback.play();
+        })
+        .then(() => {
+          readAloud.textContent = "重新朗读";
+        })
+        .catch((error) => {
+          readAloud.textContent = `朗读失败：${error.message}`;
+        })
+        .finally(() => {
+          readAloud.disabled = false;
+        });
+    });
+    const organizeButton = document.createElement("button");
+    organizeButton.type = "button";
+    organizeButton.className = "reply-tool-action";
+    organizeButton.textContent = "帮你整理信息";
+    organizeButton.addEventListener("click", () => {
+      void sendMessage(
+        `请把这张${IMAGE_TYPE_LABELS[result.analysis.image_type] || "图片"}里的信息整理成清晰的条目：要点、数字、待办或需要注意的地方分开列。图片内容参考：${result.analysis.observed || result.analysis.summary || ""}。不确定的内容要标注为不确定。`,
+      );
+    });
+    const listButton = document.createElement("button");
+    listButton.type = "button";
+    listButton.className = "reply-tool-action";
+    listButton.textContent = "列出可见内容";
+    listButton.addEventListener("click", () => {
+      void sendMessage(
+        `请把这张${IMAGE_TYPE_LABELS[result.analysis.image_type] || "图片"}里能直接看到的内容逐条列出来，不要推测看不到的东西。图片内容参考：${result.analysis.observed || result.analysis.summary || ""}。`,
+      );
+    });
     const correction = document.createElement("button");
     correction.type = "button";
     correction.className = "reply-tool-action";
@@ -3661,7 +3828,10 @@ async function handleAnalyzeImage() {
         );
       }
     });
-    analysis.append(correction);
+    const analysisActions = document.createElement("div");
+    analysisActions.className = "reply-tool-actions";
+    analysisActions.append(readAloud, organizeButton, listButton, correction);
+    analysis.append(analysisActions);
     message.append(preview, analysis);
     conversation.scrollTop = conversation.scrollHeight;
   } catch (error) {
@@ -4133,6 +4303,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   updateAgentReflectionButton();
   void loadCollaborationRoles();
+  void initializeAvatarDisplayMode();
   refreshStatus();
   loadCharacter();
   loadCharacters();

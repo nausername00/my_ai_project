@@ -297,6 +297,7 @@ def analyze_image(
         return {
             **base,
             "engine": "placeholder",
+            "image_type": "other",
             "summary": (
                 "[视觉分析占位] 已收到图片（未启用视觉模型）。"
                 "若需要真实内容描述，请传入支持多模态的 inference engine "
@@ -321,10 +322,14 @@ def analyze_image(
         }
     req = GenerationRequest(
         prompt=(
-            "谨慎分析用户主动提供的图片。先只描述直接可见的物体、布局和可辨文字，"
-            "再把任何解释明确标为可能性；看不清或存在多种解释时说明不确定并提出一个简短澄清问题。"
+            "谨慎分析用户主动提供的图片。第一步先判断图片类型："
+            "scenery(风景/场景)、character(角色/人物/立绘)、document(文档/报告)、"
+            "table(表格/清单)、bill(账单/票据)、note(记录/笔记)、other(其他)。"
+            "再只描述直接可见的物体、布局和可辨文字，"
+            "把任何解释明确标为可能性；看不清或存在多种解释时说明不确定并提出一个简短澄清问题。"
             "不要推断人物的情绪、身份、人格、关系或心理状态，也不要把推测说成事实。"
             "不得输出百分比置信度。按以下字段逐行输出：\n"
+            "image_type: scenery/character/document/table/bill/note/other 之一\n"
             "summary: 一句简短总结\n"
             "observed: 直接可见的内容\n"
             "possible_interpretations: 可能解释；没有则留空\n"
@@ -356,10 +361,15 @@ def analyze_image(
     possible_interpretations = ""
     uncertainty = ""
     clarifying_question = ""
+    image_type = "other"
     labels: list[str] = []
     has_text: bool | None = None
     for line in raw.splitlines():
-        if line.lower().startswith("summary:"):
+        if line.lower().startswith("image_type:"):
+            image_type = line.split(":", 1)[1].strip().lower()
+            if image_type not in {"scenery", "character", "document", "table", "bill", "note", "other"}:
+                image_type = "other"
+        elif line.lower().startswith("summary:"):
             summary = line.split(":", 1)[1].strip()
         elif line.lower().startswith("observed:"):
             observed = line.split(":", 1)[1].strip()
@@ -383,6 +393,7 @@ def analyze_image(
     return {
         **base,
         "engine": model_name,
+        "image_type": image_type,
         "summary": summary,
         "observed": observed,
         "possible_interpretations": possible_interpretations,
