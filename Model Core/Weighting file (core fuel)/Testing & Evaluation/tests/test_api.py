@@ -7,6 +7,7 @@ import tempfile
 import threading
 import time
 import unittest
+import zlib
 from http.client import HTTPConnection
 from pathlib import Path
 from threading import Thread
@@ -23,15 +24,31 @@ from speech import SpeechInputError, SpeechService, SpeechUnavailableError
 VISION_TEST_CAPABILITY = "ab" * 32
 
 
-def small_png(width: int = 2, height: int = 3) -> bytes:
+def _png_chunk(chunk_type: bytes, data: bytes) -> bytes:
     return (
-        b"\x89PNG\r\n\x1a\n"
-        + struct.pack(">I", 13)
-        + b"IHDR"
-        + struct.pack(">II", width, height)
-        + b"\x08\x02\x00\x00\x00"
-        + b"\x00" * 4
+        struct.pack(">I", len(data))
+        + chunk_type
+        + data
+        + struct.pack(">I", zlib.crc32(chunk_type + data) & 0xFFFFFFFF)
     )
+
+
+def small_png(width: int = 2, height: int = 3) -> bytes:
+    """返回一个真实可解码的 PNG；超大尺寸只构造头部（供头部检查先行拒绝）。"""
+    header = (
+        b"\x89PNG\r\n\x1a\n"
+        + _png_chunk(
+            b"IHDR",
+            struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0),
+        )
+    )
+    if width * height > 4096:
+        # 仅头部：超大声明会被头部尺寸检查先拒绝，无需真实像素数据。
+        return header
+    raw = b"".join(
+        b"\x00" + b"\xff\x00\x00" * width for _ in range(height)
+    )
+    return header + _png_chunk(b"IDAT", zlib.compress(raw)) + _png_chunk(b"IEND", b"")
 
 
 class ApiTests(unittest.TestCase):
@@ -292,6 +309,140 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status, 400)
         self.assertIn("local model", result["error"])
         analyze.assert_not_called()
+
+    def _run_vision_analyze(
+        self,
+        image: bytes,
+        content_type: str = "image/png",
+    ) -> tuple[int, dict]:
+        self.connection.request(
+            "POST",
+            "/v1/vision/analyze",
+            json.dumps(
+                {
+                    "content_type": content_type,
+                    "image_base64": base64.b64encode(image).decode("ascii"),
+                }
+            ),
+            {
+                "Content-Type": "application/json",
+                **self.vision_consent_header(),
+            },
+        )
+        response = self.connection.getresponse()
+        return response.status, json.loads(response.read())
+
+    def test_vision_analysis_rejects_truncated_png_without_model_call(self) -> None:
+        """J2：截断的有效 PNG 必须快速明确失败，且不调用模型、不持久化。"""
+        good = small_png()
+        truncated = good[: len(good) // 2]
+
+        class LocalVisionEngine:
+            model_name = "local-vision"
+
+            class Backend:
+                endpoint = "http://127.0.0.1:11434"
+
+            backend = Backend()
+
+        previous_engine = self.server.RequestHandlerClass.engine
+        self.server.RequestHandlerClass.engine = LocalVisionEngine()
+        try:
+            with patch("api.analyze_image") as analyze:
+                status, result = self._run_vision_analyze(truncated)
+        finally:
+            self.server.RequestHandlerClass.engine = previous_engine
+
+        self.assertEqual(status, 400)
+        self.assertIn("解码", result["error"])
+        analyze.assert_not_called()
+        self.assertFalse(Path(os.environ["CHARACTER_MEMORY_PATH"]).exists())
+
+    def test_vision_analysis_rejects_forged_dimension_header(self) -> None:
+        """J2：伪造 IHDR 尺寸头（声明 4000×4000、实际 1×1 数据）必须被解码验证拦截。"""
+        forged = bytearray(small_png(width=1, height=1))
+        # 定位 IHDR 宽度/高度字段（魔数 8 字节 + 长度 4 字节 + "IHDR" 4 字节后）
+        forged[16:20] = struct.pack(">I", 4000)
+        forged[20:24] = struct.pack(">I", 4000)
+        status, result = self._run_vision_analyze(bytes(forged))
+        self.assertEqual(status, 400)
+        self.assertIn("解码", result["error"])
+        self.assertFalse(Path(os.environ["CHARACTER_MEMORY_PATH"]).exists())
+
+    def test_vision_analysis_rejects_garbage_masquerading_as_png(self) -> None:
+        """J2：魔数合法但数据是随机垃圾的 PNG 必须被解码验证拦截。"""
+        garbage = (
+            b"\x89PNG\r\n\x1a\n"
+            + _png_chunk(
+                b"IHDR",
+                struct.pack(">IIBBBBB", 2, 2, 8, 2, 0, 0, 0),
+            )
+            + _png_chunk(b"IDAT", b"\xff\xfe\xfd\xfc\xfb")
+        )
+        status, result = self._run_vision_analyze(garbage)
+        self.assertEqual(status, 400)
+        self.assertIn("解码", result["error"])
+        self.assertFalse(Path(os.environ["CHARACTER_MEMORY_PATH"]).exists())
+
+    def test_vision_analysis_accepts_a_complete_png(self) -> None:
+        """J2：真实可解码的 PNG 应通过验证并进入模型。"""
+        class LocalVisionEngine:
+            model_name = "local-vision"
+
+            class Backend:
+                endpoint = "http://127.0.0.1:11434"
+
+            backend = Backend()
+
+        previous_engine = self.server.RequestHandlerClass.engine
+        self.server.RequestHandlerClass.engine = LocalVisionEngine()
+        try:
+            with patch(
+                "api.analyze_image",
+                return_value={
+                    "summary": "一张示例图片",
+                    "observed": [],
+                    "possible_interpretations": [],
+                    "uncertainty": "",
+                },
+            ) as analyze:
+                status, result = self._run_vision_analyze(small_png())
+        finally:
+            self.server.RequestHandlerClass.engine = previous_engine
+
+        self.assertEqual(status, 200)
+        analyze.assert_called_once()
+
+    def test_decode_verify_classifies_bomb_and_corrupt_at_unit_level(self) -> None:
+        """J2 单元级：解压炸弹/解码异常统一转成明确 ValueError；关闭开关时回退头部检查。"""
+        handler_cls = self.server.RequestHandlerClass
+        # 关闭解码验证（显式开关）时回退头部尺寸检查
+        previous = handler_cls.IMAGE_DECODE_VERIFY
+        handler_cls.IMAGE_DECODE_VERIFY = False
+        try:
+            width, height = handler_cls._decode_and_verify_image(
+                handler_cls, small_png(), "image/png"
+            )
+        finally:
+            handler_cls.IMAGE_DECODE_VERIFY = previous
+        self.assertEqual((width, height), (2, 3))
+        with patch(
+            "PIL.Image.open",
+            side_effect=OSError("image file is truncated"),
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                handler_cls._decode_and_verify_image(handler_cls, small_png(), "image/png")
+            self.assertIn("无法完整解码", str(ctx.exception))
+        bomb_error = type("BombError", (Exception,), {})
+        with patch(
+            "PIL.Image.open",
+            side_effect=bomb_error("image decompression bomb error"),
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                handler_cls._decode_and_verify_image(
+                    handler_cls, small_png(), "image/png"
+                )
+            self.assertIn("像素量超过安全上限", str(ctx.exception))
 
     def test_local_notification_post_and_get(self) -> None:
         self.connection.request(

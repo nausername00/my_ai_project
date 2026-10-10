@@ -1,11 +1,13 @@
 """HTTP API for the local AI service."""
 
 import hmac
+import io
 import ipaddress
 import base64
 import binascii
 import json
 import math
+import os
 from collections import deque
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
@@ -92,6 +94,12 @@ class ApiHandler(BaseHTTPRequestHandler):
     tool_catalog: dict[str, Any] = {}
     MAX_AUDIO_BYTES = 25_000_000
     MAX_IMAGE_BYTES = 10 * 1024 * 1024
+    MAX_IMAGE_DIMENSION = 16_384
+    MAX_IMAGE_PIXELS = 40_000_000
+    # J2：真实解码验证开关。默认严格（开启）；关闭仅保留格式签名与头部
+    # 尺寸检查，不推荐用于不可信来源的图片。
+    IMAGE_DECODE_VERIFY = os.environ.get("MOLING_IMAGE_DECODE_VERIFY", "1") != "0"
+    IMAGE_DECODE_TIMEOUT = 6.0
     NOTIFICATION_MAX = 100
     _notifications: "deque[dict[str, Any]]" = deque(maxlen=100)
     _vision_consent_lock = threading.Lock()
@@ -521,11 +529,14 @@ class ApiHandler(BaseHTTPRequestHandler):
                 if (
                     width < 1
                     or height < 1
-                    or width > 16_384
-                    or height > 16_384
-                    or width * height > 40_000_000
+                    or width > self.MAX_IMAGE_DIMENSION
+                    or height > self.MAX_IMAGE_DIMENSION
+                    or width * height > self.MAX_IMAGE_PIXELS
                 ):
                     raise ValueError("image dimensions exceed the 40 megapixel analysis limit")
+                # J2：真实解码验证——以解码器实际解析结果为准，拦截伪造尺寸头、
+                # 截断/畸形文件与异常压缩流；拒绝的图片不会进入模型或持久化。
+                self._decode_and_verify_image(image, content_type)
                 backend = getattr(self.engine, "backend", None)
                 endpoint = getattr(backend, "endpoint", None)
                 if endpoint and urlsplit(endpoint).hostname not in {
@@ -1592,6 +1603,68 @@ class ApiHandler(BaseHTTPRequestHandler):
                 and image[8:12] == b"WEBP"
             )
         return False
+
+    def _decode_and_verify_image(
+        self, image: bytes, content_type: str
+    ) -> tuple[int, int]:
+        """真实解码验证（J2）。
+
+        在格式签名与头部尺寸检查之后调用：用解码器实际解析图像，
+        拦截伪造尺寸头、截断/畸形文件与异常压缩流；返回解码器给出的
+        真实尺寸（作为最终尺寸判定依据）。
+        """
+        if not self.IMAGE_DECODE_VERIFY:
+            return self._image_dimensions(image, content_type)
+        try:
+            import PIL.Image as PILImage
+        except Exception as exc:  # pragma: no cover - 依赖缺失路径
+            raise ValueError(
+                "图片解码验证依赖不可用，已拒绝分析；"
+                "如确认来源可信可设置 MOLING_IMAGE_DECODE_VERIFY=0 关闭解码验证，但不推荐。"
+            ) from exc
+        result: dict[str, Any] = {}
+
+        def _run() -> None:
+            try:
+                # verify() 只解析流结构、不分配完整像素缓冲，能发现截断/
+                # 畸形数据；随后重新打开读取解码器解析出的真实尺寸。
+                with PILImage.open(io.BytesIO(image)) as probe:
+                    probe.verify()
+                with PILImage.open(io.BytesIO(image)) as probe:
+                    result["size"] = probe.size
+            except Exception as exc:  # noqa: BLE001 - 统一归类
+                result["error"] = exc
+
+        worker = threading.Thread(target=_run, name="moling-image-decode", daemon=True)
+        worker.start()
+        worker.join(self.IMAGE_DECODE_TIMEOUT)
+        if worker.is_alive():
+            raise ValueError(
+                f"图片解码超过 {int(self.IMAGE_DECODE_TIMEOUT)} 秒；疑似畸形或异常压缩图像，已拒绝。"
+            )
+        if "error" in result:
+            error = result["error"]
+            message = str(error)
+            lowered = message.lower()
+            if "bomb" in lowered or "pixel" in lowered:
+                raise ValueError(
+                    "图片像素量超过安全上限（疑似解压炸弹），已拒绝。"
+                )
+            raise ValueError(
+                f"图片无法完整解码（截断或损坏）：{message[:200]}，已拒绝分析。"
+            )
+        width, height = result.get("size", (0, 0))
+        if (
+            width < 1
+            or height < 1
+            or width > self.MAX_IMAGE_DIMENSION
+            or height > self.MAX_IMAGE_DIMENSION
+            or width * height > self.MAX_IMAGE_PIXELS
+        ):
+            raise ValueError(
+                "图片实际解码尺寸超过 40 兆像素分析上限，已拒绝。"
+            )
+        return width, height
 
     @classmethod
     def _consume_vision_consent(cls, value: str) -> bool:
