@@ -20,6 +20,10 @@ const {
   getVoiceAudioType,
   validateVoiceMetadata,
 } = require("./voice-resources.cjs");
+const {
+  MODES: avatarDisplayModes,
+  getAvatarCandidates,
+} = require("./avatar-display.js");
 
 const projectRoot = path.resolve(__dirname, "..");
 const toolApprovalCapability = randomBytes(32).toString("hex");
@@ -55,6 +59,7 @@ let floatingWindow;
 let miniGameWindow;
 let floatingWindowReady = false;
 let floatingCharacterUpdateVersion = 0;
+let floatingAvatarDisplayMode = avatarDisplayModes.FOLLOW;
 let notificationPollTimer;
 const pendingNotifications = [];
 const notificationActions = new Map();
@@ -974,6 +979,19 @@ function registerIpcHandlers() {
     pushCharacterToFloating();
     return result;
   });
+  ipcMain.handle("companion:set-avatar-display-mode", (event, mode) => {
+    assertWindowSender(
+      event,
+      mainWindow,
+      "Only the main window can change the portrait display mode",
+    );
+    if (!Object.values(avatarDisplayModes).includes(mode)) {
+      throw new Error("Invalid portrait display mode");
+    }
+    floatingAvatarDisplayMode = mode;
+    void pushCharacterToFloating();
+    return { mode };
+  });
   ipcMain.handle("companion:export-memories", async () => {
     const result = await dialog.showSaveDialog(BrowserWindow.getFocusedWindow() || undefined, {
       defaultPath: "coco-memories.json",
@@ -1159,26 +1177,32 @@ async function pushCharacterToFloating() {
     if (updateVersion !== floatingCharacterUpdateVersion) return;
     let moodLabel = "";
     let moodKey = "";
+    let moodReason = "";
     try {
       const affect = await callApi("/v1/affect");
       if (updateVersion !== floatingCharacterUpdateVersion) return;
       moodLabel = affect?.label || affect?.mood || "";
       moodKey = affect?.mood || "";
+      moodReason = affect?.reason || "";
     } catch {
       if (updateVersion !== floatingCharacterUpdateVersion) return;
       moodLabel = "";
       moodKey = "";
+      moodReason = "";
     }
-    let avatarDataUrl = null;
-    const emotionPortrait = character?.emotion_avatars?.[moodKey];
-    const portraitName = emotionPortrait || character?.avatar || null;
-    if (portraitName) {
+    const portraitNames = getAvatarCandidates({
+      baseAvatar: character?.avatar,
+      emotionAvatars: character?.emotion_avatars,
+      mood: moodKey,
+      mode: floatingAvatarDisplayMode,
+    });
+    const portraitDataUrls = [];
+    for (const portraitName of portraitNames) {
       try {
-        avatarDataUrl = await readAvatar(portraitName);
+        portraitDataUrls.push(await readAvatar(portraitName));
         if (updateVersion !== floatingCharacterUpdateVersion) return;
       } catch {
         if (updateVersion !== floatingCharacterUpdateVersion) return;
-        avatarDataUrl = null;
       }
     }
     if (
@@ -1191,9 +1215,11 @@ async function pushCharacterToFloating() {
     }
     floatingWindow.webContents.send("companion:character-updated", {
       nickname: character?.nickname || "墨灵",
-      avatarDataUrl,
+      avatarDataUrl: portraitDataUrls[0] || null,
+      avatarFallbackDataUrl: portraitDataUrls[1] || null,
       moodLabel,
       moodKey,
+      moodReason,
     });
   } catch {
     // 后端未就绪时静默跳过，浮窗保持初始状态

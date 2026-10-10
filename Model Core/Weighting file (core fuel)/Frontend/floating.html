@@ -186,6 +186,22 @@
     padding-right: 2px;
     -webkit-app-region: no-drag;
   }
+
+  #thinking-box {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-left: 3px solid var(--accent);
+    border-radius: 10px;
+    padding: 7px 10px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--text);
+    -webkit-app-region: no-drag;
+  }
+  #panel:not(.expanded) #thinking-box {
+    display: none;
+  }
   #notifications::-webkit-scrollbar { width: 4px; }
   #notifications::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 
@@ -241,6 +257,7 @@
       <div class="dot" title="墨小灵"></div>
       <div id="toolbar">
         <button class="tool-btn btn-toggle-size" id="btn-expand" title="展开陪伴模式">⛶</button>
+        <button class="tool-btn" id="btn-back" title="回到主窗口">⌂</button>
         <button class="tool-btn" id="btn-hide" title="隐藏悬浮窗">−</button>
       </div>
     </div>
@@ -252,6 +269,7 @@
       <div id="content">
         <div id="nickname">墨小灵</div>
         <div id="status"><span id="mood-dot"></span><span id="status-text">在线 · 等待指令</span></div>
+        <div id="thinking-box" hidden></div>
         <div id="notifications"></div>
       </div>
     </div>
@@ -265,6 +283,7 @@
   const nicknameEl = document.getElementById("nickname");
   const avatarEl = document.getElementById("avatar-wrap");
   const avatarText = document.getElementById("avatar-text");
+  let characterUpdateVersion = 0;
 
   function formatExpiry(expiresAt) {
     if (!Number.isFinite(expiresAt)) return "";
@@ -350,6 +369,12 @@
     });
   });
 
+  document.getElementById("btn-back").addEventListener("click", () => {
+    window.floating.showMainWindow().catch((error) => {
+      console.error("Could not show the main window:", error);
+    });
+  });
+
   const expandButton = document.getElementById("btn-expand");
   const panel = document.getElementById("panel");
   let expanded = false;
@@ -373,6 +398,7 @@
 
   function applyCharacter(character) {
     if (!character || typeof character !== "object") return;
+    const updateVersion = ++characterUpdateVersion;
     const image = document.getElementById("avatar-image");
     const text = document.getElementById("avatar-text");
     const nickname = document.getElementById("nickname");
@@ -392,13 +418,33 @@
     if (character.nickname) {
       nickname.textContent = character.nickname;
       text.textContent = character.nickname.slice(0, 1);
+      image.alt = `${character.nickname}角色立绘`;
     }
+    image.onerror = () => {
+      if (updateVersion !== characterUpdateVersion) return;
+      if (
+        !image.dataset.baseFallbackTried &&
+        typeof character.avatarFallbackDataUrl === "string" &&
+        character.avatarFallbackDataUrl &&
+        character.avatarFallbackDataUrl !== image.src
+      ) {
+        image.dataset.baseFallbackTried = "true";
+        image.src = character.avatarFallbackDataUrl;
+        return;
+      }
+      image.hidden = true;
+      image.removeAttribute("src");
+      text.hidden = false;
+      statusText.textContent = "角色立绘无法显示 · 在线 · 等待指令";
+    };
+    delete image.dataset.baseFallbackTried;
     if (typeof character.avatarDataUrl === "string" && character.avatarDataUrl) {
       image.src = character.avatarDataUrl;
       image.hidden = false;
       text.hidden = true;
     } else {
       image.hidden = true;
+      image.removeAttribute("src");
       text.hidden = false;
     }
     const moodKey = String(character.moodKey || "").toLowerCase();
@@ -406,8 +452,16 @@
     moodDot.style.background = moodColor || "var(--text-dim)";
     moodDot.style.boxShadow = moodColor ? `0 0 10px ${moodColor}` : "none";
     statusText.textContent = character.moodLabel
-      ? `此刻 · ${character.moodLabel}`
+      ? `模拟状态 · ${character.moodLabel}`
       : "在线 · 等待指令";
+    const thinkingBox = document.getElementById("thinking-box");
+    if (typeof character.moodReason === "string" && character.moodReason.trim()) {
+      thinkingBox.textContent = `在想：${character.moodReason.trim()}`;
+      thinkingBox.hidden = false;
+    } else {
+      thinkingBox.textContent = "";
+      thinkingBox.hidden = true;
+    }
   }
 
   window.floating.onNotification(handleNotification);
