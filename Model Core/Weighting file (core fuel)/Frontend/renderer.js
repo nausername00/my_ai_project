@@ -339,6 +339,7 @@ function addMessage(text, role, extraClass = "") {
     avatar.setAttribute("aria-hidden", "true");
     message.append(avatar);
     refreshMessageAvatar(avatar);
+    message.dataset.mood = affectMood?.value || "calm";
   }
   const body = document.createElement("span");
   body.className = "message-body";
@@ -384,9 +385,11 @@ function refreshMessageAvatar(avatarNode) {
 }
 
 function refreshAllMessageAvatars() {
-  conversation
-    .querySelectorAll(".message.assistant .message-avatar")
-    .forEach(refreshMessageAvatar);
+  conversation.querySelectorAll(".message.assistant").forEach((message) => {
+    message.dataset.mood = affectMood?.value || "calm";
+    const avatar = message.querySelector(".message-avatar");
+    if (avatar) refreshMessageAvatar(avatar);
+  });
 }
 
 function getVoicePreferences() {

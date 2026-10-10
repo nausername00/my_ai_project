@@ -3281,3 +3281,28 @@ dialog.character-editor-dialog {
     transition: none;
   }
 }
+
+/* ---------- 消息气泡情绪着色（淡色边框，不抢阅读） ---------- */
+.message.assistant[data-mood="calm"] { border-color: rgba(124, 140, 248, 0.30); }
+.message.assistant[data-mood="happy"] { border-color: rgba(255, 209, 102, 0.34); }
+.message.assistant[data-mood="curious"] { border-color: rgba(125, 211, 252, 0.32); }
+.message.assistant[data-mood="surprised"] { border-color: rgba(248, 165, 255, 0.36); }
+.message.assistant[data-mood="worried"] { border-color: rgba(255, 159, 110, 0.32); }
+.message.assistant[data-mood="shy"] { border-color: rgba(255, 143, 171, 0.32); }
+.message.assistant[data-mood="warm"] { border-color: rgba(255, 184, 77, 0.34); }
+.message.assistant[data-mood="caring"] { border-color: rgba(110, 231, 183, 0.32); }
+
+/* ---------- 思考中动效：生成回复时头像加速呼吸 ---------- */
+.message.pending .message-avatar {
+  animation: message-thinking 1.4s ease-in-out infinite;
+}
+@keyframes message-thinking {
+  0%, 100% { transform: translateY(0) scale(1); box-shadow: 0 0 10px rgba(155, 140, 255, 0.25); }
+  50% { transform: translateY(-2px) scale(1.05); box-shadow: 0 0 16px rgba(155, 140, 255, 0.55); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message.pending .message-avatar {
+    animation: none;
+  }
+}

@@ -284,3 +284,12 @@ test("avatars breathe, speak, and carry mood-tinted glow without external deps",
   assert.match(renderer, /characterDisplay\.dataset\.mood = state\.mood/);
   assert.match(renderer, /avatarNode\.dataset\.mood = mood/);
 });
+
+test("assistant bubbles take mood-tinted borders and thinking avatars pulse while pending", () => {
+  assert.match(renderer, /message\.dataset\.mood = affectMood\?\.value \|\| "calm"/);
+  assert.match(renderer, /message\.dataset\.mood = affectMood\?\.value \|\| "calm"/);
+  assert.match(css, /\.message\.assistant\[data-mood="happy"\]/);
+  assert.match(css, /\.message\.assistant\[data-mood="curious"\]/);
+  assert.match(css, /@keyframes message-thinking/);
+  assert.match(css, /\.message\.pending \.message-avatar/);
+});
