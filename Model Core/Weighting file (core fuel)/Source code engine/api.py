@@ -10,7 +10,8 @@ from collections import deque
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 import re
-from time import perf_counter
+import threading
+from time import monotonic, perf_counter, time
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
@@ -87,11 +88,14 @@ class ApiHandler(BaseHTTPRequestHandler):
     speech_service = SpeechService()
     workspace_root = Path.cwd()
     tool_capability = ""
+    vision_capability = ""
     tool_catalog: dict[str, Any] = {}
     MAX_AUDIO_BYTES = 25_000_000
     MAX_IMAGE_BYTES = 10 * 1024 * 1024
     NOTIFICATION_MAX = 100
     _notifications: "deque[dict[str, Any]]" = deque(maxlen=100)
+    _vision_consent_lock = threading.Lock()
+    _used_vision_consents: dict[str, float] = {}
     IDENTITY_QUESTION_PATTERNS = tuple(
         re.compile(pattern)
         for pattern in (
@@ -489,6 +493,14 @@ class ApiHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         if path == "/v1/vision/analyze":
+            if not self._consume_vision_consent(
+                self.headers.get("X-Moling-Vision-Consent", "")
+            ):
+                self._send_json(
+                    HTTPStatus.FORBIDDEN,
+                    {"error": "图片分析必须经过桌面应用的本次明确授权"},
+                )
+                return
             try:
                 payload = self._read_json(max_bytes=14_000_000)
                 encoded = payload.get("image_base64")
@@ -505,6 +517,15 @@ class ApiHandler(BaseHTTPRequestHandler):
                     raise ValueError("image must be between 1 byte and 10 MB")
                 if not self._has_supported_image_signature(image, content_type):
                     raise ValueError("image contents do not match the declared format")
+                width, height = self._image_dimensions(image, content_type)
+                if (
+                    width < 1
+                    or height < 1
+                    or width > 16_384
+                    or height > 16_384
+                    or width * height > 40_000_000
+                ):
+                    raise ValueError("image dimensions exceed the 40 megapixel analysis limit")
                 backend = getattr(self.engine, "backend", None)
                 endpoint = getattr(backend, "endpoint", None)
                 if endpoint and urlsplit(endpoint).hostname not in {
@@ -930,11 +951,11 @@ class ApiHandler(BaseHTTPRequestHandler):
                 if trace_id:
                     if not isinstance(trace_id, str) or not trace_id.strip():
                         raise ValueError("trace_id must be a non-empty string")
-                    cancel_event = _trace_store.cancel_event_for(trace_id)
-                    _trace_store.append(
+                    cancel_event = _trace_store.begin_execution(
                         trace_id,
-                        "executing",
-                        {"tool": payload.get("tool")},
+                        payload.get("tool"),
+                        cancelable=payload.get("tool")
+                        in {"run_tests", "run_sandboxed_shell"},
                     )
                 observation = execute_project_tool(
                     self.workspace_root,
@@ -943,7 +964,22 @@ class ApiHandler(BaseHTTPRequestHandler):
                     cancel_event=cancel_event,
                 )
                 if trace_id:
-                    _trace_store.append(trace_id, "observed", observation)
+                    process_result = observation.get("result")
+                    cancellation_effective = bool(
+                        isinstance(process_result, dict)
+                        and process_result.get("cancelled") is True
+                    )
+                    _trace_store.append(
+                        trace_id,
+                        "cancelled" if cancellation_effective else "observed",
+                        {
+                            **observation,
+                            "cancellation_requested": bool(
+                                cancel_event and cancel_event.is_set()
+                            ),
+                            "cancellation_effective": cancellation_effective,
+                        },
+                    )
                 self._send_json(HTTPStatus.OK, {"observation": observation})
             except (TypeError, ValueError, OSError) as error:
                 if trace_id:
@@ -997,11 +1033,26 @@ class ApiHandler(BaseHTTPRequestHandler):
         if cancel_match:
             trace_id = cancel_match.group(1)
             if not _trace_store.cancel(trace_id):
-                self._send_json(HTTPStatus.NOT_FOUND, {"error": "trace not found"})
+                trace = _trace_store.get(trace_id)
+                if trace is None:
+                    self._send_json(HTTPStatus.NOT_FOUND, {"error": "trace not found"})
+                else:
+                    self._send_json(
+                        HTTPStatus.CONFLICT,
+                        {
+                            "error": "当前工具没有可用的取消操作，或它尚未进入可取消的执行状态",
+                            "trace": trace,
+                            "cancelled": False,
+                        },
+                    )
                 return
             self._send_json(
                 HTTPStatus.OK,
-                {"trace": _trace_store.get(trace_id), "cancelled": True},
+                {
+                    "trace": _trace_store.get(trace_id),
+                    "cancel_requested": True,
+                    "cancelled": False,
+                },
             )
             return
         if path == "/v1/agent/traces":
@@ -1541,6 +1592,92 @@ class ApiHandler(BaseHTTPRequestHandler):
                 and image[8:12] == b"WEBP"
             )
         return False
+
+    @classmethod
+    def _consume_vision_consent(cls, value: str) -> bool:
+        if not cls.vision_capability or not isinstance(value, str):
+            return False
+        parts = value.split(".")
+        if (
+            len(parts) != 3
+            or not re.fullmatch(r"[0-9a-f]{32}", parts[0])
+            or not parts[1].isdigit()
+            or len(parts[1]) > 13
+            or not re.fullmatch(r"[0-9a-f]{64}", parts[2])
+        ):
+            return False
+        issued_at = int(parts[1])
+        now_epoch = int(time() * 1000)
+        if issued_at > now_epoch + 30_000 or now_epoch - issued_at > 120_000:
+            return False
+        try:
+            key = bytes.fromhex(cls.vision_capability)
+        except ValueError:
+            return False
+        expected = hmac.new(
+            key,
+            f"{parts[0]}.{parts[1]}".encode("ascii"),
+            "sha256",
+        ).hexdigest()
+        if not hmac.compare_digest(parts[2], expected):
+            return False
+        now = monotonic()
+        with cls._vision_consent_lock:
+            cls._used_vision_consents = {
+                nonce: expiry
+                for nonce, expiry in cls._used_vision_consents.items()
+                if expiry > now
+            }
+            if (
+                parts[0] in cls._used_vision_consents
+                or len(cls._used_vision_consents) >= 4096
+            ):
+                return False
+            cls._used_vision_consents[parts[0]] = now + 180
+        return True
+
+    @staticmethod
+    def _image_dimensions(image: bytes, content_type: str) -> tuple[int, int]:
+        if content_type == "image/png" and len(image) >= 24:
+            return int.from_bytes(image[16:20], "big"), int.from_bytes(image[20:24], "big")
+        if content_type == "image/jpeg":
+            offset = 2
+            while offset + 4 <= len(image):
+                if image[offset] != 0xFF:
+                    offset += 1
+                    continue
+                marker = image[offset + 1]
+                offset += 2
+                if marker in {0xD8, 0xD9} or 0xD0 <= marker <= 0xD7:
+                    continue
+                segment_length = int.from_bytes(image[offset : offset + 2], "big")
+                if segment_length < 2 or offset + segment_length > len(image):
+                    break
+                if marker in {
+                    0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
+                    0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF,
+                } and segment_length >= 7:
+                    height = int.from_bytes(image[offset + 3 : offset + 5], "big")
+                    width = int.from_bytes(image[offset + 5 : offset + 7], "big")
+                    return width, height
+                offset += segment_length
+        if content_type == "image/webp" and len(image) >= 30:
+            chunk_type = image[12:16]
+            if chunk_type == b"VP8X":
+                width = int.from_bytes(image[24:27], "little") + 1
+                height = int.from_bytes(image[27:30], "little") + 1
+                return width, height
+            if chunk_type == b"VP8L" and len(image) >= 25 and image[20] == 0x2F:
+                bits = int.from_bytes(image[21:25], "little")
+                return (bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1
+            if chunk_type == b"VP8 " and len(image) >= 30:
+                frame = image[23:26]
+                if frame == b"\x9d\x01\x2a":
+                    return (
+                        int.from_bytes(image[26:28], "little") & 0x3FFF,
+                        int.from_bytes(image[28:30], "little") & 0x3FFF,
+                    )
+        raise ValueError("image dimensions cannot be validated; select a complete supported image")
 
     def _read_json(self, max_bytes: int = 1_048_576) -> dict[str, Any]:
         content_length = int(self.headers.get("Content-Length", "0"))

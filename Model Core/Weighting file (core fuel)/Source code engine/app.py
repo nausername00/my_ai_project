@@ -32,6 +32,7 @@ def create_server(host: str = "127.0.0.1", port: int = 8000) -> ThreadingHTTPSer
         )
     ).resolve()
     ApiHandler.tool_capability = os.getenv("MOLING_TOOL_CAPABILITY", "")
+    ApiHandler.vision_capability = os.getenv("MOLING_VISION_CAPABILITY", "")
     ApiHandler.tool_catalog = TOOL_CATALOG
     ApiHandler.speech_service = SpeechService()
     return ThreadingHTTPServer((host, port), ApiHandler)

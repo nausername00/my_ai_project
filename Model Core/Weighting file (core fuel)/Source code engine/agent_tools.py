@@ -46,6 +46,8 @@ class AgentTraceStore:
                 "task": task.strip(),
                 "scope": scope,
                 "status": "proposed",
+                "tool": None,
+                "cancelable": False,
                 "created_at": _utc_now_iso(),
                 "updated_at": _utc_now_iso(),
                 "phases": [
@@ -70,8 +72,10 @@ class AgentTraceStore:
             "executing",
             "observed",
             "verified",
+            "cancellation_requested",
             "cancelled",
             "failed",
+            "late_result",
         }:
             raise ValueError(f"unknown trace phase: {phase}")
         with self._lock:
@@ -85,8 +89,30 @@ class AgentTraceStore:
                     "payload": payload,
                 }
             )
-            trace["status"] = phase
+            terminal = {"observed", "verified", "cancelled", "failed"}
+            if trace["status"] not in terminal and phase != "late_result":
+                trace["status"] = phase
             trace["updated_at"] = _utc_now_iso()
+
+    def begin_execution(self, trace_id: str, tool: str, *, cancelable: bool) -> threading.Event:
+        with self._lock:
+            trace = self._traces.get(trace_id)
+            if trace is None:
+                raise KeyError(f"trace not found: {trace_id}")
+            if trace["status"] not in {"proposed", "planned"}:
+                raise ValueError("trace is not available for execution")
+            trace["tool"] = tool
+            trace["cancelable"] = cancelable
+            trace["phases"].append(
+                {
+                    "phase": "executing",
+                    "at": _utc_now_iso(),
+                    "payload": {"tool": tool, "cancelable": cancelable},
+                }
+            )
+            trace["status"] = "executing"
+            trace["updated_at"] = _utc_now_iso()
+            return self._cancel_events.setdefault(trace_id, threading.Event())
 
     def get(self, trace_id: str) -> dict[str, Any] | None:
         with self._lock:
@@ -122,20 +148,25 @@ class AgentTraceStore:
     def cancel(self, trace_id: str) -> bool:
         with self._lock:
             trace = self._traces.get(trace_id)
-            if trace is None:
+            if (
+                trace is None
+                or trace["status"] != "executing"
+                or not trace["cancelable"]
+            ):
                 return False
             event = self._cancel_events.setdefault(trace_id, threading.Event())
+            if event.is_set():
+                return True
             event.set()
-            if trace["status"] not in {"observed", "verified", "cancelled", "failed"}:
-                trace["phases"].append(
-                    {
-                        "phase": "cancelled",
-                        "at": _utc_now_iso(),
-                        "payload": {"requested_by": "user"},
-                    }
-                )
-                trace["status"] = "cancelled"
-                trace["updated_at"] = _utc_now_iso()
+            trace["phases"].append(
+                {
+                    "phase": "cancellation_requested",
+                    "at": _utc_now_iso(),
+                    "payload": {"requested_by": "user"},
+                }
+            )
+            trace["status"] = "cancellation_requested"
+            trace["updated_at"] = _utc_now_iso()
             return True
 
 

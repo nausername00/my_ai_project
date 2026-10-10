@@ -1,6 +1,8 @@
 import base64
+import hmac
 import json
 import os
+import struct
 import tempfile
 import threading
 import time
@@ -18,6 +20,20 @@ from inference import ModelUnavailableError
 from speech import SpeechInputError, SpeechService, SpeechUnavailableError
 
 
+VISION_TEST_CAPABILITY = "ab" * 32
+
+
+def small_png(width: int = 2, height: int = 3) -> bytes:
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + struct.pack(">I", 13)
+        + b"IHDR"
+        + struct.pack(">II", width, height)
+        + b"\x08\x02\x00\x00\x00"
+        + b"\x00" * 4
+    )
+
+
 class ApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -30,6 +46,7 @@ class ApiTests(unittest.TestCase):
                 "CHARACTER_ASSET_DIR": self.temp_dir.name,
                 "CHARACTER_PRIVACY_PATH": os.path.join(self.temp_dir.name, "privacy.json"),
                 "CHARACTER_AFFECT_PATH": os.path.join(self.temp_dir.name, "affect.json"),
+                "MOLING_VISION_CAPABILITY": VISION_TEST_CAPABILITY,
             },
         )
         self.environment.start()
@@ -38,6 +55,21 @@ class ApiTests(unittest.TestCase):
         self.thread = Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.connection = HTTPConnection("127.0.0.1", self.server.server_port)
+
+    @staticmethod
+    def vision_consent_header(
+        nonce: str | None = None,
+        timestamp_ms: int | None = None,
+    ) -> dict[str, str]:
+        nonce = nonce or os.urandom(16).hex()
+        timestamp = str(timestamp_ms or int(time.time() * 1000))
+        consent_payload = f"{nonce}.{timestamp}"
+        signature = hmac.new(
+            bytes.fromhex(VISION_TEST_CAPABILITY),
+            consent_payload.encode("ascii"),
+            "sha256",
+        ).hexdigest()
+        return {"X-Moling-Vision-Consent": f"{consent_payload}.{signature}"}
 
     def tearDown(self) -> None:
         self.connection.close()
@@ -69,12 +101,91 @@ class ApiTests(unittest.TestCase):
                             "image_base64": base64.b64encode(image).decode("ascii"),
                         }
                     ),
-                    {"Content-Type": "application/json"},
+                    {
+                        "Content-Type": "application/json",
+                        **self.vision_consent_header(),
+                    },
                 )
                 response = self.connection.getresponse()
                 result = json.loads(response.read())
                 self.assertEqual(response.status, 400)
                 self.assertIn("image", result["error"].lower())
+
+    def test_vision_analysis_requires_fresh_signed_consent(self) -> None:
+        image = small_png()
+        body = json.dumps(
+            {
+                "content_type": "image/png",
+                "image_base64": base64.b64encode(image).decode("ascii"),
+            }
+        )
+        self.connection.request(
+            "POST",
+            "/v1/vision/analyze",
+            body,
+            {"Content-Type": "application/json"},
+        )
+        response = self.connection.getresponse()
+        denied = json.loads(response.read())
+        self.assertEqual(response.status, 403)
+        self.assertIn("明确授权", denied["error"])
+
+        expired = self.vision_consent_header(
+            timestamp_ms=int(time.time() * 1000) - 180_000,
+        )
+        self.connection.request(
+            "POST",
+            "/v1/vision/analyze",
+            body,
+            {"Content-Type": "application/json", **expired},
+        )
+        expired_response = self.connection.getresponse()
+        expired_result = json.loads(expired_response.read())
+        self.assertEqual(expired_response.status, 403)
+        self.assertIn("明确授权", expired_result["error"])
+
+        replayable = self.vision_consent_header()
+        self.connection.request(
+            "POST",
+            "/v1/vision/analyze",
+            body,
+            {"Content-Type": "application/json", **replayable},
+        )
+        accepted_response = self.connection.getresponse()
+        accepted_response.read()
+        self.assertEqual(accepted_response.status, 400)
+
+        self.connection.request(
+            "POST",
+            "/v1/vision/analyze",
+            body,
+            {"Content-Type": "application/json", **replayable},
+        )
+        replay_response = self.connection.getresponse()
+        replayed = json.loads(replay_response.read())
+        self.assertEqual(replay_response.status, 403)
+        self.assertIn("明确授权", replayed["error"])
+
+    def test_vision_analysis_rejects_oversized_pixel_dimensions(self) -> None:
+        image = small_png(width=16_000, height=16_000)
+        self.connection.request(
+            "POST",
+            "/v1/vision/analyze",
+            json.dumps(
+                {
+                    "content_type": "image/png",
+                    "image_base64": base64.b64encode(image).decode("ascii"),
+                }
+            ),
+            {
+                "Content-Type": "application/json",
+                **self.vision_consent_header(),
+            },
+        )
+        response = self.connection.getresponse()
+        result = json.loads(response.read())
+        self.assertEqual(response.status, 400)
+        self.assertIn("40 megapixel", result["error"])
 
     def test_vision_analysis_uses_local_model_and_does_not_persist_image(self) -> None:
         class LocalVisionEngine:
@@ -85,7 +196,7 @@ class ApiTests(unittest.TestCase):
 
             backend = Backend()
 
-        image = b"\x89PNG\r\n\x1a\nsample"
+        image = small_png()
         previous_engine = self.server.RequestHandlerClass.engine
         self.server.RequestHandlerClass.engine = LocalVisionEngine()
         try:
@@ -107,7 +218,10 @@ class ApiTests(unittest.TestCase):
                             "image_base64": base64.b64encode(image).decode("ascii"),
                         }
                     ),
-                    {"Content-Type": "application/json"},
+                    {
+                        "Content-Type": "application/json",
+                        **self.vision_consent_header(),
+                    },
                 )
                 response = self.connection.getresponse()
                 result = json.loads(response.read())
@@ -121,7 +235,7 @@ class ApiTests(unittest.TestCase):
         self.assertFalse(Path(os.environ["CHARACTER_MEMORY_PATH"]).exists())
 
     def test_vision_analysis_fails_clearly_without_supported_local_model(self) -> None:
-        image = b"\x89PNG\r\n\x1a\nsample"
+        image = small_png()
         self.connection.request(
             "POST",
             "/v1/vision/analyze",
@@ -131,7 +245,10 @@ class ApiTests(unittest.TestCase):
                     "image_base64": base64.b64encode(image).decode("ascii"),
                 }
             ),
-            {"Content-Type": "application/json"},
+            {
+                "Content-Type": "application/json",
+                **self.vision_consent_header(),
+            },
         )
         response = self.connection.getresponse()
         result = json.loads(response.read())
@@ -148,7 +265,7 @@ class ApiTests(unittest.TestCase):
 
             backend = Backend()
 
-        image = b"\x89PNG\r\n\x1a\nsample"
+        image = small_png()
         previous_engine = self.server.RequestHandlerClass.engine
         self.server.RequestHandlerClass.engine = RemoteVisionEngine()
         try:
@@ -162,7 +279,10 @@ class ApiTests(unittest.TestCase):
                             "image_base64": base64.b64encode(image).decode("ascii"),
                         }
                     ),
-                    {"Content-Type": "application/json"},
+                    {
+                        "Content-Type": "application/json",
+                        **self.vision_consent_header(),
+                    },
                 )
                 response = self.connection.getresponse()
                 result = json.loads(response.read())
@@ -2019,6 +2139,11 @@ class AgentTraceTests(unittest.TestCase):
 
     def test_cancel_endpoint_marks_trace(self) -> None:
         trace_id = _trace_store.create("待取消的任务")
+        _trace_store.begin_execution(
+            trace_id,
+            "run_tests",
+            cancelable=True,
+        )
         self.connection.request(
             "POST",
             f"/v1/agent/traces/{trace_id}/cancel",
@@ -2029,8 +2154,116 @@ class AgentTraceTests(unittest.TestCase):
         payload = json.loads(response.read())
 
         self.assertEqual(response.status, 200)
-        self.assertTrue(payload["cancelled"])
-        self.assertEqual(payload["trace"]["status"], "cancelled")
+        self.assertTrue(payload["cancel_requested"])
+        self.assertFalse(payload["cancelled"])
+        self.assertEqual(payload["trace"]["status"], "cancellation_requested")
+
+    def test_cannot_cancel_noninterruptible_or_finished_tool_trace(self) -> None:
+        trace_id = _trace_store.create("读取文件")
+        _trace_store.begin_execution(
+            trace_id,
+            "read_project_file",
+            cancelable=False,
+        )
+        self.connection.request(
+            "POST",
+            f"/v1/agent/traces/{trace_id}/cancel",
+            b"",
+            {"Content-Type": "application/json"},
+        )
+        response = self.connection.getresponse()
+        rejected = json.loads(response.read())
+        self.assertEqual(response.status, 409)
+        self.assertFalse(rejected["cancelled"])
+
+        _trace_store.append(trace_id, "observed", {"content": "done"})
+        self.connection.request(
+            "POST",
+            f"/v1/agent/traces/{trace_id}/cancel",
+            b"",
+            {"Content-Type": "application/json"},
+        )
+        finished_response = self.connection.getresponse()
+        self.assertEqual(finished_response.status, 409)
+        finished_response.read()
+
+    def test_cancelled_execution_trace_matches_effective_and_late_results(self) -> None:
+        handler = self.server.RequestHandlerClass
+        previous_capability = handler.tool_capability
+        handler.tool_capability = "test-capability"
+
+        def run_case(*, cancellation_effective: bool) -> dict[str, object]:
+            trace_id = _trace_store.create("执行取消竞态测试")
+            started = threading.Event()
+            finish = threading.Event()
+            response_holder: dict[str, object] = {}
+
+            def execute(_root, _tool, _arguments, *, cancel_event=None):
+                started.set()
+                if cancellation_effective:
+                    cancel_event.wait(timeout=5)
+                else:
+                    finish.wait(timeout=5)
+                return {
+                    "tool": "run_tests",
+                    "result": {"cancelled": cancellation_effective},
+                }
+
+            def send_execute() -> None:
+                connection = HTTPConnection("127.0.0.1", self.server.server_port)
+                try:
+                    connection.request(
+                        "POST",
+                        "/v1/agent/tool/execute",
+                        json.dumps(
+                            {
+                                "tool": "run_tests",
+                                "arguments": {"command": ["python", "-c", "pass"]},
+                                "trace_id": trace_id,
+                            }
+                        ),
+                        {
+                            "Content-Type": "application/json",
+                            "X-Moling-Tool-Capability": "test-capability",
+                        },
+                    )
+                    response = connection.getresponse()
+                    response_holder["status"] = response.status
+                    response_holder["body"] = json.loads(response.read())
+                finally:
+                    connection.close()
+
+            with patch("api.execute_project_tool", side_effect=execute):
+                worker = threading.Thread(target=send_execute, daemon=True)
+                worker.start()
+                self.assertTrue(started.wait(timeout=3))
+                self.connection.request(
+                    "POST",
+                    f"/v1/agent/traces/{trace_id}/cancel",
+                    b"",
+                    {"Content-Type": "application/json"},
+                )
+                cancel_response = self.connection.getresponse()
+                cancel_body = json.loads(cancel_response.read())
+                finish.set()
+                worker.join(timeout=5)
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(cancel_response.status, 200)
+            self.assertTrue(cancel_body["cancel_requested"])
+            self.assertEqual(response_holder["status"], 200)
+            return _trace_store.get(trace_id)
+
+        try:
+            effective_trace = run_case(cancellation_effective=True)
+            late_trace = run_case(cancellation_effective=False)
+        finally:
+            handler.tool_capability = previous_capability
+
+        self.assertEqual(effective_trace["status"], "cancelled")
+        self.assertTrue(effective_trace["phases"][-1]["payload"]["cancellation_effective"])
+        self.assertEqual(late_trace["status"], "observed")
+        self.assertTrue(late_trace["phases"][-1]["payload"]["cancellation_requested"])
+        self.assertFalse(late_trace["phases"][-1]["payload"]["cancellation_effective"])
 
     def test_unknown_trace_returns_not_found(self) -> None:
         self.connection.request(
@@ -2069,3 +2302,17 @@ class AgentTraceTests(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertTrue(result.cancelled)
         self.assertLess(result.duration_ms, 15_000)
+
+    def test_pre_cancelled_shell_never_starts_a_process(self) -> None:
+        cancel_event = threading.Event()
+        cancel_event.set()
+        with patch("computer_use.subprocess.Popen") as process:
+            result = run_sandboxed_shell(
+                ["python", "-c", "pass"],
+                approved=True,
+                purpose="test-pre-cancel",
+                cancel_event=cancel_event,
+            )
+
+        self.assertTrue(result.cancelled)
+        process.assert_not_called()

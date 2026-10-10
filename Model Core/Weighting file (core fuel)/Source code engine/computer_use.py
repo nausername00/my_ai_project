@@ -433,6 +433,17 @@ def run_sandboxed_shell(
     killed = False
     timed_out = False
     cancelled = False
+    if cancel_event is not None and cancel_event.is_set():
+        return ExecutedProcess(
+            command=tuple(cmd_list),
+            returncode=-1,
+            stdout="",
+            stderr="",
+            duration_ms=0,
+            killed=False,
+            timed_out=False,
+            cancelled=True,
+        )
     resolved_cwd = Path(cwd).resolve() if cwd else None
     proc_env = os.environ.copy()
     if env:
