@@ -24,6 +24,8 @@ const {
   MODES: avatarDisplayModes,
   getAvatarCandidates,
 } = require("./avatar-display.js");
+const { applyMiniGamePolicy } = require("./mini-game-policy.cjs");
+const { pathToFileURL } = require("node:url");
 
 const projectRoot = path.resolve(__dirname, "..");
 const toolApprovalCapability = randomBytes(32).toString("hex");
@@ -948,10 +950,20 @@ function registerIpcHandlers() {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
+        webviewTag: false,
+        partition: "moling-mini-game-preview",
       },
     });
     miniGameWindow.on("closed", () => {
       miniGameWindow = null;
+    });
+    // J0：预览窗口强制隔离策略——网络 / 导航 / 弹窗 / 下载 / 权限全部拒绝，
+    // 只允许加载本预览文件本身。
+    const previewSession = session.fromPartition("moling-mini-game-preview");
+    applyMiniGamePolicy({
+      webContents: miniGameWindow.webContents,
+      session: previewSession,
+      allowedFileUrl: pathToFileURL(miniGamePath()).href,
     });
     miniGameWindow.loadFile(miniGamePath());
     return { opened: true };
