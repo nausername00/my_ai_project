@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke("companion:create-character", card),
     selectCharacter: (characterId) =>
       ipcRenderer.invoke("companion:select-character", characterId),
+    deleteCharacter: (characterId) =>
+      ipcRenderer.invoke("companion:delete-character", characterId),
     chooseAvatar: () => ipcRenderer.invoke("companion:choose-avatar"),
     getAvatar: (fileName) => ipcRenderer.invoke("companion:get-avatar", fileName),
     importModelAssets: () =>

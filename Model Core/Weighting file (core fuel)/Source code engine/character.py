@@ -414,6 +414,21 @@ class CharacterStore:
             self._write_json(self.active_character_path, {"id": valid_id})
         return {"id": valid_id, "character": card.to_dict()}
 
+    def delete_character(self, character_id: Any) -> dict[str, Any]:
+        valid_id = self._validate_character_id(character_id)
+        if valid_id == self.get_active_character_id():
+            raise CharacterValidationError(
+                "cannot delete the active character; switch to another character first"
+            )
+        card_path = self._card_path_for_id(valid_id)
+        if not card_path.is_file():
+            raise CharacterValidationError(
+                f"character card '{valid_id}' does not exist"
+            )
+        with self._memory_lock:
+            card_path.unlink()
+        return {"id": valid_id, "deleted": True}
+
     def apply_agent_reflection(
         self,
         reflection: Any,

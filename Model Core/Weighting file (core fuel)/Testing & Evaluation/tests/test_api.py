@@ -1175,6 +1175,47 @@ class ApiTests(unittest.TestCase):
         response = self.connection.getresponse()
         self.assertEqual(response.status, 400)
 
+    def test_character_delete_removes_non_active_card(self) -> None:
+        self.connection.request(
+            "POST",
+            "/v1/characters",
+            json.dumps(
+                {
+                    "category": "自建角色",
+                    "formal_name": "待删除角色",
+                    "nickname": "待删除",
+                    "english_name": "ToDelete",
+                }
+            ),
+            {"Content-Type": "application/json"},
+        )
+        response = self.connection.getresponse()
+        self.assertEqual(response.status, 201)
+        created = json.loads(response.read().decode("utf-8"))
+        self.connection.request("DELETE", f"/v1/characters/{created['id']}")
+        response = self.connection.getresponse()
+        self.assertEqual(response.status, 200)
+        deleted = json.loads(response.read().decode("utf-8"))
+        self.assertEqual(deleted["deleted"], True)
+        self.connection.request("GET", "/v1/characters")
+        response = self.connection.getresponse()
+        self.assertEqual(response.status, 200)
+        listing = json.loads(response.read().decode("utf-8"))
+        self.assertNotIn(created["id"], {entry["id"] for entry in listing["characters"]})
+
+    def test_character_delete_rejects_active_card(self) -> None:
+        active_id = self.server.RequestHandlerClass.character_store.get_active_character_id()
+        self.connection.request("DELETE", f"/v1/characters/{active_id}")
+        response = self.connection.getresponse()
+        self.assertEqual(response.status, 400)
+        body = json.loads(response.read().decode("utf-8"))
+        self.assertIn("active character", body["error"])
+
+    def test_character_delete_returns_not_found_for_unknown_card(self) -> None:
+        self.connection.request("DELETE", "/v1/characters/does-not-exist")
+        response = self.connection.getresponse()
+        self.assertEqual(response.status, 404)
+
     def test_agent_reflection_can_create_and_persist_its_own_goal(self) -> None:
         class ReflectingEngine:
             model_name = "local-test"

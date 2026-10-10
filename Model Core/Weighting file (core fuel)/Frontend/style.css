@@ -1940,6 +1940,16 @@ button {
   font-size: 10px;
 }
 
+.character-card-buttons button.character-card-delete {
+  color: #ff7b7b;
+  border-color: rgba(255, 107, 107, 0.35);
+  background: rgba(255, 80, 80, 0.08);
+}
+
+.character-card-buttons button.character-card-delete:hover {
+  background: rgba(255, 80, 80, 0.18);
+}
+
 .character-card-help {
   margin: 0;
   color: var(--muted);

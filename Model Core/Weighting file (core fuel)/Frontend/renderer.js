@@ -2784,6 +2784,15 @@ async function loadCharacters() {
       edit.setAttribute("aria-label", `编辑${item.character.nickname}`);
       edit.addEventListener("click", () => editCharacter(item));
       actions.append(select, edit);
+      if (item.id !== result.active_id) {
+        const remove = document.createElement("button");
+        remove.className = "icon-button character-card-delete";
+        remove.type = "button";
+        remove.textContent = "删除";
+        remove.setAttribute("aria-label", `删除${item.character.nickname}`);
+        remove.addEventListener("click", () => deleteCharacter(item));
+        actions.append(remove);
+      }
       card.append(portrait, name, category, actions);
       characterCardList.append(card);
     }
@@ -2892,6 +2901,34 @@ async function switchCharacter(characterId) {
   } catch (error) {
     document.getElementById("character-card-status").textContent =
       `切换角色失败：${error.message}`;
+    document.getElementById("character-card-status").classList.add("error");
+  }
+}
+
+async function deleteCharacter(item) {
+  if (
+    !window.confirm(
+      `确定删除角色「${item.character.nickname}」吗？\n角色卡与配置会被移除，此操作不可撤销。`,
+    )
+  ) {
+    return;
+  }
+  if (
+    characterEditor.open &&
+    editingCharacterId === item.id &&
+    characterForm.dataset.dirty === "true"
+  ) {
+    characterEditor.close();
+  }
+  try {
+    await window.companion.deleteCharacter(item.id);
+    document.getElementById("character-card-status").textContent =
+      `已删除角色「${item.character.nickname}」。`;
+    document.getElementById("character-card-status").classList.remove("error");
+    await loadCharacters();
+  } catch (error) {
+    document.getElementById("character-card-status").textContent =
+      `删除角色失败：${error.message}`;
     document.getElementById("character-card-status").classList.add("error");
   }
 }

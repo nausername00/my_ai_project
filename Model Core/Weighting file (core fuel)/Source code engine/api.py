@@ -1495,6 +1495,24 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         path = urlsplit(self.path).path
+        characters_prefix = "/v1/characters/"
+        if path.startswith(characters_prefix) and path[len(characters_prefix) :]:
+            character_id = path[len(characters_prefix) :]
+            if "/" in character_id:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+                return
+            try:
+                deleted = self.character_store.delete_character(character_id)
+            except CharacterValidationError as error:
+                status = (
+                    HTTPStatus.BAD_REQUEST
+                    if "active character" in str(error)
+                    else HTTPStatus.NOT_FOUND
+                )
+                self._send_json(status, {"error": str(error)})
+                return
+            self._send_json(HTTPStatus.OK, deleted)
+            return
         prefix = "/v1/memory/"
         if not path.startswith(prefix) or not path[len(prefix) :]:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
