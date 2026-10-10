@@ -273,6 +273,9 @@ async function callApi(route, method = "GET", body, extraHeaders = {}) {
     (/^\/v1\/agent\/traces\/[0-9a-f-]{8,64}$/i.test(routePath)
       ? ["GET"]
       : []) ||
+    (/^\/v1\/characters\/[a-zA-Z0-9-]{1,64}$/i.test(routePath)
+      ? ["DELETE"]
+      : []) ||
     (/^\/v1\/agent\/traces\/[0-9a-f-]{8,64}\/cancel$/i.test(routePath)
       ? ["POST"]
       : []);
@@ -625,6 +628,10 @@ function registerIpcHandlers() {
   ipcMain.handle("companion:save-character", async (_event, card) => {
     const result = await callApi("/v1/character", "POST", card);
     pushCharacterToFloating();
+    return result;
+  });
+  ipcMain.handle("companion:delete-character", async (_event, characterId) => {
+    const result = await callApi(`/v1/characters/${characterId}`, "DELETE");
     return result;
   });
   ipcMain.handle("companion:choose-avatar", chooseAvatar);
@@ -985,6 +992,22 @@ function registerIpcHandlers() {
     }
     return { hidden: false, reason: "no-window" };
   });
+  ipcMain.handle("companion:floating-expand", (event) => {
+    assertWindowSender(event, floatingWindow, "Only the floating window can resize itself");
+    if (floatingWindow && !floatingWindow.isDestroyed()) {
+      floatingWindow.setBounds({ width: 340, height: 560 });
+      return { expanded: true };
+    }
+    return { expanded: false, reason: "no-window" };
+  });
+  ipcMain.handle("companion:floating-collapse", (event) => {
+    assertWindowSender(event, floatingWindow, "Only the floating window can resize itself");
+    if (floatingWindow && !floatingWindow.isDestroyed()) {
+      floatingWindow.setBounds({ width: 360, height: 220 });
+      return { collapsed: true };
+    }
+    return { collapsed: false, reason: "no-window" };
+  });
   ipcMain.handle("companion:floating-toggle", () => {
     if (floatingWindow && !floatingWindow.isDestroyed()) {
       if (floatingWindow.isVisible()) {
@@ -1073,16 +1096,20 @@ async function pushCharacterToFloating() {
       }
     }
     let moodLabel = "";
+    let moodKey = "";
     try {
       const affect = await callApi("/v1/affect");
       moodLabel = affect?.label || affect?.mood || "";
+      moodKey = affect?.mood || "";
     } catch {
       moodLabel = "";
+      moodKey = "";
     }
     floatingWindow.webContents.send("companion:character-updated", {
       nickname: character?.nickname || "墨灵",
       avatarDataUrl,
       moodLabel,
+      moodKey,
     });
   } catch {
     // 后端未就绪时静默跳过，浮窗保持初始状态

@@ -69,6 +69,8 @@ test("floating preload exposes only its notification and window controls", () =>
     "sendNotificationAction",
     "showMainWindow",
     "hideFloating",
+    "expandFloating",
+    "collapseFloating",
     "onCharacterUpdated",
   ]);
 

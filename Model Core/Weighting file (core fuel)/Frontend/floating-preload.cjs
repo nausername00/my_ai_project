@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld(
     },
     showMainWindow: () => ipcRenderer.invoke("companion:main-window-show"),
     hideFloating: () => ipcRenderer.invoke("companion:floating-hide"),
+    expandFloating: () => ipcRenderer.invoke("companion:floating-expand"),
+    collapseFloating: () => ipcRenderer.invoke("companion:floating-collapse"),
     onCharacterUpdated(callback) {
       if (typeof callback !== "function") {
         throw new TypeError("character update callback must be a function");
