@@ -263,3 +263,12 @@ test("external partner reviews require a local preview and per-run confirmation"
   assert.match(main, /"\/v1\/partners\/evaluate": \["POST"\]/);
   assert.match(main, /"\/v1\/partners\/status": \["GET"\]/);
 });
+
+test("assistant messages carry a mood-aware avatar that refreshes on affect change", () => {
+  assert.match(renderer, /refreshMessageAvatar\(avatar\)/);
+  assert.match(renderer, /refreshAllMessageAvatars\(\)/);
+  assert.match(renderer, /const portrait = runtimeEmotionAvatars\[mood\] \|\| baseAvatarFileName/);
+  assert.match(renderer, /message-avatar-fallback/);
+  assert.match(css, /\.message-avatar \{/);
+  assert.match(css, /\.message\.assistant \.message-body/);
+});

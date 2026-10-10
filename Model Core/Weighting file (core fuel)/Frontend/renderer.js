@@ -333,7 +333,17 @@ let conversationHistory = [];
 function addMessage(text, role, extraClass = "") {
   const message = document.createElement("div");
   message.className = `message ${role} ${extraClass}`.trim();
-  message.textContent = text;
+  if (role === "assistant") {
+    const avatar = document.createElement("span");
+    avatar.className = "message-avatar";
+    avatar.setAttribute("aria-hidden", "true");
+    message.append(avatar);
+    refreshMessageAvatar(avatar);
+  }
+  const body = document.createElement("span");
+  body.className = "message-body";
+  body.textContent = text;
+  message.append(body);
   if (role === "assistant") {
     const stamp = document.createElement("span");
     stamp.className = "message-stamp";
@@ -346,6 +356,36 @@ function addMessage(text, role, extraClass = "") {
   conversation.append(message);
   conversation.scrollTop = conversation.scrollHeight;
   return message;
+}
+
+function refreshMessageAvatar(avatarNode) {
+  const mood = affectMood?.value || "calm";
+  const portrait = runtimeEmotionAvatars[mood] || baseAvatarFileName;
+  avatarNode.replaceChildren();
+  if (portrait) {
+    const img = document.createElement("img");
+    img.alt = "";
+    img.src = portrait;
+    img.addEventListener("error", () => {
+      avatarNode.replaceChildren();
+      const fallback = document.createElement("span");
+      fallback.className = "message-avatar-fallback";
+      fallback.textContent = activeCharacterNickname.slice(0, 1);
+      avatarNode.append(fallback);
+    });
+    avatarNode.append(img);
+  } else {
+    const fallback = document.createElement("span");
+    fallback.className = "message-avatar-fallback";
+    fallback.textContent = activeCharacterNickname.slice(0, 1);
+    avatarNode.append(fallback);
+  }
+}
+
+function refreshAllMessageAvatars() {
+  conversation
+    .querySelectorAll(".message.assistant .message-avatar")
+    .forEach(refreshMessageAvatar);
 }
 
 function getVoicePreferences() {
@@ -3371,6 +3411,7 @@ function updateAffect(state) {
   document.getElementById("settings-avatar").dataset.mood = state.mood;
   affectReason.textContent = `状态线索：${state.reason}`;
   applyEmotionAvatar(state.mood);
+  refreshAllMessageAvatars();
 }
 
 async function loadAffect() {
