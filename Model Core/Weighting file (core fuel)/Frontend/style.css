@@ -2807,6 +2807,16 @@ button {
   background: #191c23;
 }
 
+/* J4：已暂停的记忆弱化显示，明确不进入回复提示 */
+.memory-entry.paused {
+  opacity: 0.62;
+  border-style: dashed;
+}
+
+.memory-entry.paused .memory-entry-meta {
+  color: #b8a06a;
+}
+
 .memory-entry-meta {
   color: var(--muted);
   font-size: 10px;

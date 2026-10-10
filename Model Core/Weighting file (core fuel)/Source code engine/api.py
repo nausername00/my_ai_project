@@ -1360,6 +1360,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                     payload["content"],
                     payload.get("source", "user"),
                     payload.get("visibility", "model"),
+                    reason=payload.get("reason"),
                 )
             except (KeyError, TypeError, CharacterValidationError, ValueError, json.JSONDecodeError) as error:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
@@ -1546,6 +1547,8 @@ class ApiHandler(BaseHTTPRequestHandler):
                 payload["content"],
                 payload.get("visibility", "model"),
                 payload.get("source", "user"),
+                reason=payload.get("reason"),
+                status=payload.get("status"),
             )
         except MemoryNotFoundError as error:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": str(error)})

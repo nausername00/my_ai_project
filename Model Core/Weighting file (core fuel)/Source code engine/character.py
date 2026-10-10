@@ -549,11 +549,16 @@ class CharacterStore:
         content: str,
         source: str = "user",
         visibility: str = "model",
+        reason: str | None = None,
     ) -> dict[str, str]:
         if not isinstance(content, str) or not isinstance(source, str):
             raise CharacterValidationError("memory content and source must be strings")
         if not isinstance(visibility, str):
             raise CharacterValidationError("visibility must be 'model' or 'private'")
+        if reason is not None and (
+            not isinstance(reason, str) or not reason.strip()
+        ):
+            raise CharacterValidationError("reason must be a non-empty string or null")
         content = content.strip()
         source = source.strip()
         if not content:
@@ -567,7 +572,10 @@ class CharacterStore:
         with self._memory_lock:
             try:
                 entry = self.memory_store.add_memory(
-                    content=content, source=source, visibility=visibility
+                    content=content,
+                    source=source,
+                    visibility=visibility,
+                    reason=reason,
                 )
             except (TypeError, ValueError) as exc:
                 raise CharacterValidationError(str(exc)) from exc
@@ -577,6 +585,10 @@ class CharacterStore:
             "source": entry["source"],
             "visibility": entry["visibility"],
             "created_at": entry["created_at"],
+            "reason": entry.get("reason"),
+            "status": entry.get("status", "active"),
+            "use_count": entry.get("use_count", 0),
+            "last_used_at": entry.get("last_used_at"),
         }
 
     def list_memories(self) -> list[dict[str, str]]:
@@ -589,6 +601,10 @@ class CharacterStore:
                 "source": item["source"],
                 "visibility": item["visibility"],
                 "created_at": item["created_at"],
+                "reason": item.get("reason"),
+                "status": item.get("status", "active"),
+                "use_count": item.get("use_count", 0),
+                "last_used_at": item.get("last_used_at"),
             }
             for item in raw
         ]
@@ -599,6 +615,8 @@ class CharacterStore:
         content: str,
         visibility: str,
         source: str = "user",
+        reason: str | None = None,
+        status: str | None = None,
     ) -> dict[str, str]:
         if not isinstance(memory_id, str):
             raise CharacterValidationError("memory id must be a string")
@@ -606,6 +624,12 @@ class CharacterStore:
             raise CharacterValidationError("memory content and source must be strings")
         if not isinstance(visibility, str):
             raise CharacterValidationError("visibility must be 'model' or 'private'")
+        if reason is not None and (
+            not isinstance(reason, str) or not reason.strip()
+        ):
+            raise CharacterValidationError("reason must be a non-empty string or null")
+        if status is not None and status not in {"active", "paused"}:
+            raise CharacterValidationError("status must be 'active' or 'paused'")
         content = content.strip()
         source = source.strip()
         if not content:
@@ -623,6 +647,9 @@ class CharacterStore:
                     content=content,
                     visibility=visibility,
                     source=source,
+                    # None 表示“不修改”：避免每次更新把原创建原因清空。
+                    reason=reason if reason is not None else "__NO_CHANGE__",
+                    status=status,
                 )
             except LookupError as exc:
                 raise MemoryNotFoundError(str(exc)) from exc
@@ -634,6 +661,10 @@ class CharacterStore:
             "source": entry["source"],
             "visibility": entry["visibility"],
             "created_at": entry["created_at"],
+            "reason": entry.get("reason"),
+            "status": entry.get("status", "active"),
+            "use_count": entry.get("use_count", 0),
+            "last_used_at": entry.get("last_used_at"),
         }
 
     def delete_memory(self, memory_id: str) -> None:
@@ -642,6 +673,15 @@ class CharacterStore:
                 self.memory_store.delete_memory(memory_id)
             except LookupError as exc:
                 raise MemoryNotFoundError(str(exc)) from exc
+
+    def record_memory_usage(self, memory_ids: list[str]) -> int:
+        """J4：记录被注入回复提示的记忆（使用追踪）。"""
+        if not isinstance(memory_ids, list) or any(
+            not isinstance(i, str) for i in memory_ids
+        ):
+            raise CharacterValidationError("memory_ids must be a list of strings")
+        with self._memory_lock:
+            return self.memory_store.record_memory_usage(memory_ids)
 
     def export_memories(self) -> dict[str, Any]:
         return {
@@ -924,6 +964,12 @@ class CharacterStore:
             if privacy["include_memories_in_prompt"]
             else []
         )
+        # J4：记录被采用进本回复提示的记忆（使用追踪）。
+        if memories:
+            try:
+                self.record_memory_usage([item["id"] for item in memories])
+            except CharacterValidationError:
+                pass  # 追踪失败不影响回复生成
         profile = [
             f"你正在以角色「{card.formal_name}」的身份与用户交流；常用昵称是「{card.nickname}」，英文名是「{card.english_name}」。",
             f"角色分类：{card.category}。",

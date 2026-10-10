@@ -305,6 +305,7 @@ def run_exploration(
                 f"[探索] 围绕「{resolved}」做了一次 mini 概念尝试，等待用户反馈。",
                 source="explore",
                 visibility="model",
+                reason="探索运行记录：未经用户确认，不作为偏好",
             )
         except Exception:
             memory_entry = None
@@ -344,17 +345,22 @@ def record_exploration_reaction(
         raise ValueError("note must not exceed 500 characters")
 
     memory_entry = None
+    _EXPLORE_REASON = "探索反馈记录：用户未主动确认，不作为长期偏好"
     if reaction == "praise":
         content = f"[探索反馈] 用户对「{resolved}」的 mini 尝试表示喜欢。"
         if note_clean:
             content += f" 用户说：{note_clean}"
-        memory_entry = character_store.add_memory(content, source="explore", visibility="model")
+        memory_entry = character_store.add_memory(
+            content, source="explore", visibility="model", reason=_EXPLORE_REASON
+        )
         affect = character_store.set_simulated_affect("warm") | {"reason": "探索被认可"}
     elif reaction == "redirect":
         content = f"[探索反馈] 用户希望「{resolved}」换方向。"
         if note_clean:
             content += f" 方向：{note_clean}"
-        memory_entry = character_store.add_memory(content, source="explore", visibility="model")
+        memory_entry = character_store.add_memory(
+            content, source="explore", visibility="model", reason=_EXPLORE_REASON
+        )
         affect = character_store.set_simulated_affect("curious") | {"reason": "探索换方向"}
     else:
         affect = character_store.set_simulated_affect("calm") | {"reason": "用户暂停探索"}
@@ -363,6 +369,7 @@ def record_exploration_reaction(
                 f"[探索反馈] 用户暂停围绕「{resolved}」的探索。备注：{note_clean}",
                 source="explore",
                 visibility="model",
+                reason=_EXPLORE_REASON,
             )
 
     return {

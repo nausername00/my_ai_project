@@ -3815,6 +3815,7 @@ function renderMemories(memories) {
   for (const memory of memories) {
     const entry = document.createElement("article");
     entry.className = "memory-entry";
+    if (memory.status === "paused") entry.classList.add("paused");
 
     const contentLabel = document.createElement("label");
     contentLabel.textContent = "记忆内容";
@@ -3844,7 +3845,14 @@ function renderMemories(memories) {
     const created = memory.created_at === "unknown"
       ? "旧版记录"
       : new Date(memory.created_at).toLocaleString();
-    metadata.textContent = `来源：${memory.source} · ${created}`;
+    const reasonText = memory.reason ? ` · 原因：${memory.reason}` : "";
+    const statusText = memory.status === "paused" ? " · 已暂停（不进入回复提示）" : " · 活跃";
+    const usedText =
+      (memory.use_count || 0) > 0
+        ? ` · 已采用 ${memory.use_count} 次${memory.last_used_at ? `（最近 ${new Date(memory.last_used_at).toLocaleString()}）` : ""}`
+        : " · 尚未被采用";
+    metadata.textContent =
+      `来源：${memory.source}${reasonText}${statusText}${usedText} · ${created}`;
 
     const actions = document.createElement("div");
     actions.className = "memory-entry-actions";
@@ -3868,6 +3876,32 @@ function renderMemories(memories) {
       }
     });
 
+    const pause = document.createElement("button");
+    pause.type = "button";
+    pause.textContent = memory.status === "paused" ? "恢复使用" : "暂停使用";
+    pause.addEventListener("click", async () => {
+      pause.disabled = true;
+      try {
+        const next = memory.status === "paused" ? "active" : "paused";
+        await window.companion.updateMemory(memory.id, {
+          content: content.value,
+          visibility: visibility.value,
+          source: memory.source,
+          status: next,
+        });
+        setMemoryStatus(
+          next === "paused"
+            ? "记忆已暂停：后续回复不再采用它。"
+            : "记忆已恢复使用。"
+        );
+        await loadMemories();
+      } catch (error) {
+        setMemoryStatus(error.message, true);
+      } finally {
+        pause.disabled = false;
+      }
+    });
+
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "delete-memory";
@@ -3886,7 +3920,7 @@ function renderMemories(memories) {
       }
     });
 
-    actions.append(save, remove);
+    actions.append(save, pause, remove);
     entry.append(contentLabel, visibilityLabel, metadata, actions);
     memoryList.append(entry);
   }

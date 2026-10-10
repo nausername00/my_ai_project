@@ -107,7 +107,12 @@ def discover_file(
         f"[发现] 用户分享了{kind_label(kind)}《{safe_name}》"
         + (f"，内容片段：{excerpt[:120]}" if excerpt else "，暂未查看内容")
     )
-    memory = character_store.add_memory(summary, "discovery", "model")
+    memory = character_store.add_memory(
+        summary,
+        "discovery",
+        "model",
+        reason="文件/画面观察记录：未经用户确认，不作为长期偏好",
+    )
     return {
         "feedback": feedback,
         "affect": affect,
@@ -156,6 +161,7 @@ def observe_context(
         f"[观察] 用户让墨灵看了{target}，墨灵注意到：{context[:150]}",
         "discovery",
         "model",
+        reason="画面/窗口观察记录：未经用户确认，不作为长期偏好",
     )
     return {
         "feedback": feedback,

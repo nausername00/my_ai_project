@@ -87,6 +87,11 @@ class MemoryEntry:
     importance: int = 0  # 0..10
     embedding_id: str | None = None
     scene: str | None = None
+    # J4：可追溯、可撤销。
+    reason: str | None = None  # 创建原因（如 user statement / exploration feedback）
+    status: str = "active"  # active | paused（paused 不进检索上下文）
+    use_count: int = 0  # 被注入回复提示的次数
+    last_used_at: str | None = None  # 最近一次被使用的时间
 
     def to_dict(self) -> dict[str, Any]:
         base: dict[str, Any] = {
@@ -97,11 +102,17 @@ class MemoryEntry:
             "created_at": self.created_at,
             "tags": list(self.tags),
             "importance": int(self.importance),
+            "status": self.status,
+            "use_count": int(self.use_count),
         }
         if self.embedding_id:
             base["embedding_id"] = self.embedding_id
         if self.scene:
             base["scene"] = self.scene
+        if self.reason:
+            base["reason"] = self.reason
+        if self.last_used_at:
+            base["last_used_at"] = self.last_used_at
         return base
 
     @classmethod
@@ -143,6 +154,20 @@ class MemoryEntry:
         scene = payload.get("scene")
         if scene is not None and (not isinstance(scene, str) or not scene.strip()):
             raise ValueError("scene must be a non-empty string or null")
+        reason = payload.get("reason")
+        if reason is not None and (not isinstance(reason, str) or not reason.strip()):
+            raise ValueError("reason must be a non-empty string or null")
+        status = payload.get("status", "active")
+        if status not in {"active", "paused"}:
+            raise ValueError("status must be 'active' or 'paused'")
+        use_count = int(payload.get("use_count", 0) or 0)
+        if use_count < 0:
+            raise ValueError("use_count must be >= 0")
+        last_used_at = payload.get("last_used_at")
+        if last_used_at is not None and (
+            not isinstance(last_used_at, str) or not last_used_at.strip()
+        ):
+            raise ValueError("last_used_at must be a non-empty string or null")
         return cls(
             id=str(memory_id).strip(),
             content=content,
@@ -153,6 +178,14 @@ class MemoryEntry:
             importance=importance,
             embedding_id=embedding_id,
             scene=scene if isinstance(scene, str) and scene.strip() else None,
+            reason=reason if isinstance(reason, str) and reason.strip() else None,
+            status=status,
+            use_count=use_count,
+            last_used_at=(
+                last_used_at
+                if isinstance(last_used_at, str) and last_used_at.strip()
+                else None
+            ),
         )
 
 
@@ -246,6 +279,8 @@ class LongTermStore:
         tags: Iterable[str] | None = None,
         importance: int = 0,
         scene: str | None = None,
+        reason: str | None = None,
+        status: str = "active",
     ) -> MemoryEntry:
         entry = MemoryEntry.from_dict(
             {
@@ -257,6 +292,8 @@ class LongTermStore:
                 "scene": scene,
                 "id": uuid.uuid4().hex,
                 "created_at": utc_now_iso(),
+                "reason": reason,
+                "status": status,
             }
         )
         self._entries[entry.id] = entry
@@ -268,6 +305,8 @@ class LongTermStore:
             self._entries.values(),
             key=lambda e: (e.created_at, e.id),
         )
+        # J4：暂停的记忆不进入任何列表视图（包括检索上下文）。
+        items = [e for e in items if e.status != "paused"]
         if visibility in {"model", "private"}:
             items = [e for e in items if e.visibility == visibility]
         if isinstance(limit, int) and limit >= 0:
@@ -288,6 +327,8 @@ class LongTermStore:
         tags: Iterable[str] | None = None,
         importance: int | None = None,
         scene: str | None = "__NO_CHANGE__",
+        reason: str | None = "__NO_CHANGE__",
+        status: str | None = "__NO_CHANGE__",
     ) -> MemoryEntry:
         existing = self.get(memory_id)
         payload = existing.to_dict()
@@ -300,6 +341,12 @@ class LongTermStore:
             payload["importance"] = importance
         if scene != "__NO_CHANGE__":
             payload["scene"] = scene
+        if reason != "__NO_CHANGE__":
+            payload["reason"] = reason
+        # status=None 表示不修改（API 不带该字段时的默认路径）；
+        # 显式传 "active"/"paused" 才会写入。
+        if status is not None and status != "__NO_CHANGE__":
+            payload["status"] = status
         merged = MemoryEntry.from_dict(payload)
         self._entries[merged.id] = merged
         self._dirty = True
@@ -310,6 +357,41 @@ class LongTermStore:
             raise LookupError(f"memory not found: {sanitize_for_log(memory_id, 80)}")
         del self._entries[memory_id]
         self._dirty = True
+
+    # ---------- J4: pause / resume / usage tracking ----------
+    def pause(self, memory_id: str) -> MemoryEntry:
+        return self.update(
+            memory_id,
+            content=self.get(memory_id).content,
+            visibility=self.get(memory_id).visibility,
+            source=self.get(memory_id).source,
+            status="paused",
+        )
+
+    def resume(self, memory_id: str) -> MemoryEntry:
+        return self.update(
+            memory_id,
+            content=self.get(memory_id).content,
+            visibility=self.get(memory_id).visibility,
+            source=self.get(memory_id).source,
+            status="active",
+        )
+
+    def record_usage(self, memory_ids: Iterable[str]) -> int:
+        """记录一条或多条记忆被注入回复提示（使用追踪）。不存在的 id 静默跳过。"""
+        now = utc_now_iso()
+        touched = 0
+        for memory_id in memory_ids:
+            if not isinstance(memory_id, str) or memory_id not in self._entries:
+                continue
+            entry = self._entries[memory_id]
+            if entry.status == "paused":
+                continue
+            entry.use_count = int(entry.use_count) + 1
+            entry.last_used_at = now
+            self._dirty = True
+            touched += 1
+        return touched
 
     # ---------- search ----------
     def search(
@@ -327,6 +409,8 @@ class LongTermStore:
             return []
         docs: list[tuple[MemoryEntry, list[str]]] = []
         for entry in self._entries.values():
+            if entry.status == "paused":
+                continue
             if visibility is not None and entry.visibility != visibility:
                 continue
             docs.append((entry, _tokenize(entry.content + " " + " ".join(entry.tags))))
@@ -572,6 +656,8 @@ class MemoryStore:
         tags: Iterable[str] | None = None,
         importance: int = 0,
         scene: str | None = None,
+        reason: str | None = None,
+        status: str = "active",
     ) -> dict[str, Any]:
         with self._lock:
             entry = self.long_term.add(
@@ -581,6 +667,8 @@ class MemoryStore:
                 tags=tags,
                 importance=importance,
                 scene=scene,
+                reason=reason,
+                status=status,
             )
             self._dirty = True
             return entry.to_dict()
@@ -598,6 +686,8 @@ class MemoryStore:
         tags: Iterable[str] | None = None,
         importance: int | None = None,
         scene: str | None = "__NO_CHANGE__",
+        reason: str | None = "__NO_CHANGE__",
+        status: str | None = "__NO_CHANGE__",
     ) -> dict[str, Any]:
         with self._lock:
             updated = self.long_term.update(
@@ -608,6 +698,8 @@ class MemoryStore:
                 tags=tags,
                 importance=importance,
                 scene=scene,
+                reason=reason,
+                status=status,
             )
             self._dirty = True
             return updated.to_dict()
@@ -616,6 +708,22 @@ class MemoryStore:
         with self._lock:
             self.long_term.delete(memory_id)
             self._dirty = True
+
+    def pause_memory(self, memory_id: str) -> dict[str, Any]:
+        with self._lock:
+            updated = self.long_term.pause(memory_id)
+            self._dirty = True
+            return updated.to_dict()
+
+    def resume_memory(self, memory_id: str) -> dict[str, Any]:
+        with self._lock:
+            updated = self.long_term.resume(memory_id)
+            self._dirty = True
+            return updated.to_dict()
+
+    def record_memory_usage(self, memory_ids: Iterable[str]) -> int:
+        with self._lock:
+            return self.long_term.record_usage(memory_ids)
 
     def search_memories(
         self,

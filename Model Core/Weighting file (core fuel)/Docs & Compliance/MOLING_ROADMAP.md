@@ -365,11 +365,19 @@
 - 方案评估：**自研零依赖验收**（`Frontend/e2e/e2e-runner.cjs` + `e2e-smoke.cjs`，`npm run test:e2e`）——真实窗口 + `executeJavaScript` 驱动 + 主进程策略拒绝计数，无需安装 Playwright 及浏览器（维护成本低、Windows 原生可跑）；Playwright-Electron 列为可选增强（需新增依赖与网络下载，当前不引入）。
 - 覆盖范围标注：单测/集成层（mini-game-policy / mini-game-drafts / test_api / layout 等）与真实窗口层（主窗与悬浮窗关键 UI 渲染、小游戏隔离拒绝计数、草案 IPC 全链路）已自动验收；角色外观/图片错误提示/二次确认对话框/悬浮窗手感/打包版行为列入人工检查清单（随每次 `npm run test:e2e` 输出）。运行环境：Windows + Electron 41，需显示会话。
 
-#### J4 — 可追溯、可撤销的长期连续性（P2）
+#### J4 — 可追溯、可撤销的长期连续性（P2）✅ 已完成（2026-10-10）
 
 - 当前记忆已有来源、可见性和时间字段，缺口是“哪条记忆实际影响了哪条回复”的关联、跨会话回放和用户可理解的纠正 / 遗忘结果；不是从零建设记忆库。盘点探索运行 / 反馈等自动写记忆路径，明确区分一次性上下文与长期记忆，并让长期沉淀遵循产品纲领的用户确认边界。
 - 提供可查的记忆来源、创建原因、使用记录和影响范围；用户可更正、删除或暂停使用。删除 / 暂停后不得继续进入检索上下文；当前任务的纠正默认不外推成长期偏好。
 - 验收：追踪样例能指出被采用的记忆及来源；未采用的记忆不会伪报为依据；撤回后后续回复不再召回；未经同意的探索记录不会升级为持久偏好。
+- 实现：
+  - `memory.py`：`MemoryEntry` 新增 `reason`（创建原因）、`status`（active/paused）、`use_count`/`last_used_at`（使用追踪），旧数据向后兼容；`LongTermStore.list/search` 过滤 paused（撤回后不进检索上下文）；新增 `pause/resume/record_usage`；`update` 支持 status/reason（None 语义 = 不修改，避免误清空原因）。
+  - `character.py`：透传新字段；`build_system_prompt` 注入记忆后调用 `record_memory_usage`（每条回复自动记录被采用的记忆 → 记忆面板可见“已采用 N 次/最近使用时间”）。
+  - `api.py`：POST /v1/memory 支持 `reason`；PUT 支持 `status`/`reason`（暂停/恢复走既有路由）。
+  - 自动写记忆标注原因：`explore.py`（探索运行/反馈）与 `discovery.py`（文件/画面观察）写入时带 reason“未经用户确认，不作为长期偏好”；来源可查、用户可暂停/删除，不自动升级为持久偏好。
+  - 前端记忆面板：元信息行显示 来源 · 原因 · 状态（活跃/已暂停）· 采用次数与最近使用时间；新增“暂停使用/恢复使用”按钮；暂停条目弱化样式。
+  - 新增 12 项测试（`test_j4_memory.py`：暂停不进 list/search、pause/resume 生命周期、使用计数、撤回后不再召回、旧数据兼容、持久化往返、CharacterStore 注入追踪与暂停后不入提示）；修复 PUT 不带 status 时的校验回归。
+  - 全量基线：**196 passed / 6 skipped / 63 subtests**（此前 182 + 14）。
 
 #### J5 — 有边界的主动提议和共同目标（P2；依赖 J4 的记忆边界）
 
