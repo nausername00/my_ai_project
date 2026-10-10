@@ -1,3 +1,32 @@
+// 依赖兜底：voice-playback.js / avatar-display.js 未加载时保持同构 API，
+// 避免顶层引用崩溃导致整个界面无响应。
+(function ensureRendererDependencies(root) {
+  if (!root.MolingAvatarDisplay) {
+    root.MolingAvatarDisplay = Object.freeze({
+      MODES: Object.freeze({ FOLLOW: "follow", BASE: "base" }),
+      normalizeMode(mode) {
+        return mode === "base" ? "base" : "follow";
+      },
+      getAvatarCandidates({ baseAvatar, emotionAvatars = {}, mood, mode = "follow" }) {
+        const candidates =
+          mode === "base" ? [baseAvatar] : [emotionAvatars?.[mood], baseAvatar];
+        return [
+          ...new Set(
+            candidates.filter((candidate) => typeof candidate === "string" && candidate),
+          ),
+        ];
+      },
+    });
+  }
+  if (!root.MolingVoicePlayback) {
+    root.MolingVoicePlayback = Object.freeze({
+      resolveSynthesisVoice() {
+        return { voice: undefined, unavailable: false };
+      },
+    });
+  }
+})(typeof window === "undefined" ? globalThis : window);
+
 const conversation = document.getElementById("conversation");
 const welcome = document.getElementById("welcome");
 const composer = document.getElementById("composer");
