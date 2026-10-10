@@ -3224,3 +3224,60 @@ dialog.character-editor-dialog {
   line-height: 1;
   user-select: none;
 }
+
+/* ---------- 情绪光晕（8 情绪，柔和呼吸） ---------- */
+.character-avatar img:not([hidden]),
+.character-display img:not([hidden]) {
+  transition: box-shadow 500ms ease;
+}
+.character-avatar[data-mood="calm"] img:not([hidden]),
+.character-display[data-mood="calm"] img:not([hidden]) { box-shadow: 0 0 16px rgba(124, 140, 248, 0.30); }
+.character-avatar[data-mood="happy"] img:not([hidden]),
+.character-display[data-mood="happy"] img:not([hidden]) { box-shadow: 0 0 16px rgba(255, 209, 102, 0.34); }
+.character-avatar[data-mood="curious"] img:not([hidden]),
+.character-display[data-mood="curious"] img:not([hidden]) { box-shadow: 0 0 16px rgba(125, 211, 252, 0.32); }
+.character-avatar[data-mood="surprised"] img:not([hidden]),
+.character-display[data-mood="surprised"] img:not([hidden]) { box-shadow: 0 0 18px rgba(248, 165, 255, 0.36); }
+.character-avatar[data-mood="worried"] img:not([hidden]),
+.character-display[data-mood="worried"] img:not([hidden]) { box-shadow: 0 0 16px rgba(255, 159, 110, 0.32); }
+.character-avatar[data-mood="shy"] img:not([hidden]),
+.character-display[data-mood="shy"] img:not([hidden]) { box-shadow: 0 0 16px rgba(255, 143, 171, 0.32); }
+.character-avatar[data-mood="warm"] img:not([hidden]),
+.character-display[data-mood="warm"] img:not([hidden]) { box-shadow: 0 0 16px rgba(255, 184, 77, 0.34); }
+.character-avatar[data-mood="caring"] img:not([hidden]),
+.character-display[data-mood="caring"] img:not([hidden]) { box-shadow: 0 0 16px rgba(110, 231, 183, 0.32); }
+
+/* ---------- 消息级小头像：呼吸 + 情绪光晕 ---------- */
+.message-avatar {
+  animation: avatar-idle 4.8s ease-in-out infinite;
+}
+.message-avatar[data-mood="calm"] { box-shadow: 0 0 12px rgba(124, 140, 248, 0.30), 0 2px 8px rgba(0, 0, 0, 0.28); }
+.message-avatar[data-mood="happy"] { box-shadow: 0 0 12px rgba(255, 209, 102, 0.34), 0 2px 8px rgba(0, 0, 0, 0.28); }
+.message-avatar[data-mood="curious"] { box-shadow: 0 0 12px rgba(125, 211, 252, 0.32), 0 2px 8px rgba(0, 0, 0, 0.28); }
+.message-avatar[data-mood="surprised"] { box-shadow: 0 0 14px rgba(248, 165, 255, 0.36), 0 2px 8px rgba(0, 0, 0, 0.28); }
+.message-avatar[data-mood="worried"] { box-shadow: 0 0 12px rgba(255, 159, 110, 0.32), 0 2px 8px rgba(0, 0, 0, 0.28); }
+.message-avatar[data-mood="shy"] { box-shadow: 0 0 12px rgba(255, 143, 171, 0.32), 0 2px 8px rgba(0, 0, 0, 0.28); }
+.message-avatar[data-mood="warm"] { box-shadow: 0 0 12px rgba(255, 184, 77, 0.34), 0 2px 8px rgba(0, 0, 0, 0.28); }
+.message-avatar[data-mood="caring"] { box-shadow: 0 0 12px rgba(110, 231, 183, 0.32), 0 2px 8px rgba(0, 0, 0, 0.28); }
+
+/* ---------- 说话动效：当前播放语音的消息头像 ---------- */
+.message-avatar.listening {
+  animation: message-speaking 1.1s ease-in-out infinite;
+}
+@keyframes message-speaking {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-2px) scale(1.06); }
+}
+.message-avatar.listening img {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .character-avatar img:not([hidden]),
+  .character-display img:not([hidden]),
+  .message-avatar,
+  .message-avatar.listening {
+    animation: none;
+    transition: none;
+  }
+}

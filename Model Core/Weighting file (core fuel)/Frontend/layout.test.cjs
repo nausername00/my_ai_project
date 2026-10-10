@@ -272,3 +272,15 @@ test("assistant messages carry a mood-aware avatar that refreshes on affect chan
   assert.match(css, /\.message-avatar \{/);
   assert.match(css, /\.message\.assistant \.message-body/);
 });
+
+test("avatars breathe, speak, and carry mood-tinted glow without external deps", () => {
+  assert.match(css, /@keyframes message-speaking/);
+  assert.match(css, /\.message-avatar\.listening/);
+  assert.match(css, /\[data-mood="happy"\]/);
+  assert.match(css, /\[data-mood="curious"\]/);
+  assert.match(css, /prefers-reduced-motion: reduce/);
+  assert.match(renderer, /messageAvatar\?\.classList\.add\("listening"\)/);
+  assert.match(renderer, /messageAvatar\?\.classList\.remove\("listening"\)/);
+  assert.match(renderer, /characterDisplay\.dataset\.mood = state\.mood/);
+  assert.match(renderer, /avatarNode\.dataset\.mood = mood/);
+});

@@ -361,6 +361,7 @@ function addMessage(text, role, extraClass = "") {
 function refreshMessageAvatar(avatarNode) {
   const mood = affectMood?.value || "calm";
   const portrait = runtimeEmotionAvatars[mood] || baseAvatarFileName;
+  avatarNode.dataset.mood = mood;
   avatarNode.replaceChildren();
   if (portrait) {
     const img = document.createElement("img");
@@ -760,9 +761,15 @@ function addSpeechControl(message, text) {
         if (activeAudio === playback) activeAudio = undefined;
         window.companion.notifySpeechState?.(false).catch(() => {});
       };
-      playback.addEventListener("ended", releaseAudioUrl, { once: true });
-      playback.addEventListener("error", releaseAudioUrl, { once: true });
+      const messageAvatar = message.querySelector(".message-avatar");
+      const clearListening = () => {
+        messageAvatar?.classList.remove("listening");
+        releaseAudioUrl();
+      };
+      playback.addEventListener("ended", clearListening, { once: true });
+      playback.addEventListener("error", clearListening, { once: true });
       await playback.play();
+      messageAvatar?.classList.add("listening");
       window.companion.notifySpeechState?.(true).catch(() => {});
       button.textContent = "重新播放";
     } catch (error) {
@@ -3411,6 +3418,8 @@ function updateAffect(state) {
   document.getElementById("settings-avatar").dataset.mood = state.mood;
   affectReason.textContent = `状态线索：${state.reason}`;
   applyEmotionAvatar(state.mood);
+  const characterDisplay = document.getElementById("character-display");
+  if (characterDisplay) characterDisplay.dataset.mood = state.mood;
   refreshAllMessageAvatars();
 }
 
