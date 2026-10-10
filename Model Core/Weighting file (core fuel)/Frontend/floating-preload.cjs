@@ -32,5 +32,14 @@ contextBridge.exposeInMainWorld(
       return () =>
         ipcRenderer.removeListener("companion:character-updated", listener);
     },
+    onSpeechState(callback) {
+      if (typeof callback !== "function") {
+        throw new TypeError("speech state callback must be a function");
+      }
+      const listener = (_event, speaking) => callback(speaking === true);
+      ipcRenderer.on("companion:speech-state", listener);
+      return () =>
+        ipcRenderer.removeListener("companion:speech-state", listener);
+    },
   }),
 );

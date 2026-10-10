@@ -72,6 +72,7 @@ test("floating preload exposes only its notification and window controls", () =>
     "expandFloating",
     "collapseFloating",
     "onCharacterUpdated",
+    "onSpeechState",
   ]);
 
   const received = [];

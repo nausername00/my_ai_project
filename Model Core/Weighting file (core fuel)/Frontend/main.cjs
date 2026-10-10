@@ -1008,6 +1008,19 @@ function registerIpcHandlers() {
     }
     return { collapsed: false, reason: "no-window" };
   });
+  ipcMain.handle("companion:speech-state", (_event, speaking) => {
+    if (
+      floatingWindow &&
+      !floatingWindow.isDestroyed() &&
+      floatingWindowReady
+    ) {
+      floatingWindow.webContents.send(
+        "companion:speech-state",
+        speaking === true,
+      );
+    }
+    return { ok: true };
+  });
   ipcMain.handle("companion:floating-toggle", () => {
     if (floatingWindow && !floatingWindow.isDestroyed()) {
       if (floatingWindow.isVisible()) {
@@ -1087,14 +1100,6 @@ async function pushCharacterToFloating() {
   if (!floatingWindow || floatingWindow.isDestroyed()) return;
   try {
     const { character } = await callApi("/v1/character");
-    let avatarDataUrl = null;
-    if (character?.avatar) {
-      try {
-        avatarDataUrl = await readAvatar(character.avatar);
-      } catch {
-        avatarDataUrl = null;
-      }
-    }
     let moodLabel = "";
     let moodKey = "";
     try {
@@ -1104,6 +1109,16 @@ async function pushCharacterToFloating() {
     } catch {
       moodLabel = "";
       moodKey = "";
+    }
+    let avatarDataUrl = null;
+    const emotionPortrait = character?.emotion_avatars?.[moodKey];
+    const portraitName = emotionPortrait || character?.avatar || null;
+    if (portraitName) {
+      try {
+        avatarDataUrl = await readAvatar(portraitName);
+      } catch {
+        avatarDataUrl = null;
+      }
     }
     floatingWindow.webContents.send("companion:character-updated", {
       nickname: character?.nickname || "墨灵",

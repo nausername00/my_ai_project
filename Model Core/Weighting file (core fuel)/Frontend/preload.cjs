@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld(
     synthesize: (text, voice) =>
       ipcRenderer.invoke("companion:synthesize", text, voice),
     getCharacter: () => ipcRenderer.invoke("companion:get-character"),
+    notifySpeechState: (speaking) =>
+      ipcRenderer.invoke("companion:speech-state", speaking === true),
     saveCharacter: (card) => ipcRenderer.invoke("companion:save-character", card),
     listCharacters: () => ipcRenderer.invoke("companion:list-characters"),
     createCharacter: (card) =>

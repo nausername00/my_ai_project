@@ -412,6 +412,9 @@
 
   window.floating.onNotification(handleNotification);
   window.floating.onCharacterUpdated(applyCharacter);
+  window.floating.onSpeechState((speaking) => {
+    avatarEl.classList.toggle("listening", speaking);
+  });
 
   (function initDemo() {
     const welcome = {
