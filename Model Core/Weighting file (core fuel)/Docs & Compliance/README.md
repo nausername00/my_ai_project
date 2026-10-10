@@ -159,10 +159,14 @@ The service exposes:
   Separate cancellation requests are accepted only for executing tools that
   declare cancellation support, and the trace distinguishes a cancellation
   request from an effective stop. The collaboration workspace also has a
-  review-first offline mini-game prompt: it asks the local planner to
-  propose a self-contained HTML file, shows its complete contents before
-  execution, and still requires the existing per-file confirmation. It does
-  not load external resources or automatically open the generated file.
+  review-first mini-game prompt: it asks the local planner to propose a
+  self-contained HTML file, shows its complete contents before execution,
+  and still requires the existing per-file confirmation. The generated page
+  is instructed not to load external resources and is not automatically
+  opened; the preview window disables Node integration and enables Electron
+  sandboxing, but those settings alone do not prove network access, navigation,
+  popups, or downloads are blocked. Treat preview isolation as incomplete
+  until the J0 roadmap checks pass.
 - The chat welcome screen also offers a fully local branching micro-story.
   Its choices, pause/resume, backtrack, restart, and exit controls run without
   model calls, network access, or memory writes; starting a new chat discards
