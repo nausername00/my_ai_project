@@ -98,6 +98,8 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke("companion:list-agent-traces", limit),
     createAgentTrace: (task, scope) =>
       ipcRenderer.invoke("companion:create-agent-trace", task, scope),
+    miniGameExists: () => ipcRenderer.invoke("companion:mini-game-exists"),
+    openMiniGame: () => ipcRenderer.invoke("companion:open-mini-game"),
     verifyAgentTool: (request) =>
       ipcRenderer.invoke("companion:verify-agent-tool", request),
     listMemories: () => ipcRenderer.invoke("companion:list-memories"),

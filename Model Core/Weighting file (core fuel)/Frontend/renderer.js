@@ -50,6 +50,74 @@ const collaborationSynthesisSections = document.getElementById("collaboration-sy
 const brainPlanSubmit = document.getElementById("brain-plan-submit");
 const brainPlanClear = document.getElementById("brain-plan-clear");
 const miniGamePlanButton = document.getElementById("mini-game-plan");
+const miniGamePreviewButton = document.getElementById("mini-game-preview");
+const microStory = document.getElementById("micro-story");
+const microStoryStart = document.getElementById("micro-story-start");
+const microStoryText = document.getElementById("micro-story-text");
+const microStoryStatus = document.getElementById("micro-story-status");
+const microStoryChoices = document.getElementById("micro-story-choices");
+const microStoryBack = document.getElementById("micro-story-back");
+const microStoryPause = document.getElementById("micro-story-pause");
+const microStoryRestart = document.getElementById("micro-story-restart");
+const microStoryExit = document.getElementById("micro-story-exit");
+const microStoryNodes = {
+  pier: {
+    text: "月港的潮水退去，岸边留下一只折着银色星星的纸船。远处灯塔亮着一盏温暖的灯。你想从哪里开始？",
+    choices: [
+      { label: "打开纸船看看", next: "note" },
+      { label: "沿着灯光走向灯塔", next: "lighthouse" },
+      { label: "把纸船放回潮水", next: "harbor" },
+    ],
+  },
+  note: {
+    text: "纸船里写着：“今晚的月亮忘了回家。”字迹旁画着一扇小窗。你会？",
+    choices: [
+      { label: "把纸船放到窗边", next: "windowEnding" },
+      { label: "在背面画一颗星星", next: "starEnding" },
+    ],
+  },
+  lighthouse: {
+    text: "灯塔门虚掩着，里面传来轻轻的钟声。台阶上有一把伞。你会？",
+    choices: [
+      { label: "敲门，问问是否需要帮忙", next: "bellEnding" },
+      { label: "把伞放在门边，留张便条", next: "umbrellaEnding" },
+    ],
+  },
+  harbor: {
+    text: "纸船顺着水纹漂向港湾，船底露出一枚贝壳。月光把海面照得像一条安静的小路。你会？",
+    choices: [
+      { label: "沿着海边送它一程", next: "shoreEnding" },
+      { label: "坐下来听一会儿潮声", next: "tideEnding" },
+    ],
+  },
+  windowEnding: {
+    text: "窗里亮起一盏灯，有人把纸船收进窗台的小盒子。今晚，月亮似乎找到了回家的方向。故事暂时停在这里。",
+    choices: [],
+  },
+  starEnding: {
+    text: "你画下的星星随着海风轻轻摇晃。纸船带着两份留言继续漂远，也许会遇见下一位愿意添上一笔的人。故事暂时停在这里。",
+    choices: [],
+  },
+  bellEnding: {
+    text: "门后的人笑着说，钟声是在提醒迷路的船只。你们一起把灯调亮了一点。故事暂时停在这里。",
+    choices: [],
+  },
+  umbrellaEnding: {
+    text: "清晨，伞边多了一张写着“谢谢”的纸条。灯塔的光扫过海面，像一个安静的回应。故事暂时停在这里。",
+    choices: [],
+  },
+  shoreEnding: {
+    text: "纸船在浅滩轻轻靠岸，贝壳里传来一点回声。你把它放在显眼的石头上，留给下一位散步的人。故事暂时停在这里。",
+    choices: [],
+  },
+  tideEnding: {
+    text: "潮声一遍遍来去，纸船在近处打了个转。你不必急着决定下一步，今晚的海已经足够安静。故事暂时停在这里。",
+    choices: [],
+  },
+};
+let microStoryNode = "pier";
+let microStoryHistory = [];
+let microStoryPaused = false;
 const collaborationStatus = document.getElementById("collaboration-status");
 const brainPlan = document.getElementById("brain-plan");
 const brainPlanSummary = document.getElementById("brain-plan-summary");
@@ -121,6 +189,7 @@ let modelEmotionMapping = {};
 let emotionAvatars = {};
 let runtimeEmotionAvatars = {};
 let baseAvatarFileName = null;
+let avatarLoadVersion = 0;
 let selectedModelFile = "";
 let saveAppearanceRequested = false;
 let translationRequestVersion = 0;
@@ -130,6 +199,7 @@ let lastReferenceVoice = "";
 let pendingVoiceSample;
 let activeVoicePreview;
 let activeVoicePreviewUrl;
+let speechVoiceLoadError = "";
 let selectedPersonalityPreset = "custom";
 const VOICE_PREFERENCES_KEY = "moling.voice.preferences.v1";
 const LOCAL_VOICE_PREFIX = "voice:";
@@ -619,7 +689,8 @@ function addSpeechControl(message, text) {
     let audioUrl;
     let playback;
     try {
-      const audio = await window.companion.synthesize(text);
+      const selectedVoice = getCharacterSynthesisVoice();
+      const audio = await window.companion.synthesize(text, selectedVoice);
       const wavBytes =
         audio instanceof Uint8Array
           ? audio
@@ -1164,7 +1235,7 @@ async function updateModelPreview() {
       : `${format.toUpperCase()} 资源已登记并纳入卡片；对应运行时渲染器尚未集成，当前只显示资源清单与静态立绘。`;
 }
 
-function setAvatarTargets(dataUrl) {
+function setAvatarTargets(dataUrl, requestVersion = avatarLoadVersion) {
   for (const [containerId, imageId, fallbackId] of [
     ["character-display", "welcome-avatar-image", "welcome-avatar-fallback"],
     ["topbar-avatar", "topbar-avatar-image", "topbar-avatar-fallback"],
@@ -1173,6 +1244,7 @@ function setAvatarTargets(dataUrl) {
     const image = document.getElementById(imageId);
     const fallback = document.getElementById(fallbackId);
     image.onerror = () => {
+      if (requestVersion !== avatarLoadVersion) return;
       image.hidden = true;
       fallback.hidden = false;
       avatarStatus.textContent = "图片无法解码，请选择有效的 PNG、JPEG 或 WebP 文件。";
@@ -1187,11 +1259,15 @@ function setAvatarTargets(dataUrl) {
 }
 
 async function loadAvatar(fileName) {
+  const requestVersion = ++avatarLoadVersion;
   if (!fileName) {
-    setAvatarTargets(null);
+    setAvatarTargets(null, requestVersion);
     return;
   }
-  setAvatarTargets(await window.companion.getAvatar(fileName));
+  const dataUrl = await window.companion.getAvatar(fileName);
+  if (requestVersion === avatarLoadVersion) {
+    setAvatarTargets(dataUrl, requestVersion);
+  }
 }
 
 async function refreshStatus() {
@@ -1260,7 +1336,7 @@ async function loadCharacter() {
       await loadAvatar(baseAvatarFileName);
       await applyEmotionAvatar(affectMood.value);
     } catch (error) {
-      setAvatarTargets(null);
+      await loadAvatar(null);
       avatarStatus.textContent = `无法读取角色立绘：${error.message}`;
       avatarStatus.classList.add("error");
     }
@@ -1335,7 +1411,8 @@ function characterVoiceStorageKey(characterId) {
 function loadCharacterVoicePreference(characterId) {
   try {
     return localStorage.getItem(characterVoiceStorageKey(characterId)) || "";
-  } catch {
+  } catch (error) {
+    setVoiceResourceStatus(`无法读取此角色的声线偏好：${error.message}`, true);
     return "";
   }
 }
@@ -1347,19 +1424,39 @@ function saveCharacterVoicePreference(characterId, value) {
     } else {
       localStorage.removeItem(characterVoiceStorageKey(characterId));
     }
+    return true;
   } catch {
-    // localStorage unavailable: preference simply will not persist
+    return false;
   }
+}
+
+function getCharacterSynthesisVoice(characterId = currentCharacterId) {
+  const preference = loadCharacterVoicePreference(characterId);
+  const { voice, unavailable } =
+    window.MolingVoicePlayback.resolveSynthesisVoice(preference, speechVoices);
+  if (!unavailable) return voice;
+  setVoiceStatus(
+    speechVoiceLoadError
+      ? `无法验证已选声线：${speechVoiceLoadError}；本次使用默认合成音色。`
+      : "已选声线当前不可用；本次使用默认合成音色。",
+    true,
+  );
+  return undefined;
 }
 
 async function loadSpeechVoices() {
   try {
     const payload = await window.companion.speechVoices();
     speechVoices = Array.isArray(payload?.voices) ? payload.voices : [];
-  } catch {
+    speechVoiceLoadError = "";
+  } catch (error) {
     speechVoices = [];
+    speechVoiceLoadError = error.message;
+    setVoiceResourceStatus(`无法读取本地声线目录：${error.message}`, true);
+    setVoiceStatus(`无法读取本地声线目录：${error.message}`, true);
   }
   populateCharacterVoiceSelect();
+  populateTranslatorVoiceSelect();
   return speechVoices;
 }
 
@@ -2348,12 +2445,32 @@ miniGamePlanButton.addEventListener("click", () => {
   brainPlanSubmit.click();
 });
 
+async function refreshMiniGamePreviewState() {
+  try {
+    const exists = await window.companion.miniGameExists();
+    miniGamePreviewButton.disabled = !exists;
+  } catch {
+    miniGamePreviewButton.disabled = true;
+  }
+}
+
+miniGamePreviewButton.addEventListener("click", async () => {
+  try {
+    await window.companion.openMiniGame();
+    collaborationStatus.textContent = "已在独立窗口打开小游戏；关闭窗口即可回到本窗口。";
+    collaborationStatus.classList.remove("error");
+  } catch (error) {
+    collaborationStatus.textContent = error.message;
+    collaborationStatus.classList.add("error");
+  }
+});
+
 brainPlanClear.addEventListener("click", () => {
   const activeStep = brainPlanSteps.querySelector('[data-busy="true"]');
   if (
     activeStep &&
     !window.confirm(
-      "当前已批准的单步工具调用无法中断。清除计划只会阻止后续步骤；正在执行的这一步可能仍会完成。要继续清除吗？",
+      "正在执行的步骤可通过观察面板的“停止当前步骤”请求中断。清除计划会阻止后续步骤。要继续清除吗？",
     )
   ) {
     return;
@@ -2424,8 +2541,9 @@ async function executeBrainStep(stepIndex) {
   const stopButton = document.createElement("button");
   stopButton.className = "icon-button brain-step-stop";
   stopButton.type = "button";
-  stopButton.textContent = "停止这一步";
+  stopButton.textContent = "停止当前步骤";
   stopButton.hidden = true;
+  stopButton.setAttribute("aria-label", "请求停止正在执行的当前工具调用");
   const verifyButton = document.createElement("button");
   verifyButton.className = "icon-button brain-observation-verify";
   verifyButton.type = "button";
@@ -2507,6 +2625,7 @@ async function executeBrainStep(stepIndex) {
       if (observation?.created && verification?.content_matches) {
         status.textContent = "新文件已创建，并已回读确认内容一致。";
         updateBrainStepStatus(stepIndex, "confirmed", "已创建 · 回读一致");
+        refreshMiniGamePreviewState();
       } else {
         status.textContent =
           "文件创建请求已返回，但回读未能确认内容一致；请检查实际文件后再决定后续操作。";
@@ -2697,11 +2816,18 @@ const translatorSpeak = document.getElementById("translator-speak");
 
 function populateTranslatorVoiceSelect() {
   if (!translatorVoiceSelect) return;
+  const selected = translatorVoiceSelect.value;
   translatorVoiceSelect.replaceChildren();
   const piper = document.createElement("option");
   piper.value = "";
-  piper.textContent = "当前合成音色 · Piper";
+  piper.textContent = "使用当前角色设置的合成声线";
   translatorVoiceSelect.append(piper);
+  for (const voice of speechVoices) {
+    const option = document.createElement("option");
+    option.value = `${LOCAL_VOICE_PREFIX}${voice.name}`;
+    option.textContent = `${voice.display}${voice.default ? " · 当前默认" : ""}`;
+    translatorVoiceSelect.append(option);
+  }
   for (const resource of voiceResources) {
     const option = document.createElement("option");
     option.value = `reference:${resource.id}`;
@@ -2709,6 +2835,7 @@ function populateTranslatorVoiceSelect() {
       `${resource.name} · ${voiceLanguageLabels[resource.language]} · 参考声线（仅试听）`;
     translatorVoiceSelect.append(option);
   }
+  translatorVoiceSelect.value = selected || "";
 }
 
 function playSynthesizedWav(wavBytes) {
@@ -2762,9 +2889,14 @@ translatorSpeak.addEventListener("click", async () => {
       translatorStatus.classList.remove("error");
       return;
     }
-    const wav = await window.companion.synthesize(text);
+    const requestedVoice = selectedVoice.startsWith(LOCAL_VOICE_PREFIX)
+      ? selectedVoice.slice(LOCAL_VOICE_PREFIX.length)
+      : getCharacterSynthesisVoice();
+    const wav = await window.companion.synthesize(text, requestedVoice);
     await playSynthesizedWav(wav);
-    translatorStatus.textContent = "正在朗读译文（Piper 合成）。";
+    translatorStatus.textContent = requestedVoice
+      ? `正在使用所选本地声线「${requestedVoice}」朗读译文。`
+      : "正在使用当前默认音色朗读译文。";
     translatorStatus.classList.remove("error");
   } catch (error) {
     translatorStatus.textContent = `朗读失败：${error.message}`;
@@ -2887,10 +3019,83 @@ async function editCharacter(item) {
 function clearCurrentConversation() {
   conversationHistory = [];
   updateAgentReflectionButton();
+  resetMicroStory(true);
   conversation.replaceChildren(welcome);
   welcome.hidden = false;
   input.focus();
 }
+
+function renderMicroStory() {
+  const node = microStoryNodes[microStoryNode];
+  microStoryText.textContent = node.text;
+  microStoryChoices.replaceChildren();
+  for (const choice of node.choices) {
+    const button = document.createElement("button");
+    button.className = "micro-story-choice";
+    button.type = "button";
+    button.textContent = choice.label;
+    button.disabled = microStoryPaused;
+    button.addEventListener("click", () => {
+      microStoryHistory.push(microStoryNode);
+      microStoryNode = choice.next;
+      microStoryStatus.textContent = "";
+      renderMicroStory();
+      microStoryChoices.querySelector("button")?.focus();
+    });
+    microStoryChoices.append(button);
+  }
+  microStoryBack.disabled = microStoryPaused || microStoryHistory.length === 0;
+  microStoryPause.textContent = microStoryPaused ? "继续" : "暂停";
+  if (microStoryPaused) {
+    microStoryChoices.hidden = true;
+    microStoryStatus.textContent = "故事已暂停；准备好后可以继续，也可以退出。";
+  } else {
+    microStoryChoices.hidden = false;
+  }
+}
+
+function resetMicroStory(close = false) {
+  microStoryNode = "pier";
+  microStoryHistory = [];
+  microStoryPaused = false;
+  microStoryStatus.textContent =
+    "纯本地分支故事；不调用模型、不联网，也不会保存为记忆。";
+  microStoryChoices.hidden = false;
+  microStoryChoices.replaceChildren();
+  microStoryBack.disabled = true;
+  microStoryPause.textContent = "暂停";
+  if (close) microStory.hidden = true;
+}
+
+microStoryStart.addEventListener("click", () => {
+  microStory.hidden = false;
+  resetMicroStory();
+  renderMicroStory();
+  microStoryChoices.querySelector("button")?.focus();
+});
+
+microStoryBack.addEventListener("click", () => {
+  if (microStoryPaused || microStoryHistory.length === 0) return;
+  microStoryNode = microStoryHistory.pop();
+  microStoryStatus.textContent = "已回到上一步，可以改选另一条路。";
+  renderMicroStory();
+});
+
+microStoryPause.addEventListener("click", () => {
+  microStoryPaused = !microStoryPaused;
+  renderMicroStory();
+});
+
+microStoryRestart.addEventListener("click", () => {
+  resetMicroStory();
+  renderMicroStory();
+  microStoryChoices.querySelector("button")?.focus();
+});
+
+microStoryExit.addEventListener("click", () => {
+  resetMicroStory(true);
+  microStoryStart.focus();
+});
 
 document.getElementById("character-create").addEventListener("click", createCharacter);
 
@@ -2946,6 +3151,7 @@ async function switchCharacter(characterId) {
     await loadCharacter();
     await loadAffect();
     await loadCharacters();
+    await refreshMiniGamePreviewState();
     characterStatus.textContent = "角色卡已切换；当前对话上下文已清空。";
     characterStatus.classList.remove("error");
   } catch (error) {
@@ -3138,11 +3344,22 @@ function setMemoryStatus(message, isError = false) {
 async function applyEmotionAvatar(mood) {
   const portrait = runtimeEmotionAvatars[mood] || null;
   const target = portrait || baseAvatarFileName;
-  if (!target) return;
+  const requestVersion = avatarLoadVersion + 1;
   try {
     await loadAvatar(target);
-  } catch {
-    // 情绪立绘读取失败时保留当前显示
+  } catch (error) {
+    if (requestVersion !== avatarLoadVersion) return;
+    if (portrait && baseAvatarFileName && portrait !== baseAvatarFileName) {
+      try {
+        await loadAvatar(baseAvatarFileName);
+      } catch {
+        await loadAvatar(null);
+      }
+    } else {
+      await loadAvatar(null);
+    }
+    avatarStatus.textContent = `无法加载当前情绪立绘：${error.message}`;
+    avatarStatus.classList.add("error");
   }
 }
 
@@ -3754,10 +3971,6 @@ characterForm.addEventListener("submit", async (event) => {
   };
   const selectedVoiceValue = characterVoiceSelect.value;
   const localVoiceSelected = selectedVoiceValue.startsWith(LOCAL_VOICE_PREFIX);
-  saveCharacterVoicePreference(
-    editingCharacterId,
-    localVoiceSelected ? selectedVoiceValue : "",
-  );
   if (localVoiceSelected) {
     card.voice = lastReferenceVoice || null;
   } else {
@@ -3766,8 +3979,20 @@ characterForm.addEventListener("submit", async (event) => {
   }
   try {
     await window.companion.saveCharacter(card);
+    if (
+      !saveCharacterVoicePreference(
+        editingCharacterId,
+        localVoiceSelected ? selectedVoiceValue : "",
+      )
+    ) {
+      characterStatus.textContent =
+        "角色卡已保存，但此浏览器无法保存声线偏好；下次可能需要重新选择。";
+      characterStatus.classList.add("error");
+    }
     characterForm.dataset.dirty = "false";
-    characterStatus.textContent = "角色卡资料与表现设置已保存。";
+    if (!characterStatus.classList.contains("error")) {
+      characterStatus.textContent = "角色卡资料与表现设置已保存。";
+    }
     document.getElementById("character-editor-title").textContent =
       `编辑角色卡 · ${card.nickname}`;
     avatarStatus.textContent = card.avatar ? "角色立绘已保存。" : "角色立绘已移除。";
@@ -3862,6 +4087,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadAffect();
   refreshVoiceResources();
   void loadSpeechVoices();
+  void refreshMiniGamePreviewState();
   characterVoicePreview.addEventListener("click", previewSelectedVoice);
   characterVoiceSelect.addEventListener("change", () => {
     const value = characterVoiceSelect.value;

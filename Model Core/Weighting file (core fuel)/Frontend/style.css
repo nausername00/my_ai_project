@@ -772,8 +772,13 @@ button {
 }
 
 .brain-plan.is-stale .brain-plan-steps .brain-step-execute,
-.brain-plan.is-stale .brain-plan-observations .brain-observation-verify {
+.brain-plan.is-stale .brain-plan-observations .brain-observation-verify,
+.brain-plan.is-stale .brain-plan-observations .brain-step-stop {
   cursor: not-allowed;
+}
+
+.brain-plan .brain-step-stop {
+  align-self: flex-start;
 }
 
 .brain-risk-legend {
@@ -1478,6 +1483,69 @@ button {
   padding: 9px 11px;
   border: 1px solid var(--line);
   border-radius: 18px;
+}
+
+.micro-story {
+  max-width: 560px;
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid rgba(155, 140, 255, 0.28);
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgba(155, 140, 255, 0.1), rgba(32, 36, 45, 0.9));
+}
+
+.micro-story[hidden] {
+  display: none;
+}
+
+.micro-story h2 {
+  margin: 6px 0 10px;
+  font-size: 17px;
+}
+
+.micro-story-text {
+  min-height: 3.4em;
+  margin: 0;
+  color: #e5e2f2;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.micro-story-status {
+  margin: 10px 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.micro-story-choices,
+.micro-story-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.micro-story-choice {
+  padding: 8px 11px;
+  border: 1px solid rgba(155, 140, 255, 0.28);
+  border-radius: 10px;
+  background: rgba(155, 140, 255, 0.1);
+  color: #e8e5f7;
+  cursor: pointer;
+}
+
+.micro-story-choice:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: rgba(155, 140, 255, 0.2);
+}
+
+.micro-story-actions {
+  margin-top: 12px;
+}
+
+.micro-story-actions button {
+  padding: 7px 9px;
+  font-size: 11px;
   background: #1a1d24;
   color: #c7c9d1;
   font-size: 11px;

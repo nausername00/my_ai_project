@@ -189,6 +189,7 @@
               <span class="character-card-help">不会自动修改文件、联网、联系他人或保存记忆；评审结果目前仅保留在此窗口。</span>
               <div class="collaboration-actions">
                 <button class="icon-button" id="mini-game-plan" type="button" disabled>共创一个小游戏</button>
+                <button class="icon-button" id="mini-game-preview" type="button" disabled>预览小游戏</button>
                 <button class="icon-button" id="brain-plan-submit" type="button" disabled>生成可审阅计划</button>
                 <button class="save-button" id="collaboration-submit" type="submit" disabled>等待本机模型就绪</button>
               </div>
@@ -298,10 +299,27 @@
             <div class="welcome-copy">
               <h1>你好，我是墨小灵</h1>
               <p>对话由你电脑上的本地模型生成。你可以从一个问题开始。</p>
-              <div class="suggestions">
-                <button type="button" data-prompt="帮我安排今天的计划">安排今天的计划</button>
-                <button type="button" data-prompt="给我一个简单的晚餐建议">想一个晚餐建议</button>
-                <button type="button" data-prompt="用简单的话解释什么是人工智能">解释一个新概念</button>
+                <div class="suggestions">
+                  <button type="button" data-prompt="帮我安排今天的计划">安排今天的计划</button>
+                  <button type="button" data-prompt="给我一个简单的晚餐建议">想一个晚餐建议</button>
+                  <button type="button" data-prompt="用简单的话解释什么是人工智能">解释一个新概念</button>
+                  <button type="button" id="micro-story-start">一起走一段微故事</button>
+                </div>
+                <section class="micro-story" id="micro-story" aria-labelledby="micro-story-title" hidden>
+                  <span class="eyebrow">LOCAL STORY · 离线互动</span>
+                  <h2 id="micro-story-title">月港的纸船</h2>
+                  <p class="micro-story-text" id="micro-story-text" aria-live="polite"></p>
+                  <p class="micro-story-status" id="micro-story-status" role="status" aria-live="polite">
+                    纯本地分支故事；不调用模型、不联网，也不会保存为记忆。
+                  </p>
+                  <div class="micro-story-choices" id="micro-story-choices" role="group" aria-label="故事选择"></div>
+                  <div class="micro-story-actions">
+                    <button class="icon-button" id="micro-story-back" type="button">回上一步 · 改方向</button>
+                    <button class="icon-button" id="micro-story-pause" type="button">暂停</button>
+                    <button class="icon-button" id="micro-story-restart" type="button">重新开始</button>
+                    <button class="icon-button" id="micro-story-exit" type="button">退出故事</button>
+                  </div>
+                </section>
               </div>
             </div>
           </div>
@@ -643,6 +661,7 @@
         </div>
       </dialog>
     </main>
+    <script src="./voice-playback.js"></script>
     <script src="./renderer.js"></script>
   </body>
 </html>

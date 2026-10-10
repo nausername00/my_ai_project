@@ -7,7 +7,7 @@ const {
   session,
   shell,
 } = require("electron");
-const { randomBytes, randomUUID } = require("node:crypto");
+const { createHmac, randomBytes, randomUUID } = require("node:crypto");
 const { execFileSync, spawn } = require("node:child_process");
 const fs = require("node:fs/promises");
 const net = require("node:net");
@@ -23,6 +23,7 @@ const {
 
 const projectRoot = path.resolve(__dirname, "..");
 const toolApprovalCapability = randomBytes(32).toString("hex");
+const visionConsentCapability = randomBytes(32).toString("hex");
 const agentWorkspaceRoot =
   process.env.MOLING_WORKSPACE_ROOT ||
   (app.isPackaged ? "" : projectRoot);
@@ -51,7 +52,9 @@ let backendProcess;
 let apiBaseUrl;
 let mainWindow;
 let floatingWindow;
+let miniGameWindow;
 let floatingWindowReady = false;
+let floatingCharacterUpdateVersion = 0;
 let notificationPollTimer;
 const pendingNotifications = [];
 const notificationActions = new Map();
@@ -115,9 +118,20 @@ async function chooseAndAnalyzeImage() {
   if (bytes.byteLength !== stats.size || bytes.byteLength > 10 * 1024 * 1024) {
     throw new Error("图片在确认后发生变化或超过大小限制，请重新选择。");
   }
+  const nonce = randomBytes(16).toString("hex");
+  const timestamp = String(Date.now());
+  const consentPayload = `${nonce}.${timestamp}`;
+  const consent = createHmac(
+    "sha256",
+    Buffer.from(visionConsentCapability, "hex"),
+  )
+    .update(consentPayload)
+    .digest("hex");
   const result = await callApi("/v1/vision/analyze", "POST", {
     image_base64: bytes.toString("base64"),
     content_type: contentType,
+  }, {
+    "X-Moling-Vision-Consent": `${consentPayload}.${consent}`,
   });
   return {
     canceled: false,
@@ -172,6 +186,7 @@ async function startBackend() {
     OLLAMA_MODEL: ollamaModelName,
     OLLAMA_URL: ollamaBaseUrl,
     MOLING_TOOL_CAPABILITY: agentWorkspaceRoot ? toolApprovalCapability : "",
+    MOLING_VISION_CAPABILITY: visionConsentCapability,
     WORKSPACE_ROOT: agentWorkspaceRoot || app.getPath("userData"),
   };
   if (app.isPackaged) {
@@ -896,6 +911,46 @@ function registerIpcHandlers() {
     if (typeof scope === "string" && scope.trim()) body.scope = scope.trim();
     return callApi("/v1/agent/traces", "POST", body);
   });
+  const miniGamePath = () => path.join(__dirname, "moling-mini-game.html");
+  ipcMain.handle("companion:mini-game-exists", async () => {
+    try {
+      await fs.access(miniGamePath());
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  ipcMain.handle("companion:open-mini-game", async () => {
+    try {
+      await fs.access(miniGamePath());
+    } catch {
+      throw new Error("小游戏文件尚未生成；先在“共创一个小游戏”计划中创建 Frontend/moling-mini-game.html。");
+    }
+    if (miniGameWindow && !miniGameWindow.isDestroyed()) {
+      miniGameWindow.show();
+      miniGameWindow.focus();
+      return { opened: true };
+    }
+    miniGameWindow = new BrowserWindow({
+      width: 900,
+      height: 700,
+      minWidth: 480,
+      minHeight: 360,
+      title: "墨灵共创的小游戏",
+      backgroundColor: "#ffffff",
+      autoHideMenuBar: true,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    });
+    miniGameWindow.on("closed", () => {
+      miniGameWindow = null;
+    });
+    miniGameWindow.loadFile(miniGamePath());
+    return { opened: true };
+  });
   ipcMain.handle("companion:verify-agent-tool", (_event, request) =>
     callApi("/v1/agent/tool/verify", "POST", request),
   );
@@ -1098,15 +1153,19 @@ function createWindow() {
 
 async function pushCharacterToFloating() {
   if (!floatingWindow || floatingWindow.isDestroyed()) return;
+  const updateVersion = ++floatingCharacterUpdateVersion;
   try {
     const { character } = await callApi("/v1/character");
+    if (updateVersion !== floatingCharacterUpdateVersion) return;
     let moodLabel = "";
     let moodKey = "";
     try {
       const affect = await callApi("/v1/affect");
+      if (updateVersion !== floatingCharacterUpdateVersion) return;
       moodLabel = affect?.label || affect?.mood || "";
       moodKey = affect?.mood || "";
     } catch {
+      if (updateVersion !== floatingCharacterUpdateVersion) return;
       moodLabel = "";
       moodKey = "";
     }
@@ -1116,9 +1175,19 @@ async function pushCharacterToFloating() {
     if (portraitName) {
       try {
         avatarDataUrl = await readAvatar(portraitName);
+        if (updateVersion !== floatingCharacterUpdateVersion) return;
       } catch {
+        if (updateVersion !== floatingCharacterUpdateVersion) return;
         avatarDataUrl = null;
       }
+    }
+    if (
+      updateVersion !== floatingCharacterUpdateVersion ||
+      !floatingWindow ||
+      floatingWindow.isDestroyed() ||
+      !floatingWindowReady
+    ) {
+      return;
     }
     floatingWindow.webContents.send("companion:character-updated", {
       nickname: character?.nickname || "墨灵",

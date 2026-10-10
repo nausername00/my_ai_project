@@ -8,6 +8,11 @@ const html = fs.readFileSync(path.join(frontendDirectory, "index.html"), "utf8")
 const css = fs.readFileSync(path.join(frontendDirectory, "style.css"), "utf8");
 const renderer = fs.readFileSync(path.join(frontendDirectory, "renderer.js"), "utf8");
 const main = fs.readFileSync(path.join(frontendDirectory, "main.cjs"), "utf8");
+const floating = fs.readFileSync(path.join(frontendDirectory, "floating.html"), "utf8");
+const index = fs.readFileSync(path.join(frontendDirectory, "index.html"), "utf8");
+const packageManifest = JSON.parse(
+  fs.readFileSync(path.join(frontendDirectory, "package.json"), "utf8"),
+);
 
 test("collapsed navigation keeps an accessible new-chat action and distinct workspaces", () => {
   assert.match(
@@ -89,23 +94,65 @@ test("voice preferences and user-selected image analysis are visible, local-firs
   assert.match(html, /id="image-button"[^>]*title="选择一张图片，单次分析"/);
   assert.match(renderer, /function applyVoicePreferences\(audio\)/);
   assert.match(renderer, /localStorage\.setItem\(VOICE_PREFERENCES_KEY/);
+  assert.match(renderer, /window\.companion\.synthesize\(text, selectedVoice\)/);
+  assert.match(renderer, /getCharacterSynthesisVoice\(\)/);
+  assert.match(index, /voice-playback\.js[\s\S]*renderer\.js/);
+  assert.ok(packageManifest.build.files.includes("voice-playback.js"));
+  assert.match(renderer, /translatorVoiceSelect\.append\(option\)/);
+  assert.match(renderer, /无法读取本地声线目录/);
   assert.match(main, /showOpenDialog/);
   assert.match(main, /\/v1\/vision\/analyze/);
+  assert.match(main, /X-Moling-Vision-Consent/);
+  assert.match(main, /createHmac\([\s\S]*?"sha256"/);
   assert.match(renderer, /possible_interpretations/);
   assert.match(renderer, /模型看错了/);
 });
 
-test("plans can be cleared safely and offer a review-first offline mini-game task", () => {
+test("floating character presentation follows current affect and rejects stale updates", () => {
+  assert.match(main, /ipcMain\.handle\("companion:set-affect", async[\s\S]*?pushCharacterToFloating\(\)/);
+  assert.match(main, /updateVersion !== floatingCharacterUpdateVersion/);
+  assert.match(main, /emotionPortrait \|\| character\?\.avatar/);
+  assert.match(floating, /characterUpdateVersion/);
+  assert.match(floating, /image\.onerror = \(\) => \{[\s\S]*?updateVersion !== characterUpdateVersion/);
+  assert.match(floating, /image\.removeAttribute\("src"\)/);
+});
+
+test("plans can be cleared honestly and offer a review-first offline mini-game task", () => {
   assert.match(html, /id="brain-plan-clear"[^>]*>清除计划 · 停止后续步骤/);
   assert.match(html, /id="mini-game-plan"[^>]*>共创一个小游戏/);
   assert.match(
     renderer,
-    /当前已批准的单步工具调用无法中断。清除计划只会阻止后续步骤/,
+    /正在执行的步骤可通过观察面板的“停止当前步骤”请求中断/,
   );
   assert.match(renderer, /计划清除前已批准的当前步骤已完成/);
+  assert.match(renderer, /停止当前步骤/);
+  assert.doesNotMatch(renderer, /当前已批准的单步工具调用无法中断/);
+  assert.match(renderer, /const requestVersion = \+\+avatarLoadVersion/);
+  assert.match(renderer, /requestVersion === avatarLoadVersion/);
   assert.match(renderer, /不加载外部资源或联网/);
   assert.match(renderer, /绝不覆盖已有文件/);
   assert.match(renderer, /create_project_file/);
+});
+
+test("micro-story is local, branching, reversible, pausable, and disposable", () => {
+  assert.match(html, /id="micro-story-start"[^>]*>一起走一段微故事/);
+  assert.match(html, /id="micro-story"[^>]*hidden/);
+  for (const id of [
+    "micro-story-choices",
+    "micro-story-back",
+    "micro-story-pause",
+    "micro-story-restart",
+    "micro-story-exit",
+  ]) {
+    assert.match(html, new RegExp(`id="${id}"`));
+  }
+  assert.match(renderer, /const microStoryNodes = \{/);
+  assert.match(renderer, /microStoryHistory\.push\(microStoryNode\)/);
+  assert.match(renderer, /microStoryNode = microStoryHistory\.pop\(\)/);
+  assert.match(renderer, /microStoryPaused = !microStoryPaused/);
+  assert.match(renderer, /resetMicroStory\(true\)/);
+  assert.match(renderer, /不调用模型、不联网，也不会保存为记忆/);
+  assert.match(css, /\.micro-story-choice:hover:not\(:disabled\)/);
 });
 
 test("starting a plan or collaboration clears stale results from the other flow", () => {
