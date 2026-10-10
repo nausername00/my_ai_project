@@ -1415,7 +1415,6 @@ async function emotionTourVoiceSample() {
     status.textContent = `试读失败：${error.message}`;
   }
 }
-}
 
 function setAvatarTargets(
   dataUrl,
