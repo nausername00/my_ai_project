@@ -119,6 +119,8 @@ let modelFiles = [];
 const modelFileSizes = new Map();
 let modelEmotionMapping = {};
 let emotionAvatars = {};
+let runtimeEmotionAvatars = {};
+let baseAvatarFileName = null;
 let selectedModelFile = "";
 let saveAppearanceRequested = false;
 let translationRequestVersion = 0;
@@ -1252,8 +1254,11 @@ async function loadCharacter() {
       result.character.nickname.slice(0, 1);
     document.getElementById("settings-avatar-fallback").textContent =
       result.character.nickname.slice(0, 1);
+    runtimeEmotionAvatars = structuredClone(result.character.emotion_avatars || {});
+    baseAvatarFileName = result.character.avatar || null;
     try {
-      await loadAvatar(result.character.avatar);
+      await loadAvatar(baseAvatarFileName);
+      await applyEmotionAvatar(affectMood.value);
     } catch (error) {
       setAvatarTargets(null);
       avatarStatus.textContent = `无法读取角色立绘：${error.message}`;
@@ -3130,6 +3135,17 @@ function setMemoryStatus(message, isError = false) {
   memoryStatus.classList.toggle("error", isError);
 }
 
+async function applyEmotionAvatar(mood) {
+  const portrait = runtimeEmotionAvatars[mood] || null;
+  const target = portrait || baseAvatarFileName;
+  if (!target) return;
+  try {
+    await loadAvatar(target);
+  } catch {
+    // 情绪立绘读取失败时保留当前显示
+  }
+}
+
 function updateAffect(state) {
   affectMood.value = state.mood;
   affectIndicator.textContent = `模拟状态 · ${state.label}`;
@@ -3137,6 +3153,7 @@ function updateAffect(state) {
   document.getElementById("topbar-avatar").dataset.mood = state.mood;
   document.getElementById("settings-avatar").dataset.mood = state.mood;
   affectReason.textContent = `状态线索：${state.reason}`;
+  applyEmotionAvatar(state.mood);
 }
 
 async function loadAffect() {
