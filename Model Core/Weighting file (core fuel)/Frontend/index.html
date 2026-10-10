@@ -421,6 +421,12 @@
           <div class="affect-settings">
           <h3>互动状态（模拟）</h3>
             <p>开心、好奇、担心、害羞等是角色当前的模拟表达状态；温柔、真诚、有主见是稳定人格。当前状态只按文字线索调整或由你手动设置，不会录音分析情绪，也不代表真实感受。</p>
+            <label for="avatar-display-mode">立绘表现方式</label>
+            <select id="avatar-display-mode" aria-describedby="avatar-display-mode-help">
+              <option value="follow">跟随模拟状态切换立绘</option>
+              <option value="base">固定显示基础立绘</option>
+            </select>
+            <p class="character-card-help" id="avatar-display-mode-help">此偏好保存在本浏览器，并同时应用到聊天头像、角色展示和悬浮窗；模拟状态仍会更新，但不会因此改变立绘。</p>
             <label for="affect-mood">当前表现状态</label>
             <select id="affect-mood">
               <option value="calm">平静</option>
@@ -643,6 +649,14 @@
             <div class="model-resource-list" id="model-preview-action-tags"></div>
             <div class="model-preview-mappings" id="model-preview-mappings"></div>
             <p class="character-card-help" id="model-runtime-note"></p>
+            <div class="emotion-tour">
+              <h3>情绪巡演预览</h3>
+              <div class="emotion-tour-actions">
+                <button class="icon-button" type="button" id="emotion-tour-start">▶ 轮播 8 情绪立绘</button>
+                <button class="icon-button" type="button" id="emotion-tour-voice">试读当前声线</button>
+              </div>
+              <div class="emotion-tour-status" id="emotion-tour-status"></div>
+            </div>
           </section>
         </div>
         <section class="model-pose-settings">
@@ -662,6 +676,7 @@
       </dialog>
     </main>
     <script src="./voice-playback.js"></script>
+    <script src="./avatar-display.js"></script>
     <script src="./renderer.js"></script>
   </body>
 </html>

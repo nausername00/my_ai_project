@@ -1311,6 +1311,83 @@ async function updateModelPreview() {
       : `${format.toUpperCase()} 资源已登记并纳入卡片；对应运行时渲染器尚未集成，当前只显示资源清单与静态立绘。`;
 }
 
+let emotionTourTimer = null;
+let emotionTourIndex = 0;
+
+function stopEmotionTour() {
+  if (emotionTourTimer !== null) {
+    clearInterval(emotionTourTimer);
+    emotionTourTimer = null;
+  }
+  const startButton = document.getElementById("emotion-tour-start");
+  if (startButton) startButton.textContent = "▶ 轮播 8 情绪立绘";
+}
+
+async function showEmotionTourStep(index) {
+  const [emotion, label] = simulatedEmotions[index];
+  const status = document.getElementById("emotion-tour-status");
+  const previewImage = document.getElementById("model-preview-image");
+  const previewFallback = document.getElementById("model-preview-fallback");
+  status.textContent = `情绪 ${index + 1}/${simulatedEmotions.length} · ${label}`;
+  const portraitName = emotionAvatars[emotion];
+  if (portraitName) {
+    try {
+      const dataUrl = await window.companion.getAvatar(portraitName);
+      previewImage.src = dataUrl;
+      previewImage.hidden = false;
+      previewFallback.hidden = true;
+      return;
+    } catch {
+      // 立绘读取失败时落到文字占位
+    }
+  }
+  previewImage.hidden = true;
+  previewImage.removeAttribute("src");
+  previewFallback.hidden = false;
+}
+
+async function startEmotionTour() {
+  stopEmotionTour();
+  const startButton = document.getElementById("emotion-tour-start");
+  startButton.textContent = "⏸ 停止巡演";
+  emotionTourIndex = 0;
+  await showEmotionTourStep(0);
+  emotionTourTimer = setInterval(async () => {
+    emotionTourIndex = (emotionTourIndex + 1) % simulatedEmotions.length;
+    await showEmotionTourStep(emotionTourIndex);
+  }, 2200);
+}
+
+async function emotionTourVoiceSample() {
+  const status = document.getElementById("emotion-tour-status");
+  const label = simulatedEmotions[emotionTourIndex]?.[1] || "平静";
+  const text = `我现在是${label}的心情`;
+  status.textContent = "正在用当前声线试读…";
+  try {
+    const audio = await window.companion.synthesize(
+      text,
+      getCharacterSynthesisVoice(),
+    );
+    const bytes =
+      audio instanceof Uint8Array
+        ? audio
+        : audio instanceof ArrayBuffer
+          ? new Uint8Array(audio)
+          : null;
+    if (!bytes || bytes.byteLength < 44) throw new Error("语音数据无效");
+    const url = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+    const playback = new Audio(url);
+    applyVoicePreferences(playback);
+    playback.addEventListener("ended", () => URL.revokeObjectURL(url), { once: true });
+    playback.addEventListener("error", () => URL.revokeObjectURL(url), { once: true });
+    await playback.play();
+    status.textContent = `试读：${text}`;
+  } catch (error) {
+    status.textContent = `试读失败：${error.message}`;
+  }
+}
+}
+
 function setAvatarTargets(
   dataUrl,
   requestVersion = avatarLoadVersion,
@@ -3359,6 +3436,19 @@ document.getElementById("model-file-select").addEventListener("change", (event) 
   selectedModelFile = event.currentTarget.value;
   characterForm.dataset.dirty = "true";
   updateModelPreview();
+});
+
+document.getElementById("emotion-tour-start").addEventListener("click", () => {
+  if (emotionTourTimer !== null) {
+    stopEmotionTour();
+    updateModelPreview();
+  } else {
+    void startEmotionTour();
+  }
+});
+
+document.getElementById("emotion-tour-voice").addEventListener("click", () => {
+  void emotionTourVoiceSample();
 });
 
 document.getElementById("model-actions").addEventListener("input", () => {

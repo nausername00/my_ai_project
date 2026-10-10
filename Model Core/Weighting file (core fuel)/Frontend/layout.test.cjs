@@ -269,6 +269,20 @@ test("image analysis classifies the image type and offers read/organize/list act
   assert.match(css, /\.image-analysis-type/);
 });
 
+test("character studio offers an 8-emotion portrait tour with a voice sample", () => {
+  assert.match(html, /id="emotion-tour-start"/);
+  assert.match(html, /id="emotion-tour-voice"/);
+  assert.match(html, /情绪巡演预览/);
+  assert.match(renderer, /async function startEmotionTour\(\)/);
+  assert.match(renderer, /async function showEmotionTourStep\(index\)/);
+  assert.match(renderer, /emotionTourTimer = setInterval/);
+  assert.match(renderer, /2200\);/);
+  assert.match(renderer, /async function emotionTourVoiceSample\(\)/);
+  assert.match(renderer, /getCharacterSynthesisVoice\(\)/);
+  assert.match(css, /\.emotion-tour\s*\{/);
+  assert.match(css, /\.emotion-tour-actions\s*\{/);
+});
+
 test("external partner reviews require a local preview and per-run confirmation", () => {
   assert.match(html, /默认只使用本地主引擎/);
   assert.match(html, /id="partners-external-options"/);

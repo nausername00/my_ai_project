@@ -2468,6 +2468,32 @@ button {
   line-height: 1.5;
 }
 
+.emotion-tour {
+  margin-top: 12px;
+  border-top: 1px dashed var(--line);
+  padding-top: 10px;
+}
+
+.emotion-tour h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin: 0 0 8px;
+}
+
+.emotion-tour-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.emotion-tour-status {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  min-height: 16px;
+}
+
 .model-resource-chip {
   max-width: 100%;
   padding: 4px 7px;
