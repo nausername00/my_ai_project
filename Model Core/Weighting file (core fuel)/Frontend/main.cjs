@@ -1446,6 +1446,18 @@ app.whenReady().then(async () => {
     registerIpcHandlers();
     createWindow();
     createFloatingWindow();
+    // J3：真实窗口验收（MOLING_E2E=1 时由 npm run test:e2e 触发）。
+    if (process.env.MOLING_E2E === "1") {
+      try {
+        const { runE2ESmoke } = require("./e2e/e2e-runner.cjs");
+        await runE2ESmoke({ app, mainWindow, floatingWindow });
+        return; // runE2ESmoke 内部 app.exit
+      } catch (error) {
+        console.error("E2E runner failed:", error);
+        app.exit(1);
+        return;
+      }
+    }
     notificationPollTimer = setInterval(() => {
       syncBackendNotifications().catch((error) => {
         console.error("Could not sync local notifications:", error);
