@@ -247,6 +247,7 @@ async function callApi(route, method = "GET", body, extraHeaders = {}) {
     "/v1/agent/plan": ["POST"],
     "/v1/agent/tools": ["GET"],
     "/v1/agent/roles": ["GET"],
+    "/v1/agent/traces": ["GET", "POST"],
     "/v1/social/status": ["GET"],
     "/v1/social/partners": ["GET"],
     "/v1/social/collaborate": ["POST"],
@@ -268,7 +269,13 @@ async function callApi(route, method = "GET", body, extraHeaders = {}) {
   const routePath = new URL(route, "http://127.0.0.1").pathname;
   const allowedMethods =
     staticRoutes[routePath] ||
-    (/^\/v1\/memory\/[a-f0-9-]+$/i.test(routePath) ? ["PUT", "DELETE"] : []);
+    (/^\/v1\/memory\/[a-f0-9-]+$/i.test(routePath) ? ["PUT", "DELETE"] : []) ||
+    (/^\/v1\/agent\/traces\/[0-9a-f-]{8,64}$/i.test(routePath)
+      ? ["GET"]
+      : []) ||
+    (/^\/v1\/agent\/traces\/[0-9a-f-]{8,64}\/cancel$/i.test(routePath)
+      ? ["POST"]
+      : []);
   if (!allowedMethods.includes(method)) {
     throw new Error("Unsupported API route");
   }
@@ -759,7 +766,7 @@ function registerIpcHandlers() {
   ipcMain.handle("companion:list-agent-tools", () => callApi("/v1/agent/tools"));
   ipcMain.handle(
     "companion:execute-agent-tool",
-    async (event, tool, arguments_) => {
+    async (event, tool, arguments_, traceId) => {
       const toolLabels = {
         list_project_files: "读取项目文件清单",
         read_project_file: "读取项目文本文件",
@@ -848,15 +855,40 @@ function registerIpcHandlers() {
       if (approval.response !== 0) {
         return { approved: false, observation: null };
       }
+      const executeBody = { tool, arguments: arguments_ };
+      if (typeof traceId === "string" && traceId.trim()) {
+        executeBody.trace_id = traceId.trim();
+      }
       const result = await callApi(
         "/v1/agent/tool/execute",
         "POST",
-        { tool, arguments: arguments_ },
+        executeBody,
         { "X-Moling-Tool-Capability": toolApprovalCapability },
       );
       return { approved: true, ...result };
     },
   );
+  ipcMain.handle("companion:cancel-agent-trace", (_event, traceId) => {
+    if (typeof traceId !== "string" || !traceId.trim()) {
+      throw new Error("trace id 无效");
+    }
+    return callApi(
+      `/v1/agent/traces/${encodeURIComponent(traceId.trim())}/cancel`,
+      "POST",
+      {},
+    );
+  });
+  ipcMain.handle("companion:list-agent-traces", (_event, limit) => {
+    const clamped = Number.isFinite(limit)
+      ? Math.max(1, Math.min(50, Math.floor(limit)))
+      : 20;
+    return callApi(`/v1/agent/traces?limit=${clamped}`);
+  });
+  ipcMain.handle("companion:create-agent-trace", (_event, task, scope) => {
+    const body = { task: typeof task === "string" && task.trim() ? task : "工具执行" };
+    if (typeof scope === "string" && scope.trim()) body.scope = scope.trim();
+    return callApi("/v1/agent/traces", "POST", body);
+  });
   ipcMain.handle("companion:verify-agent-tool", (_event, request) =>
     callApi("/v1/agent/tool/verify", "POST", request),
   );

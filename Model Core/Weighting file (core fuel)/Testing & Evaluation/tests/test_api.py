@@ -2,13 +2,17 @@ import base64
 import json
 import os
 import tempfile
+import threading
+import time
 import unittest
 from http.client import HTTPConnection
 from pathlib import Path
 from threading import Thread
 from unittest.mock import patch
 
+from agent_tools import _trace_store
 from app import create_server
+from computer_use import run_sandboxed_shell
 from inference import ModelUnavailableError
 from speech import SpeechInputError, SpeechService, SpeechUnavailableError
 
@@ -1845,3 +1849,136 @@ class SpeechServiceTests(unittest.TestCase):
                     continue  # None means "use default" and is valid
                 with self.assertRaises(SpeechInputError):
                     service.synthesize_wav("你好", voice=bad_voice)
+
+
+class AgentTraceTests(unittest.TestCase):
+    """Execution traces: record, expose, and cancel in-flight tool calls."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.environment = patch.dict(
+            os.environ,
+            {
+                "MODEL_BACKEND": "placeholder",
+                "CHARACTER_CARD_PATH": os.path.join(self.temp_dir.name, "character.json"),
+                "CHARACTER_MEMORY_PATH": os.path.join(self.temp_dir.name, "memory.json"),
+                "CHARACTER_ASSET_DIR": self.temp_dir.name,
+                "CHARACTER_PRIVACY_PATH": os.path.join(self.temp_dir.name, "privacy.json"),
+                "CHARACTER_AFFECT_PATH": os.path.join(self.temp_dir.name, "affect.json"),
+            },
+        )
+        self.environment.start()
+        self.server = create_server()
+        self.server.RequestHandlerClass._notifications.clear()
+        self.thread = Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.connection = HTTPConnection("127.0.0.1", self.server.server_port)
+
+    def tearDown(self) -> None:
+        self.connection.close()
+        self.server.shutdown()
+        self.server.server_close()
+        self.environment.stop()
+        self.temp_dir.cleanup()
+
+    def test_trace_store_lifecycle(self) -> None:
+        trace_id = _trace_store.create("整理项目文档", scope="read_only")
+        entries = _trace_store.list()
+        self.assertTrue(any(item["trace_id"] == trace_id for item in entries))
+
+        _trace_store.append(trace_id, "planned", {"steps": 3})
+        trace = _trace_store.get(trace_id)
+        self.assertIsNotNone(trace)
+        self.assertEqual(trace["status"], "planned")
+        phases = [entry["phase"] for entry in trace["phases"]]
+        self.assertEqual(phases[:2], ["proposed", "planned"])
+
+    def test_execute_records_trace_phases(self) -> None:
+        handler = self.server.RequestHandlerClass
+        previous_root = handler.workspace_root
+        previous_capability = handler.tool_capability
+        handler.workspace_root = Path(self.temp_dir.name)
+        handler.tool_capability = "test-capability"
+        (handler.workspace_root / "readme.md").write_text("safe", encoding="utf-8")
+        trace_id = _trace_store.create("读取项目说明", scope="read_only")
+        try:
+            self.connection.request(
+                "POST",
+                "/v1/agent/tool/execute",
+                json.dumps(
+                    {
+                        "tool": "read_project_file",
+                        "arguments": {"path": "readme.md"},
+                        "trace_id": trace_id,
+                    }
+                ),
+                {
+                    "Content-Type": "application/json",
+                    "X-Moling-Tool-Capability": "test-capability",
+                },
+            )
+            response = self.connection.getresponse()
+            result = json.loads(response.read())
+        finally:
+            handler.workspace_root = previous_root
+            handler.tool_capability = previous_capability
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(result["observation"]["content"], "safe")
+        trace = _trace_store.get(trace_id)
+        phases = [entry["phase"] for entry in trace["phases"]]
+        self.assertIn("executing", phases)
+        self.assertIn("observed", phases)
+
+    def test_cancel_endpoint_marks_trace(self) -> None:
+        trace_id = _trace_store.create("待取消的任务")
+        self.connection.request(
+            "POST",
+            f"/v1/agent/traces/{trace_id}/cancel",
+            b"",
+            {"Content-Type": "application/json"},
+        )
+        response = self.connection.getresponse()
+        payload = json.loads(response.read())
+
+        self.assertEqual(response.status, 200)
+        self.assertTrue(payload["cancelled"])
+        self.assertEqual(payload["trace"]["status"], "cancelled")
+
+    def test_unknown_trace_returns_not_found(self) -> None:
+        self.connection.request(
+            "POST",
+            "/v1/agent/traces/00000000-0000-0000-0000-000000000000/cancel",
+            b"",
+            {"Content-Type": "application/json"},
+        )
+        response = self.connection.getresponse()
+        body = json.loads(response.read())
+        self.assertEqual(response.status, 404)
+        self.assertIn("not found", body["error"])
+
+    def test_running_shell_tool_can_be_cancelled(self) -> None:
+        cancel_event = threading.Event()
+        holder: dict[str, object] = {}
+
+        def run() -> None:
+            holder["result"] = run_sandboxed_shell(
+                ["python", "-c", "import time; time.sleep(30)"],
+                approved=True,
+                purpose="test-cancel",
+                timeout_seconds=30,
+                cancel_event=cancel_event,
+            )
+
+        worker = threading.Thread(target=run, daemon=True)
+        started = time.monotonic()
+        worker.start()
+        time.sleep(0.8)
+        cancel_event.set()
+        worker.join(timeout=10)
+
+        self.assertFalse(worker.is_alive())
+        result = holder.get("result")
+        self.assertIsNotNone(result)
+        self.assertTrue(result.cancelled)
+        self.assertLess(result.duration_ms, 15_000)

@@ -1,8 +1,145 @@
 """Bounded project tools exposed to the approved agent loop."""
 
 import hashlib
+import threading
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+class AgentTraceStore:
+    """In-memory, bounded record of one approved agent task.
+
+    Phases follow the roadmap state machine: proposed → planned →
+    executing → observed → verified, with cancelled / failed as terminal
+    outcomes. The store never executes anything itself; it only records
+    what the caller reports and holds a per-trace cancel event so a
+    running tool call can be asked to stop.
+    """
+
+    MAX_TRACES = 50
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._traces: dict[str, dict[str, Any]] = {}
+        self._cancel_events: dict[str, threading.Event] = {}
+
+    def create(self, task: str, *, scope: str | None = None) -> str:
+        if not isinstance(task, str) or not task.strip() or len(task) > 4000:
+            raise ValueError("task must be a non-empty string up to 4000 characters")
+        trace_id = str(uuid.uuid4())
+        with self._lock:
+            if len(self._traces) >= self.MAX_TRACES:
+                oldest = sorted(
+                    self._traces,
+                    key=lambda key: self._traces[key]["created_at"],
+                )[0]
+                self._traces.pop(oldest, None)
+                self._cancel_events.pop(oldest, None)
+            self._traces[trace_id] = {
+                "trace_id": trace_id,
+                "task": task.strip(),
+                "scope": scope,
+                "status": "proposed",
+                "created_at": _utc_now_iso(),
+                "updated_at": _utc_now_iso(),
+                "phases": [
+                    {
+                        "phase": "proposed",
+                        "at": _utc_now_iso(),
+                        "payload": {"scope": scope},
+                    }
+                ],
+            }
+        return trace_id
+
+    def append(
+        self,
+        trace_id: str,
+        phase: str,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        if phase not in {
+            "proposed",
+            "planned",
+            "executing",
+            "observed",
+            "verified",
+            "cancelled",
+            "failed",
+        }:
+            raise ValueError(f"unknown trace phase: {phase}")
+        with self._lock:
+            trace = self._traces.get(trace_id)
+            if trace is None:
+                raise KeyError(f"trace not found: {trace_id}")
+            trace["phases"].append(
+                {
+                    "phase": phase,
+                    "at": _utc_now_iso(),
+                    "payload": payload,
+                }
+            )
+            trace["status"] = phase
+            trace["updated_at"] = _utc_now_iso()
+
+    def get(self, trace_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            trace = self._traces.get(trace_id)
+            return dict(trace) if trace else None
+
+    def list(self, limit: int = 20) -> list[dict[str, Any]]:
+        limit = max(1, min(int(limit), 50))
+        with self._lock:
+            items = sorted(
+                self._traces.values(),
+                key=lambda item: item["updated_at"],
+                reverse=True,
+            )[:limit]
+            return [
+                {
+                    "trace_id": item["trace_id"],
+                    "task": item["task"],
+                    "scope": item["scope"],
+                    "status": item["status"],
+                    "created_at": item["created_at"],
+                    "updated_at": item["updated_at"],
+                }
+                for item in items
+            ]
+
+    def cancel_event_for(self, trace_id: str) -> threading.Event:
+        with self._lock:
+            if trace_id not in self._traces:
+                raise KeyError(f"trace not found: {trace_id}")
+            return self._cancel_events.setdefault(trace_id, threading.Event())
+
+    def cancel(self, trace_id: str) -> bool:
+        with self._lock:
+            trace = self._traces.get(trace_id)
+            if trace is None:
+                return False
+            event = self._cancel_events.setdefault(trace_id, threading.Event())
+            event.set()
+            if trace["status"] not in {"observed", "verified", "cancelled", "failed"}:
+                trace["phases"].append(
+                    {
+                        "phase": "cancelled",
+                        "at": _utc_now_iso(),
+                        "payload": {"requested_by": "user"},
+                    }
+                )
+                trace["status"] = "cancelled"
+                trace["updated_at"] = _utc_now_iso()
+            return True
+
+
+_trace_store = AgentTraceStore()
 
 
 MAX_READ_BYTES = 256 * 1024
@@ -563,6 +700,8 @@ def execute_project_tool(
     workspace_root: Path,
     tool_name: Any,
     arguments: Any,
+    *,
+    cancel_event: threading.Event | None = None,
 ) -> dict[str, Any]:
     if tool_name == "list_project_files":
         return list_project_files(workspace_root, arguments)
@@ -575,7 +714,7 @@ def execute_project_tool(
     if tool_name == "patch_project_file":
         return patch_project_file(workspace_root, arguments)
     # run_tests / run_sandboxed_shell 把权限和 dispatch 交给 computer_use 模块；
-    # 这里只负责参数校验。
+    # 这里只负责参数校验。cancel_event 可让运行中的 shell 调用被用户停止。
     if tool_name in {"run_tests", "run_sandboxed_shell"}:
         args = validate_tool_arguments(tool_name, arguments)
         import computer_use as _cu
@@ -588,6 +727,7 @@ def execute_project_tool(
             cwd=str(args.get("cwd") or workspace_root),
             timeout_seconds=int(args.get("timeout_seconds", 180 if tool_name == "run_tests" else 60)),
             safe_commands=safe,
+            cancel_event=cancel_event,
         )
         return {"tool": tool_name, "result": result.to_dict()}
     # 其余（browser / visualize / system / memory 等）由 controller 直接路由到对应模块；

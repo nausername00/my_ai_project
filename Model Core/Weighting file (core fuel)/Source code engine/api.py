@@ -29,6 +29,7 @@ from pathlib import Path
 
 from agent_tools import (
     PLAN_TOOL_NAMES,
+    _trace_store,
     execute_project_tool,
     TOOL_CATALOG,
 )
@@ -297,6 +298,22 @@ class ApiHandler(BaseHTTPRequestHandler):
                     ]
                 },
             )
+            return
+        if path == "/v1/agent/traces":
+            query = parse_qs(urlsplit(self.path).query, strict_parsing=False)
+            try:
+                limit = int(query.get("limit", ["20"])[0])
+            except (TypeError, ValueError):
+                limit = 20
+            self._send_json(HTTPStatus.OK, {"traces": _trace_store.list(limit)})
+            return
+        trace_match = re.fullmatch(r"/v1/agent/traces/([0-9a-f-]{8,64})", path)
+        if trace_match:
+            trace = _trace_store.get(trace_match.group(1))
+            if trace is None:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": "trace not found"})
+                return
+            self._send_json(HTTPStatus.OK, {"trace": trace})
             return
         if path == "/v1/agent/roles":
             self._send_json(HTTPStatus.OK, {"roles": list_collaborator_roles()})
@@ -908,13 +925,32 @@ class ApiHandler(BaseHTTPRequestHandler):
                 return
             try:
                 payload = self._read_json()
+                trace_id = payload.get("trace_id")
+                cancel_event = None
+                if trace_id:
+                    if not isinstance(trace_id, str) or not trace_id.strip():
+                        raise ValueError("trace_id must be a non-empty string")
+                    cancel_event = _trace_store.cancel_event_for(trace_id)
+                    _trace_store.append(
+                        trace_id,
+                        "executing",
+                        {"tool": payload.get("tool")},
+                    )
                 observation = execute_project_tool(
                     self.workspace_root,
                     payload.get("tool"),
                     payload.get("arguments"),
+                    cancel_event=cancel_event,
                 )
+                if trace_id:
+                    _trace_store.append(trace_id, "observed", observation)
                 self._send_json(HTTPStatus.OK, {"observation": observation})
             except (TypeError, ValueError, OSError) as error:
+                if trace_id:
+                    try:
+                        _trace_store.append(trace_id, "failed", {"error": str(error)})
+                    except (KeyError, ValueError):
+                        pass
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         if path == "/v1/agent/tool/verify":
@@ -954,6 +990,34 @@ class ApiHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             except ModelUnavailableError as error:
                 self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(error)})
+            return
+        cancel_match = re.fullmatch(
+            r"/v1/agent/traces/([0-9a-f-]{8,64})/cancel", path
+        )
+        if cancel_match:
+            trace_id = cancel_match.group(1)
+            if not _trace_store.cancel(trace_id):
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": "trace not found"})
+                return
+            self._send_json(
+                HTTPStatus.OK,
+                {"trace": _trace_store.get(trace_id), "cancelled": True},
+            )
+            return
+        if path == "/v1/agent/traces":
+            try:
+                payload = self._read_json()
+                task = payload.get("task", "工具执行")
+                scope = payload.get("scope")
+                if scope is not None and not isinstance(scope, str):
+                    raise ValueError("scope must be a string")
+                trace_id = _trace_store.create(task, scope=scope)
+                self._send_json(
+                    HTTPStatus.CREATED,
+                    {"trace_id": trace_id, "trace": _trace_store.get(trace_id)},
+                )
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         if path == "/v1/agent/reflect":
             try:

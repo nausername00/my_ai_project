@@ -2371,6 +2371,11 @@ async function executeBrainStep(stepIndex) {
     ? "请检查上方完整路径与内容预览；随后会再次弹出系统确认。"
     : "等待本次操作审批…";
   const resultNode = document.createElement("pre");
+  const stopButton = document.createElement("button");
+  stopButton.className = "icon-button brain-step-stop";
+  stopButton.type = "button";
+  stopButton.textContent = "停止这一步";
+  stopButton.hidden = true;
   const verifyButton = document.createElement("button");
   verifyButton.className = "icon-button brain-observation-verify";
   verifyButton.type = "button";
@@ -2378,7 +2383,7 @@ async function executeBrainStep(stepIndex) {
   verifyButton.hidden = true;
   const verification = document.createElement("p");
   verification.className = "brain-verification";
-  observationPanel.append(heading, status, resultNode, verifyButton, verification);
+  observationPanel.append(heading, status, resultNode, stopButton, verifyButton, verification);
   if (!observationPanel.isConnected) brainPlanObservations.prepend(observationPanel);
   button.dataset.busy = "true";
   button.disabled = true;
@@ -2387,10 +2392,36 @@ async function executeBrainStep(stepIndex) {
     "awaiting-approval",
     isCreate ? "等待创建审批" : "等待审批",
   );
+  let activeTraceId = "";
+  let traceRecord = null;
+  try {
+    traceRecord = await window.companion.createAgentTrace(step.title, step.tool);
+  } catch {
+    traceRecord = null;
+  }
+  activeTraceId = traceRecord?.trace_id || "";
+  if (activeTraceId) {
+    stopButton.hidden = false;
+    stopButton.addEventListener("click", async () => {
+      stopButton.disabled = true;
+      status.textContent = "正在请求停止当前工具调用…";
+      try {
+        await window.companion.cancelAgentTrace(activeTraceId);
+      } catch (cancelError) {
+        status.textContent = `停止请求未送达：${cancelError.message}`;
+        stopButton.disabled = false;
+      }
+    });
+  }
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
   try {
-    const result = await window.companion.executeAgentTool(step.tool, step.arguments);
+    const result = await window.companion.executeAgentTool(
+      step.tool,
+      step.arguments,
+      activeTraceId || undefined,
+    );
+    stopButton.hidden = true;
     if (activeBrainPlan !== plan) {
       status.textContent = result.approved
         ? "计划清除前已批准的当前步骤已完成；观察结果保留，但不会启动其他步骤。"

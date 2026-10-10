@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from importlib.util import find_spec
 import os
 import shlex
+import threading
 import subprocess
 import sys
 from pathlib import Path
@@ -74,6 +75,7 @@ class ExecutedProcess:
     duration_ms: int
     killed: bool
     timed_out: bool
+    cancelled: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -84,6 +86,7 @@ class ExecutedProcess:
             "duration_ms": int(self.duration_ms),
             "killed": bool(self.killed),
             "timed_out": bool(self.timed_out),
+            "cancelled": bool(self.cancelled),
         }
 
 
@@ -408,6 +411,7 @@ def run_sandboxed_shell(
     env: Mapping[str, str] | None = None,
     timeout_seconds: int = 30,
     safe_commands: Iterable[str] = _SAFE_COMMANDS,
+    cancel_event: threading.Event | None = None,
 ) -> ExecutedProcess:
     _gate("run_sandboxed_shell", approved, purpose)
     import time as _t, shlex as _sh
@@ -428,6 +432,7 @@ def run_sandboxed_shell(
     t0 = _t.monotonic()
     killed = False
     timed_out = False
+    cancelled = False
     resolved_cwd = Path(cwd).resolve() if cwd else None
     proc_env = os.environ.copy()
     if env:
@@ -444,13 +449,25 @@ def run_sandboxed_shell(
         )
     except Exception as exc:
         raise DesktopAutomationError(f"failed to launch command: {exc}") from exc
-    try:
-        out, err = proc.communicate(timeout=max(1, int(timeout_seconds)))
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        killed = True
-        timed_out = True
-        out, err = proc.communicate()
+    deadline = _t.monotonic() + max(1, int(timeout_seconds))
+    out: str | None = None
+    err: str | None = None
+    while True:
+        try:
+            out, err = proc.communicate(timeout=0.2)
+            break
+        except subprocess.TimeoutExpired:
+            if cancel_event is not None and cancel_event.is_set():
+                proc.kill()
+                cancelled = True
+                out, err = proc.communicate()
+                break
+            if _t.monotonic() >= deadline:
+                proc.kill()
+                killed = True
+                timed_out = True
+                out, err = proc.communicate()
+                break
     rc = proc.returncode if proc.returncode is not None else -1
     return ExecutedProcess(
         command=tuple(cmd_list),
@@ -460,6 +477,7 @@ def run_sandboxed_shell(
         duration_ms=int(round((_t.monotonic() - t0) * 1000)),
         killed=bool(killed),
         timed_out=bool(timed_out),
+        cancelled=bool(cancelled),
     )
 
 

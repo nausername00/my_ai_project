@@ -86,8 +86,14 @@ contextBridge.exposeInMainWorld(
     createBrainPlan: (task, context) =>
       ipcRenderer.invoke("companion:create-brain-plan", task, context),
     listAgentTools: () => ipcRenderer.invoke("companion:list-agent-tools"),
-    executeAgentTool: (tool, arguments_) =>
-      ipcRenderer.invoke("companion:execute-agent-tool", tool, arguments_),
+    executeAgentTool: (tool, arguments_, traceId) =>
+      ipcRenderer.invoke("companion:execute-agent-tool", tool, arguments_, traceId),
+    cancelAgentTrace: (traceId) =>
+      ipcRenderer.invoke("companion:cancel-agent-trace", traceId),
+    listAgentTraces: (limit) =>
+      ipcRenderer.invoke("companion:list-agent-traces", limit),
+    createAgentTrace: (task, scope) =>
+      ipcRenderer.invoke("companion:create-agent-trace", task, scope),
     verifyAgentTool: (request) =>
       ipcRenderer.invoke("companion:verify-agent-tool", request),
     listMemories: () => ipcRenderer.invoke("companion:list-memories"),
