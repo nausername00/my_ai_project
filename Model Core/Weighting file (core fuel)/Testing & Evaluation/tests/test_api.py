@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from agent_tools import _trace_store
 from app import create_server
+from character import CharacterCard
 from computer_use import run_sandboxed_shell
 from inference import ModelUnavailableError
 from speech import SpeechInputError, SpeechService, SpeechUnavailableError
@@ -1215,6 +1216,51 @@ class ApiTests(unittest.TestCase):
         self.connection.request("DELETE", "/v1/characters/does-not-exist")
         response = self.connection.getresponse()
         self.assertEqual(response.status, 404)
+
+    def test_emotion_avatars_round_trip_and_validation(self) -> None:
+        store = self.server.RequestHandlerClass.character_store
+        active_id = store.get_active_character_id()
+        store.load_card(active_id)
+        card = CharacterCard.from_dict(
+            json.loads(
+                (store._card_path_for_id(active_id)).read_text(encoding="utf-8")
+            )
+        )
+        card.emotion_avatars = {"happy": "emotion-happy.png"}
+        store.save_card(card, active_id)
+        loaded = CharacterCard.from_dict(
+            json.loads(
+                (store._card_path_for_id(active_id)).read_text(encoding="utf-8")
+            )
+        )
+        self.assertEqual(loaded.emotion_avatars, {"happy": "emotion-happy.png"})
+        card.emotion_avatars = {"not-a-mood": "x.png"}
+        with self.assertRaises(Exception):
+            store.save_card(card, active_id)
+        card.emotion_avatars = {"happy": "../evil.png"}
+        with self.assertRaises(Exception):
+            store.save_card(card, active_id)
+
+    def test_character_validation_rejects_bad_avatar_and_oversized_lists(self) -> None:
+        store = self.server.RequestHandlerClass.character_store
+        active_id = store.get_active_character_id()
+        store.load_card(active_id)
+        card = CharacterCard.from_dict(
+            json.loads(
+                (store._card_path_for_id(active_id)).read_text(encoding="utf-8")
+            )
+        )
+        card.avatar = "path/avatar.png"
+        with self.assertRaises(Exception):
+            store.save_card(card, active_id)
+        card.avatar = None
+        card.actions = ["x" * 161]
+        with self.assertRaises(Exception):
+            store.save_card(card, active_id)
+        card.actions = []
+        card.expressions = ["ok"] * 201
+        with self.assertRaises(Exception):
+            store.save_card(card, active_id)
 
     def test_agent_reflection_can_create_and_persist_its_own_goal(self) -> None:
         class ReflectingEngine:

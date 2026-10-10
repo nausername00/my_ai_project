@@ -2423,7 +2423,7 @@ button {
 
 .emotion-mapping-row {
   display: grid;
-  grid-template-columns: 72px 1fr 1fr;
+  grid-template-columns: 72px 1fr 1fr auto;
   align-items: center;
   gap: 6px;
 }
@@ -2437,6 +2437,39 @@ button {
   min-width: 0;
   padding: 7px 5px;
   font-size: 10px;
+}
+
+.emotion-portrait-box {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.emotion-portrait-thumb {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  object-fit: cover;
+  border: 1px solid rgba(124, 111, 255, 0.35);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.emotion-portrait-thumb.broken {
+  opacity: 0.35;
+}
+
+.emotion-portrait-button {
+  padding: 6px 8px;
+  font-size: 10px;
+  border: 1px solid rgba(124, 111, 255, 0.4);
+  background: rgba(124, 111, 255, 0.12);
+  color: #d5d0ff;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.emotion-portrait-button:hover {
+  background: rgba(124, 111, 255, 0.24);
 }
 
 .model-studio-footer {

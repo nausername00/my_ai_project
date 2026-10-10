@@ -118,6 +118,7 @@ let editingCharacterId;
 let modelFiles = [];
 const modelFileSizes = new Map();
 let modelEmotionMapping = {};
+let emotionAvatars = {};
 let selectedModelFile = "";
 let saveAppearanceRequested = false;
 let translationRequestVersion = 0;
@@ -644,15 +645,18 @@ function addSpeechControl(message, text) {
       const releaseAudioUrl = () => {
         URL.revokeObjectURL(audioUrl);
         if (activeAudio === playback) activeAudio = undefined;
+        window.companion.notifySpeechState?.(false).catch(() => {});
       };
       playback.addEventListener("ended", releaseAudioUrl, { once: true });
       playback.addEventListener("error", releaseAudioUrl, { once: true });
       await playback.play();
+      window.companion.notifySpeechState?.(true).catch(() => {});
       button.textContent = "重新播放";
     } catch (error) {
       playback?.pause();
       if (activeAudio === playback) activeAudio = undefined;
       if (audioUrl) URL.revokeObjectURL(audioUrl);
+      window.companion.notifySpeechState?.(false).catch(() => {});
       button.textContent = `播放失败：${error.message}`;
     } finally {
       button.disabled = false;
@@ -865,6 +869,7 @@ function fillCharacterForm(card) {
   selectedModelFile =
     card.model_file || (card.avatar ? `avatar:${card.avatar}` : "");
   modelEmotionMapping = structuredClone(card.emotion_mapping || {});
+  emotionAvatars = structuredClone(card.emotion_avatars || {});
   document.getElementById("model-actions").value =
     (card.actions || []).join(", ");
   document.getElementById("model-expressions").value =
@@ -1040,7 +1045,47 @@ function renderEmotionMappings() {
     );
     action.addEventListener("change", updateEmotionMapping);
     expression.addEventListener("change", updateEmotionMapping);
-    row.append(name, action, expression);
+    const portraitBox = document.createElement("span");
+    portraitBox.className = "emotion-portrait-box";
+    const portraitName = emotionAvatars[emotion];
+    if (portraitName) {
+      const thumb = document.createElement("img");
+      thumb.className = "emotion-portrait-thumb";
+      thumb.alt = `${label}立绘`;
+      thumb.src = "";
+      window.companion
+        .getAvatar(portraitName)
+        .then((dataUrl) => {
+          if (thumb.isConnected) thumb.src = dataUrl;
+        })
+        .catch(() => {
+          if (thumb.isConnected) {
+            thumb.title = "立绘加载失败";
+            thumb.classList.add("broken");
+          }
+        });
+      portraitBox.append(thumb);
+    }
+    const portraitButton = document.createElement("button");
+    portraitButton.type = "button";
+    portraitButton.className = "emotion-portrait-button";
+    portraitButton.textContent = portraitName ? "换立绘" : "选立绘";
+    portraitButton.setAttribute("aria-label", `为${label}选择立绘图`);
+    portraitButton.addEventListener("click", async (event) => {
+      event.preventDefault();
+      try {
+        const result = await window.companion.chooseAvatar();
+        if (!result?.fileName) return;
+        emotionAvatars[emotion] = result.fileName;
+        characterForm.dataset.dirty = "true";
+        renderEmotionMappings();
+      } catch (error) {
+        characterStatus.textContent = `选择立绘失败：${error.message}`;
+        characterStatus.classList.add("error");
+      }
+    });
+    portraitBox.append(portraitButton);
+    row.append(name, action, expression, portraitBox);
     container.append(row);
   }
   renderPreviewEmotionMappings();
@@ -2965,6 +3010,7 @@ async function createCharacter() {
     actions: [],
     expressions: [],
     emotion_mapping: {},
+    emotion_avatars: {},
     avatar: null,
     voice: null,
   };
@@ -3680,6 +3726,7 @@ characterForm.addEventListener("submit", async (event) => {
     actions: splitList(document.getElementById("model-actions").value),
     expressions: splitList(document.getElementById("model-expressions").value),
     emotion_mapping: modelEmotionMapping,
+    emotion_avatars: emotionAvatars,
     signature_lines: form
       .get("signature_lines")
       .split("\n")

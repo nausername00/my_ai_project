@@ -72,6 +72,7 @@ class CharacterCard:
     actions: list[str] = field(default_factory=list)
     expressions: list[str] = field(default_factory=list)
     emotion_mapping: dict[str, dict[str, str]] = field(default_factory=dict)
+    emotion_avatars: dict[str, str] = field(default_factory=dict)
     avatar: str | None = None
     voice: str | None = None
 
@@ -133,6 +134,7 @@ class CharacterCard:
             "actions": data.get("actions", []),
             "expressions": data.get("expressions", []),
             "emotion_mapping": data.get("emotion_mapping", {}),
+            "emotion_avatars": data.get("emotion_avatars", {}),
             "avatar": data.get("avatar"),
             "voice": data.get("voice"),
         }
@@ -226,6 +228,41 @@ class CharacterCard:
                 raise CharacterValidationError("emotion mapping action is not configured")
             if mapping["expression"] and mapping["expression"] not in values["expressions"]:
                 raise CharacterValidationError("emotion mapping expression is not configured")
+        if not isinstance(values["emotion_avatars"], dict):
+            raise CharacterValidationError("emotion_avatars must be an object")
+        for emotion, portrait in values["emotion_avatars"].items():
+            if (
+                not isinstance(emotion, str)
+                or emotion
+                not in {
+                    "calm",
+                    "happy",
+                    "curious",
+                    "surprised",
+                    "worried",
+                    "shy",
+                    "warm",
+                    "caring",
+                }
+                or not isinstance(portrait, str)
+                or not portrait.strip()
+                or len(portrait) > 240
+                or "/" in portrait
+                or "\\" in portrait
+            ):
+                raise CharacterValidationError("emotion_avatars entry is invalid")
+        if len(values["actions"]) > 200 or any(
+            len(item) > 160 for item in values["actions"]
+        ):
+            raise CharacterValidationError(
+                "actions must contain at most 200 entries of up to 160 characters"
+            )
+        if len(values["expressions"]) > 200 or any(
+            len(item) > 160 for item in values["expressions"]
+        ):
+            raise CharacterValidationError(
+                "expressions must contain at most 200 entries of up to 160 characters"
+            )
         if values["model_file"] is not None and (
             not isinstance(values["model_file"], str)
             or (
@@ -271,6 +308,15 @@ class CharacterCard:
                 not isinstance(values[key], str) or not values[key].strip()
             ):
                 raise CharacterValidationError(f"{key} must be a non-empty string or null")
+        if values["avatar"] is not None and (
+            len(values["avatar"]) > 240
+            or "/" in values["avatar"]
+            or "\\" in values["avatar"]
+            or not re.fullmatch(
+                r"[^/\\]{1,240}\.(png|jpe?g|webp)", values["avatar"], re.I
+            )
+        ):
+            raise CharacterValidationError("avatar file name is invalid")
         return cls(**values)
 
     def to_dict(self) -> dict[str, Any]:
@@ -360,7 +406,8 @@ class CharacterStore:
     def save_card(self, card: CharacterCard, character_id: str | None = None) -> None:
         target_id = character_id or self.get_active_character_id()
         card_path = self._card_path_for_id(target_id)
-        self._write_json(card_path, card.to_dict())
+        validated = CharacterCard.from_dict(card.to_dict())
+        self._write_json(card_path, validated.to_dict())
 
     def list_characters(self) -> dict[str, Any]:
         if not self.card_path.exists():
