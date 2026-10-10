@@ -6,8 +6,8 @@
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "check": "node --check main.cjs && node --check preload.cjs && node --check floating-preload.cjs && node --check renderer.js && node --check ollama-setup.cjs && node --check voice-resources.cjs",
-    "test": "node --test ollama-setup.test.cjs voice-resources.test.cjs notifications.test.cjs social.test.cjs layout.test.cjs",
+    "check": "node --check main.cjs && node --check preload.cjs && node --check floating-preload.cjs && node --check renderer.js && node --check voice-playback.js && node --check avatar-display.js && node --check ollama-setup.cjs && node --check voice-resources.cjs",
+    "test": "node --test ollama-setup.test.cjs voice-resources.test.cjs voice-playback.test.cjs avatar-display.test.cjs floating-avatar.test.cjs notifications.test.cjs social.test.cjs layout.test.cjs",
     "build:backend": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\build-backend.ps1",
     "dist:win": "npm run build:backend && electron-builder --win nsis"
   },
@@ -24,6 +24,8 @@
       "floating-preload.cjs",
       "index.html",
       "floating.html",
+      "voice-playback.js",
+      "avatar-display.js",
       "renderer.js",
       "style.css",
       "ollama-setup.cjs",

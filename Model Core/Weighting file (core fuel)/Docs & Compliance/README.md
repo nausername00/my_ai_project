@@ -132,22 +132,41 @@ The service exposes:
   text-only; screen capture is not exposed through the API or desktop UI, and
   there is no automatic screen monitoring. `POST /v1/vision/analyze` only
   accepts a user-selected PNG, JPEG, or WebP image after the desktop's
-  per-image confirmation, checks its declared type against its file signature,
-  and returns observed content separately from possible interpretations and
+  per-image confirmation; the service additionally requires a signed,
+  short-lived, single-use consent token from the Electron main process. It
+  checks the declared type against the file signature and dimensions, and
+  returns observed content separately from possible interpretations and
   uncertainty. Images are request-scoped and are not added to long-term memory.
   If the configured local model cannot process images, the request fails
   explicitly rather than returning a text-only guess.
 - Voice preferences in the desktop settings control local playback mute,
   speed, and volume and can be reset; they are stored in browser-local storage.
-  These controls do not select a different synthesized voice, train or clone a
-  voice, or upload recordings. Reference audio remains audition material.
+  The per-character local synthesized voice preference is applied to chat
+  playback and can be overridden for translation playback. Reference audio
+  remains audition material and cannot be selected as a synthesis voice.
+  Nothing here trains or clones a voice or uploads recordings.
+- The floating companion receives the active character portrait and simulated
+  affect after character or affect changes. The appearance setting can either
+  follow simulated affect or stay on the base portrait; it is shared by chat
+  avatars, the character display, and the floating companion. When an
+  emotion-specific portrait cannot be read or decoded, the base portrait is
+  tried before falling back to the character initial. The floating status
+  labels affect as simulated, and out-of-order updates cannot replace newer
+  character or affect state.
 - A brain plan can be cleared to disable its future tool steps. A tool call
-  already approved and in progress cannot be interrupted; the UI warns before
-  clearing and preserves its eventual result. The collaboration workspace also
-  has a review-first offline mini-game prompt: it asks the local planner to
+  already approved and in progress cannot be interrupted when it is a file
+  read/create step; the UI does not offer a stop control for those tools.
+  Separate cancellation requests are accepted only for executing tools that
+  declare cancellation support, and the trace distinguishes a cancellation
+  request from an effective stop. The collaboration workspace also has a
+  review-first offline mini-game prompt: it asks the local planner to
   propose a self-contained HTML file, shows its complete contents before
   execution, and still requires the existing per-file confirmation. It does
   not load external resources or automatically open the generated file.
+- The chat welcome screen also offers a fully local branching micro-story.
+  Its choices, pause/resume, backtrack, restart, and exit controls run without
+  model calls, network access, or memory writes; starting a new chat discards
+  the current story path.
 - `GET /v1/social/status` and `GET /v1/social/partners` report the local
   collaboration service and its built-in architecture, code, UI, and testing
   review partners. `POST /v1/social/collaborate` accepts a `task` and optional

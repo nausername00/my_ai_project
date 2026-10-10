@@ -112,6 +112,8 @@ contextBridge.exposeInMainWorld(
     setPrivacy: (settings) => ipcRenderer.invoke("companion:set-privacy", settings),
     getAffect: () => ipcRenderer.invoke("companion:get-affect"),
     setAffect: (mood) => ipcRenderer.invoke("companion:set-affect", mood),
+    setAvatarDisplayMode: (mode) =>
+      ipcRenderer.invoke("companion:set-avatar-display-mode", mode),
     exportMemories: () => ipcRenderer.invoke("companion:export-memories"),
     importMemories: () => ipcRenderer.invoke("companion:import-memories"),
     onNotificationAction: (callback) => {
