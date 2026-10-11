@@ -2159,6 +2159,34 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status, 503)
         self.assertIn("unavailable", json.loads(response.read())["error"])
 
+    def test_assets_check_reports_extended_inspection(self) -> None:
+        asset_path = Path(self.temp_dir.name) / "sprite.png"
+        asset_path.write_bytes(small_png(8, 8))
+        self.connection.request(
+            "POST",
+            "/v1/assets/check",
+            body=json.dumps({"paths": [str(asset_path)]}),
+        )
+        response = self.connection.getresponse()
+        self.assertEqual(response.status, 200)
+        payload = json.loads(response.read())
+        self.assertEqual(len(payload["results"]), 1)
+        self.assertEqual(payload["results"][0]["file_name"], "sprite.png")
+        self.assertIn("checks", payload["results"][0])
+        self.assertIn("manifest", payload)
+        self.assertIn("manifest_text", payload)
+
+    def test_assets_check_rejects_too_many_paths(self) -> None:
+        self.connection.request(
+            "POST",
+            "/v1/assets/check",
+            body=json.dumps({"paths": [str(i) for i in range(51)]}),
+        )
+        response = self.connection.getresponse()
+        self.assertEqual(response.status, 400)
+        payload = json.loads(response.read())
+        self.assertIn("error", payload)
+
 
 class SpeechServiceTests(unittest.TestCase):
     """Unit tests for the local voice catalog; never load a Piper model."""

@@ -531,13 +531,36 @@ async function importModelAssets() {
     reports.push({ ...candidate, report, reportText: formatAssetReport(report) });
   }
 
+  // K0：调用本地后端做扩展预检（边缘/裁切/PSD 头/MOV box/交付清单），失败不阻断导入
+  let extendedByName = new Map();
+  let manifestText = "";
+  try {
+    const checkResponse = await callApi("/v1/assets/check", "POST", {
+      paths: candidates.map((candidate) => candidate.sourcePath),
+    });
+    extendedByName = new Map(
+      (checkResponse.results || []).map((entry) => [path.basename(entry.file_name), entry]),
+    );
+    manifestText = checkResponse.manifest_text || "";
+  } catch (extendedError) {
+    manifestText = `扩展预检不可用：${extendedError.message}（仍按基础报告导入）`;
+  }
+
+  const detailLines = reports.map((item) => {
+    const extended = extendedByName.get(item.originalName);
+    if (extended?.warnings?.length) {
+      return `${item.reportText}\n预检：${extended.warnings.join("；")}`;
+    }
+    return item.reportText;
+  });
+  if (manifestText) detailLines.push(`交付清单\n${manifestText}`);
   const confirmation = await dialog.showMessageBox(
     BrowserWindow.getFocusedWindow() || undefined,
     {
-      type: "info",
+      type: "warning",
       title: "角色素材预检报告",
       message: "请检查素材支持范围，再确认是否复制到本地角色资源目录。",
-      detail: reports.map((item) => item.reportText).join("\n\n"),
+      detail: detailLines.join("\n\n"),
       buttons: ["确认导入", "取消"],
       defaultId: 1,
       cancelId: 1,
@@ -566,11 +589,13 @@ async function importModelAssets() {
       }
       usedNames.add(fileName.toLowerCase());
       await fs.writeFile(path.join(targetDirectory, fileName), source, { flag: "wx" });
+      const extended = extendedByName.get(candidate.originalName) || null;
       imported.push({
         name: path.posix.join("models", bundleId, fileName),
         originalName: candidate.originalName,
         bytes: candidate.bytes,
         reportText: candidate.reportText,
+        extended,
       });
     }
   } catch (error) {

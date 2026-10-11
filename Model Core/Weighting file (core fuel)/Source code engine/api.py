@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 from agent import route_cognition
+from asset_check import check_assets, delivery_manifest, format_manifest
 from discovery import discover_file, observe_context
 from explore import (
     propose_exploration,
@@ -1405,6 +1406,48 @@ class ApiHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
                 return
             self._send_json(HTTPStatus.CREATED, {"goal": goal})
+            return
+        if path == "/v1/assets/check":
+            try:
+                payload = self._read_json()
+                paths = payload.get("paths", [])
+                if not isinstance(paths, list) or not paths:
+                    raise ValueError("paths must be a non-empty list")
+                if len(paths) > 50:
+                    raise ValueError("单次素材预检最多 50 个文件")
+                files: list[dict[str, Any]] = []
+                names: list[str] = []
+                for raw_path in paths:
+                    file_path = os.fspath(raw_path)
+                    name = os.path.basename(file_path)
+                    names.append(name)
+                    try:
+                        with open(file_path, "rb") as handle:
+                            files.append({"name": name, "data": handle.read()})
+                    except OSError as error:
+                        files.append(
+                            {
+                                "name": name,
+                                "data": b"",
+                                "warning": f"无法读取文件：{error}",
+                            }
+                        )
+                results = check_assets(files)
+                for entry, candidate in zip(results, files):
+                    if candidate.get("warning") and not entry.get("warnings"):
+                        entry["warnings"] = [candidate["warning"]]
+                manifest = delivery_manifest(names)
+                self._send_json(
+                    HTTPStatus.OK,
+                    {
+                        "results": results,
+                        "manifest": manifest,
+                        "manifest_text": format_manifest(manifest),
+                    },
+                )
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                return
             return
         if path != "/v1/generate":
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
