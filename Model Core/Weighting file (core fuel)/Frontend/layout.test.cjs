@@ -350,3 +350,42 @@ test("assistant bubbles take mood-tinted borders and thinking avatars pulse whil
   assert.match(css, /@keyframes message-thinking/);
   assert.match(css, /\.message\.pending \.message-avatar/);
 });
+
+test("bounded proactive proposals require opt-in, show basis, and manage shared goals", () => {
+  assert.match(html, /data-settings-tab="proposals">提议/);
+  assert.match(html, /id="proposals-enabled"/);
+  assert.match(html, /id="proposals-paused"/);
+  assert.match(html, /id="proposals-frequency"/);
+  assert.match(html, /id="proposals-quiet-start"/);
+  assert.match(html, /id="proposals-quiet-end"/);
+  assert.match(html, /id="proposal-card"[^>]*hidden/);
+  assert.match(html, /id="goal-form"/);
+  assert.match(html, /默认关闭。开启后，墨灵只会在你回复对话之后、按频率与安静时段做一次低打扰提议/);
+  assert.match(html, /进展只在你说“保留”时保存/);
+  assert.match(renderer, /async function loadProposals\(\)/);
+  assert.match(renderer, /proposalCard\.dataset\.goalId = proposal\.goal_id/);
+  assert.match(renderer, /async function respondToProposal\(action\)/);
+  assert.match(renderer, /companion\.respondProposal/);
+  assert.match(renderer, /companion\.updateGoal/);
+  assert.match(renderer, /if \(result\.proposal\) \{\s*renderProposalCard\(result\.proposal\)/);
+  assert.match(renderer, /依据：\$\{proposal\.basis\}/);
+  assert.match(main, /companion:get-proposals/);
+  assert.match(main, /companion:respond-proposal/);
+  assert.match(main, /\/v1\/proposals\/settings", "PUT"/);
+  assert.match(main, /\/v1\/goals\/\$\{goalId\}/);
+  assert.match(css, /\.proposal-card\s*\{/);
+  assert.match(css, /\.goals-section\s*\{/);
+});
+
+test("model asset imports show a local format report before copying files", () => {
+  assert.match(main, /require\("\.\/asset-inspector\.cjs"\)/);
+  assert.match(main, /"psd", "mov"/);
+  assert.match(main, /角色素材预检报告/);
+  assert.match(main, /buttons: \["确认导入", "取消"\]/);
+  assert.match(main, /await fs\.open\(candidate\.sourcePath, "r"\)/);
+  assert.match(main, /await fs\.writeFile\(path\.join\(targetDirectory, fileName\), source, \{ flag: "wx" \}\)/);
+  assert.match(renderer, /asset\.reportText/);
+  assert.match(html, /文件只复制和登记，不会执行/);
+  assert.match(html, /PSD 图层解析、MOV 解码和 Live2D 运行时尚未接入/);
+  assert.match(packageManifest.scripts.test, /asset-inspector\.test\.cjs/);
+});

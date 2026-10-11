@@ -376,6 +376,7 @@
           <button class="settings-tab active" type="button" data-settings-tab="persona">角色</button>
           <button class="settings-tab" type="button" data-settings-tab="memories">记忆</button>
           <button class="settings-tab" type="button" data-settings-tab="affect">模拟状态</button>
+          <button class="settings-tab" type="button" data-settings-tab="proposals">提议</button>
         </nav>
         <section id="persona-panel">
           <div class="character-gallery-header">
@@ -457,6 +458,56 @@
               <button class="icon-button" id="affect-reset" type="button">重置为平静</button>
             </div>
             <p class="form-status" id="affect-status" role="status"></p>
+          </div>
+        </section>
+        <section id="proposals-panel" hidden>
+          <div class="proposal-settings">
+            <h3>主动提议</h3>
+            <p>默认关闭。开启后，墨灵只会在你回复对话之后、按频率与安静时段做一次低打扰提议；不会后台常驻或擅自外联。提议内容来自你确认过的共同目标。</p>
+            <label class="privacy-toggle">
+              <input id="proposals-enabled" type="checkbox" />
+              <span>开启主动提议</span>
+            </label>
+            <label class="privacy-toggle">
+              <input id="proposals-paused" type="checkbox" />
+              <span>暂停所有提议（保留设置）</span>
+            </label>
+            <label for="proposals-frequency">最少间隔（分钟，5–10080）
+              <input id="proposals-frequency" type="number" min="5" max="10080" step="5" value="180" />
+            </label>
+            <label for="proposals-quiet-start">安静时段开始（HH:MM）
+              <input id="proposals-quiet-start" type="text" placeholder="23:00" value="23:00" />
+            </label>
+            <label for="proposals-quiet-end">安静时段结束（HH:MM）
+              <input id="proposals-quiet-end" type="text" placeholder="07:00" value="07:00" />
+            </label>
+            <div class="affect-actions">
+              <button class="save-button" id="proposals-save" type="button">保存设置</button>
+            </div>
+            <p class="form-status" id="proposals-status" role="status"></p>
+          </div>
+          <div class="proposal-card" id="proposal-card" hidden>
+            <h3>墨灵想和你一起推进</h3>
+            <p class="proposal-title" id="proposal-title"></p>
+            <p class="proposal-description" id="proposal-description"></p>
+            <p class="proposal-basis" id="proposal-basis"></p>
+            <div class="memory-entry-actions">
+              <button type="button" id="proposal-accept">接受</button>
+              <button type="button" id="proposal-redirect">改方向</button>
+              <button type="button" id="proposal-later">稍后</button>
+              <button type="button" id="proposal-decline">拒绝</button>
+              <button type="button" class="delete-memory" id="proposal-stop">停止提议</button>
+            </div>
+          </div>
+          <div class="goals-section">
+            <h3>共同目标</h3>
+            <p>由你创建并确认；进展只在你说“保留”时保存。可编辑、暂停、结束、删除。</p>
+            <form id="goal-form" class="memory-form">
+              <label>目标名称<input name="title" required maxlength="200" placeholder="如：一起学会 Blender" /></label>
+              <label>说明<textarea name="description" rows="2" maxlength="2000"></textarea></label>
+              <button class="save-button" type="submit">新建目标</button>
+            </form>
+            <div class="memory-list" id="goal-list"></div>
           </div>
         </section>
       </aside>
@@ -638,7 +689,7 @@
               <button class="icon-button" id="model-assets-import" type="button">导入模型与资源</button>
               <select id="model-file-select"></select>
             </div>
-            <p class="character-card-help">可一次选择模型、贴图、动作、表情与物理参数文件；单文件最多 250 MB，单次最多 500 MB。文件仅复制到本地资源目录，不会执行。</p>
+            <p class="character-card-help">可选择模型、贴图、动作、表情与物理参数文件，单文件最多 250 MB、单次最多 25 个且总计不超过 500 MB。导入前会显示本地预检报告；文件只复制和登记，不会执行。当前不保留素材目录层级；PSD 图层解析、MOV 解码和 Live2D 运行时尚未接入。</p>
             <div class="avatar-editor">
               <div class="character-avatar settings-avatar" id="settings-avatar" data-mood="calm">
                 <img id="settings-avatar-image" alt="当前角色立绘预览" hidden />

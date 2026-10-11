@@ -25,6 +25,7 @@ const {
   getAvatarCandidates,
 } = require("./avatar-display.js");
 const { applyMiniGamePolicy } = require("./mini-game-policy.cjs");
+const { formatAssetReport, inspectAsset } = require("./asset-inspector.cjs");
 const {
   seedDraft,
   draftStatus,
@@ -63,6 +64,7 @@ const modelAssetExtensions = new Set([
 ]);
 const maxModelAssetBytes = 250 * 1024 * 1024;
 const maxModelBundleBytes = 500 * 1024 * 1024;
+const maxModelAssetCount = 25;
 let characterAssetDir;
 let voiceResourceStore;
 let backendProcess;
@@ -466,21 +468,24 @@ async function importModelAssets() {
         name: "角色模型与资源",
         extensions: [
           "vrm", "pmx", "pmd", "moc3", "json", "vmd", "png", "jpg",
-          "jpeg", "webp", "bmp", "tga", "wav", "mp3",
+          "jpeg", "webp", "bmp", "tga", "wav", "mp3", "psd", "mov",
         ],
       }],
     },
   );
   if (result.canceled || result.filePaths.length === 0) return [];
+  if (result.filePaths.length > maxModelAssetCount) {
+    throw new Error(`一次最多检查 ${maxModelAssetCount} 个角色素材文件。`);
+  }
+
   let bundleBytes = 0;
-  const imported = [];
-  const bundleId = randomUUID();
-  const targetDirectory = path.join(characterAssetDir, "models", bundleId);
-  await fs.mkdir(targetDirectory, { recursive: true });
-  const usedNames = new Set();
+  const candidates = [];
+  const selectedFileNames = result.filePaths.map((sourcePath) => path.basename(sourcePath));
+  const structuredJsonLimit = 5 * 1024 * 1024 + 1;
+
   for (const sourcePath of result.filePaths) {
     const extension = path.extname(sourcePath).toLowerCase();
-    if (!modelAssetExtensions.has(extension)) {
+    if (!modelAssetExtensions.has(extension) && extension !== ".psd" && extension !== ".mov") {
       throw new Error(`不支持导入此角色资源格式：${extension || "未知格式"}`);
     }
     const stat = await fs.stat(sourcePath);
@@ -491,21 +496,88 @@ async function importModelAssets() {
     if (bundleBytes > maxModelBundleBytes) {
       throw new Error("一次导入的角色资源不能超过 500 MB");
     }
-    const source = await fs.readFile(sourcePath);
-    let fileName = path.basename(sourcePath);
-    let suffix = 1;
-    while (usedNames.has(fileName.toLowerCase())) {
-      const parsed = path.parse(path.basename(sourcePath));
-      fileName = `${parsed.name}-${suffix}${parsed.ext}`;
-      suffix += 1;
+    candidates.push({ sourcePath, originalName: path.basename(sourcePath), bytes: stat.size });
+  }
+
+  const reports = [];
+  for (const candidate of candidates) {
+    const extension = path.extname(candidate.originalName).toLowerCase();
+    let inspectBytes = Buffer.alloc(0);
+    const isStructuredJson = /\.model3\.json$/i.test(candidate.originalName) ||
+      /\.physics3\.json$/i.test(candidate.originalName);
+    const readLimit = isStructuredJson
+      ? structuredJsonLimit
+      : extension === ".psd"
+        ? 4
+        : [".bmp", ".jpg", ".jpeg", ".png", ".webp"].includes(extension)
+          ? 12
+          : 0;
+    if (readLimit > 0) {
+      const handle = await fs.open(candidate.sourcePath, "r");
+      try {
+        const buffer = Buffer.alloc(Math.min(candidate.bytes, readLimit));
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+        inspectBytes = buffer.subarray(0, bytesRead);
+      } finally {
+        await handle.close();
+      }
     }
-    usedNames.add(fileName.toLowerCase());
-    await fs.writeFile(path.join(targetDirectory, fileName), source, { flag: "wx" });
-    imported.push({
-      name: path.posix.join("models", bundleId, fileName),
-      originalName: path.basename(sourcePath),
-      bytes: stat.size,
+    const report = inspectAsset({
+      fileName: candidate.originalName,
+      bytes: inspectBytes,
+      byteLength: candidate.bytes,
+      selectedFileNames,
     });
+    reports.push({ ...candidate, report, reportText: formatAssetReport(report) });
+  }
+
+  const confirmation = await dialog.showMessageBox(
+    BrowserWindow.getFocusedWindow() || undefined,
+    {
+      type: "info",
+      title: "角色素材预检报告",
+      message: "请检查素材支持范围，再确认是否复制到本地角色资源目录。",
+      detail: reports.map((item) => item.reportText).join("\n\n"),
+      buttons: ["确认导入", "取消"],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    },
+  );
+  if (confirmation.response !== 0) return [];
+
+  const imported = [];
+  const bundleId = randomUUID();
+  const targetDirectory = path.join(characterAssetDir, "models", bundleId);
+  const usedNames = new Set();
+  let targetDirectoryCreated = false;
+  try {
+    await fs.mkdir(path.dirname(targetDirectory), { recursive: true });
+    await fs.mkdir(targetDirectory, { recursive: false });
+    targetDirectoryCreated = true;
+    for (const candidate of reports) {
+      const source = await fs.readFile(candidate.sourcePath);
+      let fileName = candidate.originalName;
+      let suffix = 1;
+      while (usedNames.has(fileName.toLowerCase())) {
+        const parsed = path.parse(candidate.originalName);
+        fileName = `${parsed.name}-${suffix}${parsed.ext}`;
+        suffix += 1;
+      }
+      usedNames.add(fileName.toLowerCase());
+      await fs.writeFile(path.join(targetDirectory, fileName), source, { flag: "wx" });
+      imported.push({
+        name: path.posix.join("models", bundleId, fileName),
+        originalName: candidate.originalName,
+        bytes: candidate.bytes,
+        reportText: candidate.reportText,
+      });
+    }
+  } catch (error) {
+    if (targetDirectoryCreated) {
+      await fs.rm(targetDirectory, { recursive: true, force: true });
+    }
+    throw error;
   }
   return imported;
 }
@@ -1066,6 +1138,22 @@ function registerIpcHandlers() {
   ipcMain.handle("companion:get-privacy", () => callApi("/v1/privacy"));
   ipcMain.handle("companion:set-privacy", (_event, settings) =>
     callApi("/v1/privacy", "POST", settings),
+  );
+  ipcMain.handle("companion:get-proposals", () => callApi("/v1/proposals"));
+  ipcMain.handle("companion:update-proposal-settings", (_event, settings) =>
+    callApi("/v1/proposals/settings", "PUT", settings),
+  );
+  ipcMain.handle("companion:respond-proposal", (_event, goalId, action) =>
+    callApi("/v1/proposals/respond", "POST", { goal_id: goalId, action }),
+  );
+  ipcMain.handle("companion:add-goal", (_event, goal) =>
+    callApi("/v1/goals", "POST", goal),
+  );
+  ipcMain.handle("companion:update-goal", (_event, goalId, payload) =>
+    callApi(`/v1/goals/${goalId}`, "PUT", payload),
+  );
+  ipcMain.handle("companion:delete-goal", (_event, goalId) =>
+    callApi(`/v1/goals/${goalId}`, "DELETE"),
   );
   ipcMain.handle("companion:get-affect", () => callApi("/v1/affect"));
   ipcMain.handle("companion:set-affect", async (_event, mood) => {

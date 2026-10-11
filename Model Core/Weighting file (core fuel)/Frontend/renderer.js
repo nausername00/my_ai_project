@@ -184,6 +184,18 @@ const memoryList = document.getElementById("memory-list");
 const memoryStatus = document.getElementById("memory-status");
 const memoryForm = document.getElementById("memory-form");
 const includeMemories = document.getElementById("include-memories");
+const proposalsEnabled = document.getElementById("proposals-enabled");
+const proposalsPaused = document.getElementById("proposals-paused");
+const proposalsFrequency = document.getElementById("proposals-frequency");
+const proposalsQuietStart = document.getElementById("proposals-quiet-start");
+const proposalsQuietEnd = document.getElementById("proposals-quiet-end");
+const proposalsStatus = document.getElementById("proposals-status");
+const proposalCard = document.getElementById("proposal-card");
+const proposalTitle = document.getElementById("proposal-title");
+const proposalDescription = document.getElementById("proposal-description");
+const proposalBasis = document.getElementById("proposal-basis");
+const goalList = document.getElementById("goal-list");
+const goalForm = document.getElementById("goal-form");
 const affectIndicator = document.getElementById("affect-indicator");
 const affectMood = document.getElementById("affect-mood");
 const affectReason = document.getElementById("affect-reason");
@@ -3663,7 +3675,9 @@ document.getElementById("model-assets-import").addEventListener("click", async (
       imported[0].name;
     renderModelFiles();
     characterForm.dataset.dirty = "true";
-    status.textContent = `已导入 ${imported.length} 个资源；保存表现设置后关联到此角色卡。`;
+    status.textContent =
+      `已导入 ${imported.length} 个资源；保存表现设置后关联到此角色卡。\n` +
+      imported.map((asset) => asset.reportText).filter(Boolean).join("\n");
   } catch (error) {
     status.textContent = error.message;
     status.classList.add("error");
@@ -4156,6 +4170,11 @@ async function sendMessage(text) {
     if (result.explore_proposal?.proposed) {
       attachExploreOffer(pending, result.explore_proposal, prompt);
     }
+    if (result.proposal) {
+      renderProposalCard(result.proposal);
+      proposalsStatus.textContent = "墨灵带来了一条提议。";
+      proposalsStatus.classList.remove("error");
+    }
   } catch (error) {
     pending.textContent = `暂时无法生成：${error.message}`;
     pending.classList.add("error-message");
@@ -4310,7 +4329,7 @@ document.getElementById("settings-close").addEventListener("click", () => {
 document.querySelectorAll("[data-settings-tab]").forEach((button) => {
   button.addEventListener("click", () => {
     const selected = button.dataset.settingsTab;
-    for (const panel of ["persona", "memories", "affect"]) {
+    for (const panel of ["persona", "memories", "affect", "proposals"]) {
       document.getElementById(`${panel}-panel`).hidden = panel !== selected;
     }
     document.querySelectorAll("[data-settings-tab]").forEach((tab) => {
@@ -4318,6 +4337,7 @@ document.querySelectorAll("[data-settings-tab]").forEach((button) => {
     });
     if (selected === "memories") loadMemories();
     if (selected === "affect") loadAffect();
+    if (selected === "proposals") loadProposals();
   });
 });
 
@@ -4336,6 +4356,175 @@ async function saveAffect(mood, confirmation) {
     affectStatus.classList.add("error");
   }
 }
+
+// ---------- J5: bounded proactive proposals & shared goals ----------
+async function loadProposals() {
+  try {
+    const result = await window.companion.getProposals();
+    proposalsEnabled.checked = result.settings.enabled;
+    proposalsPaused.checked = result.settings.paused;
+    proposalsFrequency.value = result.settings.frequency_minutes ?? 180;
+    const quiet = result.settings.quiet_hours?.[0];
+    proposalsQuietStart.value = quiet?.start ?? "23:00";
+    proposalsQuietEnd.value = quiet?.end ?? "07:00";
+    renderProposalCard(result.pending_proposal);
+    renderGoals(result.goals);
+  } catch (error) {
+    proposalsStatus.textContent = error.message;
+    proposalsStatus.classList.add("error");
+  }
+}
+
+function renderProposalCard(proposal) {
+  if (!proposal) {
+    proposalCard.hidden = true;
+    return;
+  }
+  proposalTitle.textContent = proposal.title;
+  proposalDescription.textContent = proposal.description || "（未填写说明）";
+  proposalBasis.textContent = `依据：${proposal.basis}`;
+  proposalCard.dataset.goalId = proposal.goal_id;
+  proposalCard.hidden = false;
+}
+
+async function respondToProposal(action) {
+  const goalId = proposalCard.dataset.goalId;
+  if (!goalId) return;
+  try {
+    const result = await window.companion.respondProposal(goalId, action);
+    proposalsStatus.textContent = result.message;
+    proposalsStatus.classList.remove("error");
+    proposalCard.hidden = true;
+    await loadProposals();
+  } catch (error) {
+    proposalsStatus.textContent = error.message;
+    proposalsStatus.classList.add("error");
+  }
+}
+
+function renderGoals(goals) {
+  goalList.replaceChildren();
+  if (goals.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "memory-empty";
+    empty.textContent = "还没有共同目标。由你创建并确认后，墨灵才会按频率提议。";
+    goalList.append(empty);
+    return;
+  }
+  const statusLabel = { active: "进行中", paused: "已暂停", completed: "已完成", ended: "已结束" };
+  for (const goal of goals) {
+    const entry = document.createElement("article");
+    entry.className = "memory-entry";
+    const head = document.createElement("div");
+    head.className = "memory-entry-meta";
+    head.textContent =
+      `${goal.title} · ${statusLabel[goal.status] ?? goal.status}` +
+      (goal.consented ? " · 已确认" : " · 未经确认") +
+      (goal.progress_note ? ` · 进展：${goal.progress_note}` : "");
+    const actions = document.createElement("div");
+    actions.className = "memory-entry-actions";
+
+    const pause = document.createElement("button");
+    pause.type = "button";
+    pause.textContent =
+      goal.status === "paused" ? "恢复" : goal.status === "active" ? "暂停" : "结束";
+    pause.addEventListener("click", async () => {
+      const next =
+        goal.status === "active" ? "paused" : goal.status === "paused" ? "active" : "ended";
+      try {
+        await window.companion.updateGoal(goal.id, { status: next });
+        await loadProposals();
+      } catch (error) {
+        proposalsStatus.textContent = error.message;
+        proposalsStatus.classList.add("error");
+      }
+    });
+
+    const finish = document.createElement("button");
+    finish.type = "button";
+    finish.textContent = "完成";
+    finish.disabled = goal.status === "completed" || goal.status === "ended";
+    finish.addEventListener("click", async () => {
+      const note = window.prompt("记录一条进展（只在你确认后保存）：", "");
+      if (note === null) return;
+      try {
+        await window.companion.updateGoal(goal.id, {
+          status: "completed",
+          progress_note: note,
+          consented: true,
+        });
+        await loadProposals();
+      } catch (error) {
+        proposalsStatus.textContent = error.message;
+        proposalsStatus.classList.add("error");
+      }
+    });
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "delete-memory";
+    remove.textContent = "删除";
+    remove.addEventListener("click", async () => {
+      if (!window.confirm("确定删除这个共同目标吗？")) return;
+      try {
+        await window.companion.deleteGoal(goal.id);
+        await loadProposals();
+      } catch (error) {
+        proposalsStatus.textContent = error.message;
+        proposalsStatus.classList.add("error");
+      }
+    });
+
+    actions.append(pause, finish, remove);
+    entry.append(head, actions);
+    goalList.append(entry);
+  }
+}
+
+document.getElementById("proposals-save").addEventListener("click", async () => {
+  try {
+    await window.companion.updateProposalSettings({
+      enabled: proposalsEnabled.checked,
+      paused: proposalsPaused.checked,
+      frequency_minutes: Number(proposalsFrequency.value) || 180,
+      quiet_hours: [
+        { start: proposalsQuietStart.value.trim(), end: proposalsQuietEnd.value.trim() },
+      ],
+    });
+    proposalsStatus.textContent = "提议设置已保存。";
+    proposalsStatus.classList.remove("error");
+    await loadProposals();
+  } catch (error) {
+    proposalsStatus.textContent = error.message;
+    proposalsStatus.classList.add("error");
+  }
+});
+
+for (const [id, action] of [
+  ["proposal-accept", "accept"],
+  ["proposal-redirect", "redirect"],
+  ["proposal-later", "later"],
+  ["proposal-decline", "decline"],
+  ["proposal-stop", "stop"],
+]) {
+  document.getElementById(id).addEventListener("click", () => respondToProposal(action));
+}
+
+goalForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const formData = new FormData(goalForm);
+  try {
+    await window.companion.addGoal({
+      title: formData.get("title"),
+      description: formData.get("description") || "",
+    });
+    goalForm.reset();
+    await loadProposals();
+  } catch (error) {
+    proposalsStatus.textContent = error.message;
+    proposalsStatus.classList.add("error");
+  }
+});
 
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes < 0) return "";

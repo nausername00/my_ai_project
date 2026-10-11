@@ -57,6 +57,7 @@ from character import (
 )
 from social import collaborate_with_partners, get_social_status, list_local_partners
 from speech import SpeechInputError, SpeechService, SpeechUnavailableError
+from proposals import ProposalStore
 from vision import VisionError, analyze_image
 
 
@@ -88,6 +89,7 @@ class ApiHandler(BaseHTTPRequestHandler):
         "Character/assets",
     )
     speech_service = SpeechService()
+    proposal_store = ProposalStore("Character/proposals.json")
     workspace_root = Path.cwd()
     tool_capability = ""
     vision_capability = ""
@@ -390,6 +392,16 @@ class ApiHandler(BaseHTTPRequestHandler):
             return
         if path == "/v1/memory/export":
             self._send_json(HTTPStatus.OK, self.character_store.export_memories())
+            return
+        if path == "/v1/proposals":
+            self._send_json(
+                HTTPStatus.OK,
+                {
+                    "settings": self.proposal_store.get_settings(),
+                    "goals": self.proposal_store.list_goals(),
+                    "pending_proposal": self.proposal_store.pending_proposal(),
+                },
+            )
             return
         if path == "/v1/privacy":
             self._send_json(HTTPStatus.OK, self.character_store.get_privacy_settings())
@@ -1367,6 +1379,33 @@ class ApiHandler(BaseHTTPRequestHandler):
                 return
             self._send_json(HTTPStatus.CREATED, {"memory": entry})
             return
+        if path == "/v1/proposals/respond":
+            try:
+                payload = self._read_json()
+                result = self.proposal_store.respond(
+                    payload["goal_id"], payload.get("action", "later")
+                )
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                return
+            except LookupError as error:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": str(error)})
+                return
+            self._send_json(HTTPStatus.OK, result)
+            return
+        if path == "/v1/goals":
+            try:
+                payload = self._read_json()
+                goal = self.proposal_store.add_goal(
+                    payload["title"],
+                    payload.get("description", ""),
+                    consented=True,
+                )
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                return
+            self._send_json(HTTPStatus.CREATED, {"goal": goal})
+            return
         if path != "/v1/generate":
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
             return
@@ -1459,6 +1498,12 @@ class ApiHandler(BaseHTTPRequestHandler):
         except ModelUnavailableError as error:
             self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(error)})
             return
+        # J5：对话回复后按规则检查一次主动提议（无后台循环；未开启/暂停/安静时段/频率未到均返回 None）。
+        proposal = None
+        try:
+            proposal = self.proposal_store.pending_proposal()
+        except Exception:
+            proposal = None  # 提议失败不影响回复本身
         self._send_json(
             HTTPStatus.OK,
             {
@@ -1468,6 +1513,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 "cognition_mode": cognitive_route.mode,
                 "inference_ms": inference_ms,
                 "explore_proposal": explore_hint,
+                "proposal": proposal,
                 "evidence": self._build_response_evidence(
                     prompt, validated_history
                 ),
@@ -1532,6 +1578,30 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     def do_PUT(self) -> None:
         path = urlsplit(self.path).path
+        if path == "/v1/proposals/settings":
+            try:
+                settings = self.proposal_store.update_settings(self._read_json())
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                return
+            self._send_json(HTTPStatus.OK, {"settings": settings})
+            return
+        goals_prefix = "/v1/goals/"
+        if path.startswith(goals_prefix) and path[len(goals_prefix) :]:
+            goal_id = path[len(goals_prefix) :]
+            if "/" in goal_id:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+                return
+            try:
+                updated = self.proposal_store.update_goal(goal_id, self._read_json())
+            except LookupError as error:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": str(error)})
+                return
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                return
+            self._send_json(HTTPStatus.OK, {"goal": updated})
+            return
         prefix = "/v1/memory/"
         if not path.startswith(prefix) or not path[len(prefix) :]:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
@@ -1577,6 +1647,19 @@ class ApiHandler(BaseHTTPRequestHandler):
                 self._send_json(status, {"error": str(error)})
                 return
             self._send_json(HTTPStatus.OK, deleted)
+            return
+        goals_prefix = "/v1/goals/"
+        if path.startswith(goals_prefix) and path[len(goals_prefix) :]:
+            goal_id = path[len(goals_prefix) :]
+            if "/" in goal_id:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+                return
+            try:
+                self.proposal_store.delete_goal(goal_id)
+            except LookupError as error:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": str(error)})
+                return
+            self._send_json(HTTPStatus.OK, {"deleted": goal_id})
             return
         prefix = "/v1/memory/"
         if not path.startswith(prefix) or not path[len(prefix) :]:

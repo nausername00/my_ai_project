@@ -117,6 +117,15 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke("companion:delete-memory", memoryId),
     getPrivacy: () => ipcRenderer.invoke("companion:get-privacy"),
     setPrivacy: (settings) => ipcRenderer.invoke("companion:set-privacy", settings),
+    getProposals: () => ipcRenderer.invoke("companion:get-proposals"),
+    updateProposalSettings: (settings) =>
+      ipcRenderer.invoke("companion:update-proposal-settings", settings),
+    respondProposal: (goalId, action) =>
+      ipcRenderer.invoke("companion:respond-proposal", goalId, action),
+    addGoal: (goal) => ipcRenderer.invoke("companion:add-goal", goal),
+    updateGoal: (goalId, payload) =>
+      ipcRenderer.invoke("companion:update-goal", goalId, payload),
+    deleteGoal: (goalId) => ipcRenderer.invoke("companion:delete-goal", goalId),
     getAffect: () => ipcRenderer.invoke("companion:get-affect"),
     setAffect: (mood) => ipcRenderer.invoke("companion:set-affect", mood),
     setAvatarDisplayMode: (mode) =>

@@ -2849,6 +2849,86 @@ button {
   text-align: center;
 }
 
+/* J5: bounded proactive proposals & shared goals */
+.proposal-settings,
+.goals-section {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #191c23;
+  margin-bottom: 10px;
+}
+
+.proposal-settings h3,
+.goals-section h3 {
+  margin: 0;
+  font-size: 13px;
+  color: #e8eaf0;
+}
+
+.proposal-settings p,
+.goals-section > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.proposal-settings label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #d5d7df;
+  font-size: 11px;
+}
+
+.proposal-settings input[type="number"],
+.proposal-settings input[type="text"] {
+  max-width: 180px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #20232b;
+  color: #d5d7df;
+}
+
+.proposal-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #6a7f4e;
+  border-radius: 9px;
+  background: #1b211a;
+  margin-bottom: 10px;
+}
+
+.proposal-card h3 {
+  margin: 0;
+  font-size: 13px;
+  color: #cfe0a8;
+}
+
+.proposal-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e8eaf0;
+}
+
+.proposal-description,
+.proposal-basis {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.proposal-basis {
+  color: #b8a06a;
+}
+
 .save-button {
   justify-content: center;
   margin-top: 4px;
@@ -3251,6 +3331,10 @@ dialog.character-editor-dialog {
 }
 .form-status {
   color: var(--muted);
+}
+#model-studio-status {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
 }
 
 /* ---------- 消息时间戳 ---------- */
