@@ -507,3 +507,10 @@
   - `AvatarSystem` 构造可注入 `character_store`（api/app 惰性与 create_server 均已接线）。
   - **测试**：`test_avatars.py` 58 项（+15 项 S3：跨领域计划识别、同领域去重、协作执行、tech 待输入、唤醒确认记录、回写需批准、来源可追溯、可撤销、并行不覆盖、HTTP 冒烟）全绿。
   - 待办：S4 自我进化（自省回路 + 技能沉淀）。
+- **S4 自我进化（2026-10-14 第一版）**：
+  - 新增 `Source code engine/avatar_evolution.py`：
+    - `SkillCardRegistry`（技能沉淀）：6 张预置技能卡——K 系列 `live2d_render`（K3–K6 渲染/演出）、`portrait_draft`（K1 立绘）、`video_timeline`（K6 时间线合成）+ S 系列 `document_retrieve` / `script_draft` / `mood_echo`（S2 领域任务，绑定 invoke 被分身实际调用）。可查询、可登记（必填校验 + id 去重）、按任务名反查绑定。
+    - `IntrospectionLoop`（自省回路）：回放工具痕迹（≤100）+ 唤醒确认记录（≤10）→ 统计（ok / denied / failed / 拒绝原因分布 / 唤醒确认率）→ 规则式策略调整：确认率高（≥0.8，样本 ≥3）降低 `ask_min_length`（提前询问、减少等待）、低（≤0.3）提高（减少打扰），±20 步进、40–160 范围；样本不足不调整；调整可应用（apply=True）也可撤销（revert，恢复旧值）。复盘日志 `introspection_log.json` 可追溯。
+  - 新端点：`GET /v1/avatars/skills`、`POST /v1/avatars/skills/register`、`POST /v1/avatars/introspect`（apply）、`GET /v1/avatars/introspection-log`、`POST /v1/avatars/introspection/revert`。
+  - **测试**：`test_avatars.py` 72 项（+14 项 S4：K/S 技能卡预置与来源、技能卡被分身实际调用（script_draft 绑定 creation）、登记/重复拒绝、自省统计、高确认率调整应用、撤销恢复、低确认率减少打扰、样本不足不调整、日志可追溯、HTTP 冒烟）全绿。
+  - 待办：S5 手机陪伴与性格分化（远期，不设时间表）。

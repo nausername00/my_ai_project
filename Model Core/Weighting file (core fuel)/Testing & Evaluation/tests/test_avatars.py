@@ -764,5 +764,220 @@ class AvatarApiS3Test(unittest.TestCase):
         self.assertEqual(payload["memory"]["source"], "avatar:creation")
 
 
+class AvatarEvolutionS4Test(unittest.TestCase):
+    """S4：技能沉淀（K 系列能力卡 + 被分身调用）+ 自省回路（策略调整可应用 / 可撤销）。"""
+
+    def setUp(self) -> None:
+        tmp = tempfile.mkdtemp(prefix="moling_avatars_s4_")
+        self.store = FakeMemoryStore()
+        self.system = AvatarSystem(
+            registry_path=Path(tmp) / "avatars.json",
+            awaken_log_path=Path(tmp) / "awaken_log.json",
+            character_store=self.store,
+        )
+
+    def test_k_series_skill_cards_present(self) -> None:
+        skills = self.system.skill_list()
+        ids = {s["id"] for s in skills}
+        self.assertTrue(
+            {"live2d_render", "portrait_draft", "video_timeline"} <= ids
+        )
+        self.assertTrue(
+            {"document_retrieve", "script_draft", "mood_echo"} <= ids
+        )
+
+    def test_skill_card_has_source(self) -> None:
+        card = self.system.skills.get("live2d_render")
+        self.assertIsNotNone(card)
+        self.assertEqual(card["source"], "K6")  # type: ignore[union-attr]
+        self.assertEqual(card["status"], "available")
+
+    def test_skill_card_invoked_by_avatar(self) -> None:
+        # 技能卡被分身实际调用：script_draft 卡绑定创作分身任务并真实执行
+        card = self.system.skill_for_task("script_draft")
+        self.assertIsNotNone(card)
+        self.assertEqual(card["invoke"], "script_draft")  # type: ignore[union-attr]
+        result = self.system.run_task(
+            "creation", "script_draft", {"topic": "演示"}
+        )
+        self.assertEqual(result["status"], "ok")
+        # tool_log 中留下调用痕迹（skill → task 绑定可追溯）
+        entries = self.system.tool_log_list()
+        self.assertEqual(entries[-1]["task"], "script_draft")
+
+    def test_register_skill_card(self) -> None:
+        card = self.system.register_skill(
+            {
+                "id": "ffmpeg_mix",
+                "name": "人声优先混音",
+                "description": "背景音乐不盖人声（K6 待办）",
+                "capability": "video_script",
+                "invoke": None,
+                "source": "K6",
+            }
+        )
+        self.assertEqual(card["status"], "available")
+        self.assertEqual(card["source"], "K6")
+        # 重复登记拒绝
+        with self.assertRaises(ValueError):
+            self.system.register_skill(
+                {"id": "ffmpeg_mix", "name": "重复", "capability": "x"}
+            )
+
+    def test_introspection_stats(self) -> None:
+        self.system.run_task("creation", "script_draft", {"topic": "A"})
+        self.system.run_task("creation", "script_draft", {"topic": "B"})
+        self.system.run_task("tech", "safe_exec", {"command": "python", "args": "-c 1"})
+        report = self.system.introspect()
+        stats = report["stats"]
+        self.assertEqual(stats["tool_total"], 3)
+        self.assertEqual(stats["ok"], 2)
+        self.assertEqual(stats["denied"], 1)
+        self.assertIn("需要审批的操作未获用户批准", stats["denied_reasons"])
+
+    def test_introspection_adjustment_applied(self) -> None:
+        # 构造高确认率场景：3 次唤醒全部确认 → 建议提前询问并应用
+        for _ in range(3):
+            self.system.confirm_awaken(
+                ["learning"], confirmed=True, reason="S4 演示"
+            )
+        report = self.system.introspect(apply=True)
+        self.assertTrue(report["applied"])
+        adjustment = report["applied"][0]
+        self.assertEqual(adjustment["key"], "ask_min_length")
+        self.assertLess(adjustment["new"], adjustment["old"])
+        # 行为差异可验证：调整后阈值已更新
+        self.assertEqual(
+            self.system.router.get_settings()["ask_min_length"],
+            adjustment["new"],
+        )
+
+    def test_introspection_adjustment_revert(self) -> None:
+        for _ in range(3):
+            self.system.confirm_awaken(
+                ["learning"], confirmed=True, reason="S4 演示"
+            )
+        report = self.system.introspect(apply=True)
+        adjustment_id = report["applied"][0]["id"]
+        old_value = report["applied"][0]["old"]
+        result = self.system.revert_adjustment(adjustment_id)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["restored"], old_value)
+        self.assertEqual(
+            self.system.router.get_settings()["ask_min_length"], old_value
+        )
+
+    def test_introspection_insufficient_sample(self) -> None:
+        # 样本不足（<3）不调整
+        self.system.confirm_awaken(["learning"], confirmed=True, reason="A")
+        report = self.system.introspect(apply=True)
+        self.assertEqual(report["applied"], [])
+        self.assertEqual(report["proposed"], [])
+
+    def test_introspection_low_confirm_reduces_asking(self) -> None:
+        # 低确认率 → 提高 ask_min_length（减少打扰）
+        self.system.router.update_settings({"ask_min_length": 60})
+        for _ in range(3):
+            self.system.confirm_awaken(
+                ["tech"], confirmed=False, reason="S4 演示"
+            )
+        report = self.system.introspect(apply=True)
+        self.assertTrue(report["applied"])
+        adjustment = report["applied"][0]
+        self.assertGreater(adjustment["new"], adjustment["old"])
+
+    def test_introspection_log_traceable(self) -> None:
+        self.system.run_task("creation", "script_draft", {"topic": "A"})
+        self.system.introspect()
+        entries = self.system.introspection_list()
+        self.assertEqual(len(entries), 1)
+        self.assertIn("stats", entries[0])
+        self.assertIn("at", entries[0])
+
+
+class AvatarApiS4Test(unittest.TestCase):
+    """S4 HTTP 端点冒烟：skills / introspect。"""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.environment = patch.dict(
+            os.environ,
+            {
+                "MODEL_BACKEND": "placeholder",
+                "CHARACTER_CARD_PATH": os.path.join(self.temp_dir.name, "character.json"),
+                "CHARACTER_MEMORY_PATH": os.path.join(self.temp_dir.name, "memory.json"),
+                "CHARACTER_ASSET_DIR": self.temp_dir.name,
+                "CHARACTER_PRIVACY_PATH": os.path.join(self.temp_dir.name, "privacy.json"),
+                "CHARACTER_AFFECT_PATH": os.path.join(self.temp_dir.name, "affect.json"),
+                "AVATAR_REGISTRY_PATH": os.path.join(self.temp_dir.name, "avatars.json"),
+                "AVATAR_AWAKEN_LOG_PATH": os.path.join(
+                    self.temp_dir.name, "awaken_log.json"
+                ),
+                "AVATAR_TOOL_LOG_PATH": os.path.join(self.temp_dir.name, "tool_log.json"),
+            },
+        )
+        self.environment.start()
+        self.server = create_server()
+        self.thread = Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.connection = HTTPConnection("127.0.0.1", self.server.server_port)
+
+    def tearDown(self) -> None:
+        self.connection.close()
+        self.server.shutdown()
+        self.server.server_close()
+        self.environment.stop()
+        self.temp_dir.cleanup()
+
+    def _get(self, path: str) -> tuple[int, dict]:
+        self.connection.request("GET", path)
+        response = self.connection.getresponse()
+        return response.status, json.loads(response.read())
+
+    def _post(self, path: str, payload: dict) -> tuple[int, dict]:
+        self.connection.request(
+            "POST",
+            path,
+            json.dumps(payload),
+            {"Content-Type": "application/json"},
+        )
+        response = self.connection.getresponse()
+        return response.status, json.loads(response.read())
+
+    def test_skills_endpoint(self) -> None:
+        status, payload = self._get("/v1/avatars/skills")
+        self.assertEqual(status, 200)
+        ids = {s["id"] for s in payload["skills"]}
+        self.assertIn("live2d_render", ids)
+        self.assertIn("document_retrieve", ids)
+
+    def test_skills_register_endpoint(self) -> None:
+        status, payload = self._post(
+            "/v1/avatars/skills/register",
+            {
+                "id": "mix_audio",
+                "name": "人声优先混音",
+                "description": "背景音乐不盖人声（K6 待办）",
+                "capability": "video_script",
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["skill"]["id"], "mix_audio")
+
+    def test_introspect_endpoint(self) -> None:
+        status, payload = self._post(
+            "/v1/avatars/introspect", {"apply": False}
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("stats", payload)
+        self.assertIn("tool_total", payload["stats"])
+
+    def test_introspection_log_endpoint(self) -> None:
+        self._post("/v1/avatars/introspect", {"apply": False})
+        status, payload = self._get("/v1/avatars/introspection-log")
+        self.assertEqual(status, 200)
+        self.assertGreaterEqual(len(payload["entries"]), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

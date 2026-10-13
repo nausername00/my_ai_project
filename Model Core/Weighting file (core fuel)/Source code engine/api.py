@@ -435,6 +435,18 @@ class ApiHandler(BaseHTTPRequestHandler):
                 {"entries": self.get_avatar_system().tool_log_list()},
             )
             return
+        if path == "/v1/avatars/skills":
+            self._send_json(
+                HTTPStatus.OK,
+                {"skills": self.get_avatar_system().skill_list()},
+            )
+            return
+        if path == "/v1/avatars/introspection-log":
+            self._send_json(
+                HTTPStatus.OK,
+                {"entries": self.get_avatar_system().introspection_list()},
+            )
+            return
         if path == "/v1/privacy":
             self._send_json(HTTPStatus.OK, self.character_store.get_privacy_settings())
             return
@@ -659,6 +671,34 @@ class ApiHandler(BaseHTTPRequestHandler):
                     content=str(payload.get("content", "")),
                     approved=bool(payload.get("approved", False)),
                     reason=str(payload.get("reason", "")),
+                )
+                self._send_json(HTTPStatus.OK, result)
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/avatars/skills/register":
+            try:
+                payload = self._read_json()
+                card = self.get_avatar_system().register_skill(payload)
+                self._send_json(HTTPStatus.OK, {"skill": card})
+            except ValueError as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/avatars/introspect":
+            try:
+                payload = self._read_json()
+                result = self.get_avatar_system().introspect(
+                    apply=bool(payload.get("apply", False))
+                )
+                self._send_json(HTTPStatus.OK, result)
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/avatars/introspection/revert":
+            try:
+                payload = self._read_json()
+                result = self.get_avatar_system().revert_adjustment(
+                    str(payload.get("adjustment_id", ""))
                 )
                 self._send_json(HTTPStatus.OK, result)
             except (TypeError, ValueError, json.JSONDecodeError) as error:

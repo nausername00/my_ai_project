@@ -17,6 +17,7 @@ from uuid import uuid4
 
 from avatar_tasks import AvatarToolGate, AvatarToolLog, run_avatar_task
 from avatar_collab import AvatarOrchestrator
+from avatar_evolution import IntrospectionLoop, SkillCardRegistry
 
 AvatarStatus = Literal["active", "sleeping"]
 
@@ -405,6 +406,14 @@ class AvatarSystem:
         self.tool_gate = AvatarToolGate(self.tool_log)
         self._character_store = character_store
         self.orchestrator = AvatarOrchestrator(self.run_task)
+        base_dir = Path(awaken_log_path).parent
+        self.skills = SkillCardRegistry(base_dir / "skills.json")
+        self.introspection = IntrospectionLoop(
+            self.router,
+            self.tool_log,
+            self.awaken_log,
+            base_dir / "introspection_log.json",
+        )
 
     def status(self) -> dict[str, Any]:
         avatars = [p.to_dict() for p in self.registry.list()]
@@ -568,3 +577,25 @@ class AvatarSystem:
         except (TypeError, ValueError) as error:
             return {"status": "failed", "reason": str(error)}
         return {"status": "ok", "memory": memory}
+
+    def skill_list(self) -> list[dict[str, Any]]:
+        """技能卡列表（K / S 系列已验证能力沉淀）。"""
+        return self.skills.list()
+
+    def register_skill(self, card: dict[str, Any]) -> dict[str, Any]:
+        """登记技能卡（配置而非硬编码；本地登记自动授权）。"""
+        return self.skills.register(card)
+
+    def skill_for_task(self, task: str) -> dict[str, Any] | None:
+        """按分身任务名找绑定技能卡（技能卡被实际调用时验证）。"""
+        return self.skills.by_invoke(task)
+
+    def introspect(self, apply: bool = False) -> dict[str, Any]:
+        """自省回路：回放记录 → 统计 → 策略调整（可应用 / 可撤销）。"""
+        return self.introspection.run(apply=apply)
+
+    def introspection_list(self, limit: int = 20) -> list[dict[str, Any]]:
+        return self.introspection.list(limit=limit)
+
+    def revert_adjustment(self, adjustment_id: str) -> dict[str, Any]:
+        return self.introspection.revert(adjustment_id)
