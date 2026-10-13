@@ -1,0 +1,100 @@
+{
+  "source": "D:\\Coding\\code program\\test\\This is mine\\my_ai_project\\Model Core\\Weighting file (core fuel)\\Character\\K1 Portrait\\baseline_v5_0_raw.png",
+  "canvas": [
+    1024,
+    1536
+  ],
+  "person_pixels": 298657,
+  "compose_check": {
+    "passed": true,
+    "diff": 0,
+    "total": 298657
+  },
+  "layers": {
+    "eye": {
+      "file": "eye.png",
+      "bbox": [
+        489,
+        565,
+        657,
+        736
+      ],
+      "pixels": 1175,
+      "purpose": "眼睛（含瞳孔与眼周）",
+      "z_order": 3
+    },
+    "mouth": {
+      "file": "mouth.png",
+      "bbox": [
+        488,
+        474,
+        580,
+        719
+      ],
+      "pixels": 5892,
+      "purpose": "嘴巴（含口线与唇色）",
+      "z_order": 2
+    },
+    "hair": {
+      "file": "hair.png",
+      "bbox": [
+        261,
+        418,
+        945,
+        1227
+      ],
+      "pixels": 27827,
+      "purpose": "银白长发（覆盖脸侧）",
+      "z_order": 1
+    },
+    "face": {
+      "file": "face.png",
+      "bbox": [
+        502,
+        472,
+        774,
+        825
+      ],
+      "pixels": 54890,
+      "purpose": "脸部基底（皮肤）",
+      "z_order": 0
+    },
+    "cloth": {
+      "file": "cloth.png",
+      "bbox": [
+        261,
+        418,
+        944,
+        1197
+      ],
+      "pixels": 154819,
+      "purpose": "衣物（外套/裙/袜，含交叠双手）",
+      "z_order": 5
+    },
+    "boots": {
+      "file": "boots.png",
+      "bbox": [
+        390,
+        1198,
+        943,
+        1533
+      ],
+      "pixels": 56184,
+      "purpose": "靴子（下半身收尾）",
+      "z_order": 4
+    }
+  },
+  "needs_patch": [
+    {
+      "region": "face-hair boundary",
+      "bbox": [
+        490,
+        460,
+        786,
+        837
+      ],
+      "reason": "发丝与脸交界处可能遮挡皮肤，K3 绑定前需确认是否补画"
+    }
+  ],
+  "note": "部件蒙版为程序化粗蒙版（像素互斥归属，拼回=原图）；精细蒙版与补画在 K3 绑定前按需精修。"
+}

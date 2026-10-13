@@ -380,6 +380,13 @@ TOOL_CATALOG = {
     "list_memories": {"name": "list_memories", "arguments": {"limit": "返回条数", "scene": "可选场景过滤"}, "description": "列出角色长时记忆。", "risk": "local_reversible", "requires_approval": False},
     "search_memory": {"name": "search_memory", "arguments": {"query": "查询字符串", "limit": "返回条数"}, "description": "搜索角色长时记忆。", "risk": "local_reversible", "requires_approval": False},
     "add_memory": {"name": "add_memory", "arguments": {"content": "记忆内容", "source": "来源，如 agent/user", "visibility": "private/friend/public", "tags": "列表或逗号分隔", "scene": "场景名", "importance": "0..1 浮点数"}, "description": "新增一条角色记忆（需 approved）。", "risk": "requires_permission", "requires_approval": True},
+    "draw_portrait": {
+        "name": "draw_portrait",
+        "description": "用本地 ComfyUI 生成一张立绘草稿（基于 K1 定稿特征：红眸/白猫耳/银白长发/黑白主色带蓝红点缀的清冷少女）。草稿保存到 Character/K1 Portrait/drafts/，不覆盖定稿；可追加风格描述。",
+        "arguments": {"style_prompt": "可选：追加的风格描述（≤2000 字符）", "count": "可选：生成张数 1-3（默认 1）", "seed_base": "可选：基础随机种子（0=自动选推荐种子）"},
+        "risk": "local_reversible",
+        "requires_approval": False,
+    },
 }
 PLAN_TOOL_NAMES = frozenset(
     {"list_project_files", "read_project_file", "create_project_file"}
@@ -464,6 +471,29 @@ def validate_tool_arguments(tool_name: Any, arguments: Any) -> dict[str, Any]:
             if not isinstance(arguments[k], str):
                 raise ValueError(f"patch_project_file {k} 必须是字符串")
         return {"path": path, "old_string": arguments["old_string"], "new_string": arguments["new_string"]}
+    if tool_name == "draw_portrait":
+        optional = {"style_prompt", "count", "seed_base"}
+        if not set(arguments).issubset(optional):
+            raise ValueError("draw_portrait 只接受 style_prompt/count/seed_base")
+        out: dict[str, Any] = {}
+        if "style_prompt" in arguments:
+            if (
+                not isinstance(arguments["style_prompt"], str)
+                or len(arguments["style_prompt"]) > 2000
+            ):
+                raise ValueError("style_prompt 必须是 2000 字符以内的字符串")
+            out["style_prompt"] = arguments["style_prompt"]
+        if "count" in arguments:
+            count = arguments["count"]
+            if not isinstance(count, int) or count < 1 or count > 3:
+                raise ValueError("count 必须是 1-3 的整数")
+            out["count"] = count
+        if "seed_base" in arguments:
+            seed_base = arguments["seed_base"]
+            if not isinstance(seed_base, int):
+                raise ValueError("seed_base 必须是整数")
+            out["seed_base"] = seed_base
+        return out
     if tool_name in {"run_tests", "run_sandboxed_shell"}:
         optional = {"command", "timeout_seconds", "cwd", "safe_commands"}
         if not set(arguments).issubset(optional):
@@ -727,6 +757,92 @@ def patch_project_file(workspace_root: Path, arguments: Any) -> dict[str, Any]:
     }
 
 
+def draw_portrait(workspace_root: Path, arguments: dict[str, Any]) -> dict[str, Any]:
+    """墨灵「试画」：调用本地 ComfyUI 按 K1 定稿特征生成立绘草稿。
+
+    草稿只写入 workspace_root/Character/K1 Portrait/drafts/（不覆盖定稿）；
+    ComfyUI 未启动或执行失败时返回 error 说明，不抛异常破坏对话。
+    """
+    style_prompt = arguments.get("style_prompt") or ""
+    count = int(arguments.get("count", 1))
+    seed_base = int(arguments.get("seed_base", 0))
+
+    from comfyui_client import ComfyUIClient, ComfyUIError, make_txt2img_workflow
+    from portrait_prompts import (
+        DEFAULT_CFG,
+        DEFAULT_HEIGHT,
+        DEFAULT_STEPS,
+        DEFAULT_WIDTH,
+        NEGATIVE_TEMPLATE,
+        RECOMMENDED_SEEDS,
+        build_positive,
+    )
+
+    drafts_dir = workspace_root / "Character" / "K1 Portrait" / "drafts"
+    try:
+        drafts_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        return {
+            "tool": "draw_portrait",
+            "error": f"无法创建草稿目录：{error}",
+            "hint": "请确认工作区存在 Character/K1 Portrait 目录结构。",
+        }
+
+    seeds: list[int] = []
+    for i in range(count):
+        if seed_base:
+            seeds.append(seed_base + i)
+        else:
+            seeds.append(RECOMMENDED_SEEDS[i % len(RECOMMENDED_SEEDS)])
+
+    client = ComfyUIClient()
+    drafts: list[dict[str, Any]] = []
+    try:
+        for seed in seeds:
+            workflow = make_txt2img_workflow(
+                checkpoint="Counterfeit-V2.5_pruned.safetensors",
+                positive=build_positive(style_prompt=style_prompt),
+                negative=NEGATIVE_TEMPLATE,
+                width=DEFAULT_WIDTH,
+                height=DEFAULT_HEIGHT,
+                seed=seed,
+                steps=DEFAULT_STEPS,
+                cfg=DEFAULT_CFG,
+                lora=None,
+            )
+            images = client.generate(workflow, timeout_seconds=600)
+            if not images:
+                raise ComfyUIError("ComfyUI 未返回输出图片")
+            data = client.fetch_image(images[0])
+            target = drafts_dir / f"moling_draft_{seed}.png"
+            target.write_bytes(data)
+            drafts.append(
+                {
+                    "seed": seed,
+                    "path": str(target.relative_to(workspace_root)).replace("\\", "/"),
+                    "bytes": len(data),
+                }
+            )
+    except ComfyUIError as error:
+        return {
+            "tool": "draw_portrait",
+            "error": str(error),
+            "hint": "请确认本地 ComfyUI 已启动（http://127.0.0.1:8188）后重试。",
+        }
+    except OSError as error:
+        return {
+            "tool": "draw_portrait",
+            "error": f"保存草稿失败：{error}",
+            "hint": "请检查 Character/K1 Portrait/drafts 目录权限。",
+        }
+    return {
+        "tool": "draw_portrait",
+        "count": len(drafts),
+        "drafts": drafts,
+        "note": "草稿已保存到 Character/K1 Portrait/drafts/；挑选、透明化与定稿流程见 Docs & Compliance/K1_ARTIST_NOTES.md。",
+    }
+
+
 def execute_project_tool(
     workspace_root: Path,
     tool_name: Any,
@@ -744,6 +860,9 @@ def execute_project_tool(
         return write_project_file(workspace_root, arguments)
     if tool_name == "patch_project_file":
         return patch_project_file(workspace_root, arguments)
+    if tool_name == "draw_portrait":
+        args = validate_tool_arguments(tool_name, arguments)
+        return draw_portrait(workspace_root, args)
     # run_tests / run_sandboxed_shell 把权限和 dispatch 交给 computer_use 模块；
     # 这里只负责参数校验。cancel_event 可让运行中的 shell 调用被用户停止。
     if tool_name in {"run_tests", "run_sandboxed_shell"}:
