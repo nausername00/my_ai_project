@@ -4,6 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>墨小灵 · 悬浮窗</title>
+<script src="./vendor/live2dcubismcore.min.js"></script>
+<script src="./vendor/live2d-runtime.js"></script>
+<script src="./live2d-avatar.js"></script>
 <style>
   :root {
     --panel-bg: rgba(22, 24, 32, 0.78);
@@ -99,6 +102,23 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+  #avatar-wrap.expanded-live2d img { display: none; }
+  #avatar-wrap.expanded-live2d #avatar-text { display: none; }
+  #avatar-live2d {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  #avatar-wrap.expanded-live2d #avatar-live2d {
+    display: flex;
+  }
+  #avatar-live2d canvas {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain;
   }
   #avatar-wrap:hover { transform: scale(1.05); }
   #avatar-wrap.listening {
@@ -264,6 +284,7 @@
     <div id="body">
       <div id="avatar-wrap" title="点击打开主窗口">
         <img id="avatar-image" alt="角色立绘" hidden />
+        <div id="avatar-live2d"></div>
         <span id="avatar-text">灵</span>
       </div>
       <div id="content">
@@ -389,6 +410,7 @@
     request.catch((error) => {
       console.error("Could not resize the floating window:", error);
     });
+    syncLive2dVisibility();
   });
 
   function handleNotification(note) {
@@ -448,6 +470,10 @@
       text.hidden = false;
     }
     const moodKey = String(character.moodKey || "").toLowerCase();
+    currentMood = moodKey;
+    if (live2dReady && moodKey) {
+      window.MolingLive2D.setExpressionByMood(moodKey);
+    }
     const moodColor = MOOD_COLORS[moodKey] || "";
     moodDot.style.background = moodColor || "var(--text-dim)";
     moodDot.style.boxShadow = moodColor ? `0 0 10px ${moodColor}` : "none";
@@ -468,7 +494,43 @@
   window.floating.onCharacterUpdated(applyCharacter);
   window.floating.onSpeechState((speaking) => {
     avatarEl.classList.toggle("listening", speaking);
+    // Live2D 口型联动：说话张嘴、结束闭嘴
+    if (speaking) {
+      window.MolingLive2D?.startTalking();
+    } else {
+      window.MolingLive2D?.stopTalking();
+    }
   });
+
+  // ── 悬浮窗 Live2D 动态形象（沐莹）────────────────────────────
+  const live2dBox = document.getElementById("avatar-live2d");
+  let live2dReady = false;
+  let currentMood = "";
+
+  function syncLive2dVisibility() {
+    const isExpanded = panel.classList.contains("expanded");
+    avatarEl.classList.toggle("expanded-live2d", isExpanded && live2dReady);
+  }
+
+  async function initFloatingLive2D() {
+    try {
+      const ok = await window.MolingLive2D.init(live2dBox, {
+        modelUrl:
+          "moling://local/model/狐仙花嫁/狐仙花嫁/狐仙花嫁.model3.json",
+        fixedSize: { width: 228, height: 228 },
+      });
+      if (!ok) return;
+      live2dReady = true;
+      window.MolingLive2D.setCharacterSide("center", live2dBox);
+      if (currentMood) {
+        window.MolingLive2D.setExpressionByMood(currentMood);
+      }
+      syncLive2dVisibility();
+    } catch (error) {
+      console.error("Live2D init failed:", error);
+    }
+  }
+  initFloatingLive2D();
 
   (function initDemo() {
     const welcome = {

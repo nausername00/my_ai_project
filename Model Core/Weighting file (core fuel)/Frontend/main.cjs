@@ -1473,7 +1473,8 @@ function createFloatingWindow() {
   });
   floatingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   floatingWindow.setAlwaysOnTop(true, "screen-saver");
-  floatingWindow.loadFile(path.join(__dirname, "floating.html"));
+  // Live2D 模型与前端资源经 moling:// 同源协议加载（file:// 无法跨协议 fetch 模型资源）
+  floatingWindow.loadURL("moling://local/floating.html");
   floatingWindow.once("ready-to-show", () => {
     floatingWindowReady = true;
     floatingWindow.showInactive();
