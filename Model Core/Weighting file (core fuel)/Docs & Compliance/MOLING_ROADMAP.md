@@ -442,6 +442,13 @@
 - 原生动作：眨眼、小幅说话（眼 / 嘴 / 主体起步）、连续转头、抬手；可列出动作清单并按层规划。
 - 同一姿势插画可在剪辑中切换；时间线可编辑。
 - 验收：每个动作有触发语义、时长与中性返回；时间线编辑可回放；动作清单与分层规划成文。
+- **实现进度（K4 第一版，2026-10-13）**：情绪 → Live2D 表情自动联动已完成并实机验证。
+  - `setExpressionByMood(moodKey)` + 可配置 `MOOD_EXPRESSION_MAP`：calm=中性、happy/curious/warm=心心眼、surprised/caring=星星眼、worried=流泪、shy=脸红；目标表情不可用时回退中性。
+  - `updateAffect` 在 Live2D 模式直接驱动表情（静态立绘路径作为降级）；init 后按当前情绪同步一次。
+  - `setExpression` 幂等（重复切换同表情不再误报失败）；修复 init 待机动画自动播放（definitions 为对象而非数组）与 `resetExpression` 管理器定位。
+  - **修复画布 0 尺寸**：init 前先显示舞台 + init 内显式 `renderer.resize`；`preserveDrawingBuffer:true` 保证窗口截图/录屏可捕获 WebGL。
+  - **实机验证**：主窗口 8 种情绪切换全部成功（calm/happy/curious/surprised/worried/shy/warm/caring=true），画布 220×298 非空，截图中立绘可见。
+  - 待办：动作编排（提问切思考、拍手等语义动作映射）、时间线可编辑、动作清单成文。
 
 **K5 · 声线与口型曲线（P2；依赖 K3 嘴开合参数，可与 K4 并行）**
 - 首版先复用现有合成声线和试听，生成开场 / 疑惑 / 解释等对白预设；录音作为用户授权的素材，可用于人工配音与时间对齐，不自动克隆录音者声音。停顿 / 重音先允许人工编辑，自动语义韵律作为后续评估。

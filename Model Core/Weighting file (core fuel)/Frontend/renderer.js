@@ -3707,6 +3707,8 @@ function setMemoryStatus(message, isError = false) {
 }
 
 async function applyEmotionAvatar(mood) {
+  // K4：Live2D 动态形象已启用时不再加载/切换静态情绪立绘（由 setExpressionByMood 负责表情）
+  if (live2DInitialized && window.MolingLive2D) return;
   const requestVersion = ++appearanceRequestVersion;
   const portraits = window.MolingAvatarDisplay.getAvatarCandidates({
     baseAvatar: baseAvatarFileName,
@@ -3787,7 +3789,14 @@ function updateAffect(state) {
   document.getElementById("topbar-avatar").dataset.mood = state.mood;
   document.getElementById("settings-avatar").dataset.mood = state.mood;
   affectReason.textContent = `状态线索：${state.reason}`;
-  applyEmotionAvatar(state.mood);
+  // K4：Live2D 模式下情绪直接驱动动态表情；静态立绘路径作为降级
+  if (live2DInitialized && window.MolingLive2D) {
+    window.MolingLive2D.setExpressionByMood(state.mood).catch((error) => {
+      console.warn("Live2D 表情联动失败：", error);
+    });
+  } else {
+    applyEmotionAvatar(state.mood);
+  }
   const characterDisplay = document.getElementById("character-display");
   if (characterDisplay) characterDisplay.dataset.mood = state.mood;
   refreshAllMessageAvatars();
@@ -4814,16 +4823,25 @@ async function initLive2DIfAvailable() {
     window.MolingLive2D;
   if (!stage || !live2DReady) return;
   try {
+    // 先显示舞台再初始化：Pixi resizeTo 在 display:none 容器上会得到 0 尺寸，
+    // 初始化完成后容器尺寸固定，画布才不会是 0x0。
+    stage.hidden = false;
     await window.MolingLive2D.init(stage, {
       modelUrl: "moling://local/model/狐仙花嫁/狐仙花嫁/狐仙花嫁.model3.json",
     });
     live2DInitialized = true;
-    stage.hidden = false;
     characterDisplay.classList.add("has-live2d");
     if (welcomeImage) welcomeImage.hidden = true;
     const fallback = document.getElementById("welcome-avatar-fallback");
     if (fallback) fallback.hidden = true;
+    // K4：初始化后按当前情绪同步一次表情（loadAffect 可能在 init 前已跑静态路径）
+    try {
+      await window.MolingLive2D.setExpressionByMood(affectMood?.value || "calm");
+    } catch (error) {
+      console.warn("Live2D 初始表情同步失败：", error);
+    }
   } catch (error) {
+    stage.hidden = true;
     console.warn("Live2D 模型加载失败，保持静态立绘：", error);
     if (!live2DErrorShown) {
       live2DErrorShown = true;

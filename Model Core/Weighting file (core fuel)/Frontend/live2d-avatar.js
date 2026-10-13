@@ -1,8 +1,8 @@
-// Live2D 渲染模块（K3）：基于 pixi.js + pixi-live2d-display 加载本地 Live2D 模型。
+// Live2D 渲染模块（K3/K4）：基于 pixi.js + pixi-live2d-display 加载本地 Live2D 模型。
 // 依赖（按顺序引入）：
 //   vendor/live2dcubismcore.min.js  -> window.Live2DCubismCore
 //   vendor/live2d-runtime.js        -> window.MOLING_LIVE2D = { PIXI, Live2DModel }
-// 模型通过主进程自定义协议 moling-model:// 加载（仅 Character 目录内文件）。
+// 模型通过主进程自定义协议 moling:// 加载（仅 Character 目录内文件）。
 "use strict";
 
 (function () {
@@ -44,8 +44,8 @@
   // 模型适配容器：等比缩放 + 居中（锚点 0.5,0.5 保证中心对齐）
   function fitModel(container) {
     if (!model || !container) return;
-    const cw = container.clientWidth || 300;
-    const ch = container.clientHeight || 400;
+    const cw = container.clientWidth || container.getBoundingClientRect().width || 300;
+    const ch = container.clientHeight || container.getBoundingClientRect().height || 400;
     let bw = model.width || cw;
     let bh = model.height || ch;
     if (bw <= 0 || bh <= 0) {
@@ -126,6 +126,8 @@
       autoStart: true,
       resizeTo: container,
       resolution: window.devicePixelRatio || 1,
+      // 保留绘制缓冲：让窗口截图/录屏能稳定捕获 WebGL 内容（含 capturePage）
+      preserveDrawingBuffer: true,
     });
     container.appendChild(app.view);
     app.view.style.width = "100%";
@@ -144,14 +146,25 @@
     // motionManager/expressionManager 的 definitions 为同一引用，patch 一次即生效）。
     patchModelSubResourceURLs(modelUrl);
 
+    // 显式对齐画布与容器尺寸（resizeTo 在 display:none 容器上会得到 0，调用方应确保已显示）
+    const cw = container.clientWidth || container.getBoundingClientRect().width || 300;
+    const ch = container.clientHeight || container.getBoundingClientRect().height || 400;
+    if (cw > 0 && ch > 0) {
+      app.renderer.resize(Math.floor(cw), Math.floor(ch));
+    }
+
     fitModel(container);
 
-    // 待机动画（模型自带）
+    // 待机动画（模型自带）：definitions 是 { 组名: [动作...] } 的对象
     try {
       const motions = model.internalModel.motionManager.definitions;
-      const idle = motions.findIndex((group) => String(group).toLowerCase().includes("idle"));
-      if (idle >= 0) {
-        await model.internalModel.motionManager.startMotion(idle, 0);
+      if (motions && typeof motions === "object") {
+        const idleKey = Object.keys(motions).find((k) =>
+          String(k).toLowerCase().includes("idle")
+        );
+        if (idleKey) {
+          await model.internalModel.motionManager.startMotion(idleKey, 0);
+        }
       }
     } catch {
       /* 无待机动作时静默 */
@@ -167,7 +180,21 @@
     if (!model || !model.internalModel || !model.internalModel.motionManager) return false;
     const em = model.internalModel.motionManager.expressionManager;
     if (!em) return false;
-    currentExpressionIndex = typeof nameOrIndex === "number" ? nameOrIndex : -1;
+    const defs = em.definitions || [];
+    const resolvedIndex =
+      typeof nameOrIndex === "number"
+        ? nameOrIndex
+        : defs.findIndex((d) => d && d.Name === nameOrIndex);
+    // 幂等：当前已是目标表情时直接视为成功（避免重复切换被 manager 抑制而误报失败）
+    if (
+      resolvedIndex >= 0 &&
+      em.expressions &&
+      em.expressions.indexOf(em.currentExpression) === resolvedIndex
+    ) {
+      currentExpressionIndex = resolvedIndex;
+      return true;
+    }
+    currentExpressionIndex = resolvedIndex;
     const ok = await em.setExpression(nameOrIndex);
     return ok === true;
   }
@@ -221,12 +248,38 @@
   }
 
   function resetExpression() {
-    if (!model) return false;
-    const em = model.internalModel.expressionManager;
+    if (!model || !model.internalModel || !model.internalModel.motionManager) return false;
+    const em = model.internalModel.motionManager.expressionManager;
     if (!em) return false;
     currentExpressionIndex = -1;
     em.resetExpression();
     return true;
+  }
+
+  // K4：情绪键 -> 模型表情名映射（可被外部覆盖调整；null = 回中性无表情）
+  const MOOD_EXPRESSION_MAP = {
+    calm: null, // 平静 -> 中性
+    happy: "心心眼",
+    curious: "心心眼",
+    surprised: "星星眼",
+    worried: "流泪",
+    shy: "脸红",
+    warm: "心心眼",
+    caring: "星星眼",
+  };
+
+  // K4：按情绪键切换表情（情绪系统 mood key，见 renderer simulatedEmotions）
+  async function setExpressionByMood(moodKey) {
+    if (!model) return false;
+    const name = MOOD_EXPRESSION_MAP[moodKey] || null;
+    if (!name) {
+      return resetExpression();
+    }
+    const ok = await setExpression(name);
+    if (ok) return true;
+    // 目标表情不可用时回退中性，避免停留在旧表情
+    await resetExpression();
+    return false;
   }
 
   function dispose() {
@@ -300,6 +353,7 @@
   window.MolingLive2D = {
     init,
     setExpression,
+    setExpressionByMood,
     setMotion,
     setMouth,
     startTalking,
@@ -309,6 +363,9 @@
     dispose,
     getExpressionDefinitions,
     _debugExpressionState,
+    get MOOD_EXPRESSION_MAP() {
+      return MOOD_EXPRESSION_MAP;
+    },
     get loaded() {
       return Boolean(model);
     },
