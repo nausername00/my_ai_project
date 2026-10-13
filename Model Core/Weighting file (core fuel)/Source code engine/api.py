@@ -103,6 +103,7 @@ class ApiHandler(BaseHTTPRequestHandler):
             cls._avatar_system = AvatarSystem(
                 character_root / "avatars.json",
                 character_root / "awaken_log.json",
+                character_root / "tool_log.json",
             )
         return cls._avatar_system
     workspace_root = Path.cwd()
@@ -427,6 +428,12 @@ class ApiHandler(BaseHTTPRequestHandler):
                 {"entries": self.get_avatar_system().awaken_log.list()},
             )
             return
+        if path == "/v1/avatars/tool-log":
+            self._send_json(
+                HTTPStatus.OK,
+                {"entries": self.get_avatar_system().tool_log_list()},
+            )
+            return
         if path == "/v1/privacy":
             self._send_json(HTTPStatus.OK, self.character_store.get_privacy_settings())
             return
@@ -586,6 +593,34 @@ class ApiHandler(BaseHTTPRequestHandler):
                 payload = self._read_json()
                 settings = self.get_avatar_system().router.update_settings(payload)
                 self._send_json(HTTPStatus.OK, {"threshold": settings})
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/avatars/capabilities":
+            try:
+                payload = self._read_json()
+                profile = self.get_avatar_system().update_capabilities(
+                    avatar_id=str(payload.get("avatar_id", "")),
+                    mode=str(payload.get("mode", "set")),
+                    capability=str(payload.get("capability", "")),
+                    capabilities=payload.get("capabilities"),
+                )
+                self._send_json(HTTPStatus.OK, {"profile": profile.to_dict()})
+            except KeyError as error:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": str(error)})
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/avatars/task":
+            try:
+                payload = self._read_json()
+                result = self.get_avatar_system().run_task(
+                    avatar_id=str(payload.get("avatar_id", "")),
+                    task=str(payload.get("task", "")),
+                    payload=payload.get("payload") or {},
+                    approved=bool(payload.get("approved", False)),
+                )
+                self._send_json(HTTPStatus.OK, result)
             except (TypeError, ValueError, json.JSONDecodeError) as error:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return

@@ -39,6 +39,7 @@ def create_server(host: str = "127.0.0.1", port: int = 8000) -> ThreadingHTTPSer
     ApiHandler._avatar_system = AvatarSystem(
         os.getenv("AVATAR_REGISTRY_PATH", str(character_root / "avatars.json")),
         os.getenv("AVATAR_AWAKEN_LOG_PATH", str(character_root / "awaken_log.json")),
+        os.getenv("AVATAR_TOOL_LOG_PATH", str(character_root / "tool_log.json")),
     )
     return ThreadingHTTPServer((host, port), ApiHandler)
 

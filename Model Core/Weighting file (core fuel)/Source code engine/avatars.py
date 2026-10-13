@@ -15,6 +15,8 @@ from time import time
 from typing import Any, Literal
 from uuid import uuid4
 
+from avatar_tasks import AvatarToolGate, AvatarToolLog, run_avatar_task
+
 AvatarStatus = Literal["active", "sleeping"]
 
 
@@ -385,16 +387,20 @@ class AwakenLog:
 
 
 class AvatarSystem:
-    """分身系统门面：注册表 + 阈值 + 唤醒确认日志。"""
+    """分身系统门面：注册表 + 阈值 + 唤醒确认日志 + 工具闸门与痕迹。"""
 
     def __init__(
         self,
         registry_path: str | Path,
         awaken_log_path: str | Path,
+        tool_log_path: str | Path | None = None,
     ) -> None:
         self.registry = AvatarRegistry(registry_path)
         self.router = ThresholdRouter()
         self.awaken_log = AwakenLog(awaken_log_path)
+        tool_log = tool_log_path or (Path(awaken_log_path).parent / "tool_log.json")
+        self.tool_log = AvatarToolLog(tool_log)
+        self.tool_gate = AvatarToolGate(self.tool_log)
 
     def status(self) -> dict[str, Any]:
         avatars = [p.to_dict() for p in self.registry.list()]
@@ -430,3 +436,63 @@ class AvatarSystem:
                 except KeyError:
                     continue
         return entry
+
+    def update_capabilities(
+        self,
+        avatar_id: str,
+        mode: str = "set",
+        capability: str = "",
+        capabilities: list[str] | None = None,
+    ) -> AvatarProfile:
+        """能力清单可增删（配置而非硬编码）。
+
+        mode=set 直接覆盖；mode=add / remove 单个增删（幂等）。
+        """
+        profile = self.registry.get(avatar_id)
+        if profile is None:
+            raise KeyError(f"分身不存在: {avatar_id}")
+        if mode == "set":
+            return self.registry.update_capabilities(avatar_id, capabilities or [])
+        if mode == "add":
+            if not capability:
+                raise ValueError("add 模式需要 capability")
+            current = list(profile.capabilities)
+            if capability not in current:
+                current.append(capability)
+            return self.registry.update_capabilities(avatar_id, current)
+        if mode == "remove":
+            if not capability:
+                raise ValueError("remove 模式需要 capability")
+            current = [c for c in profile.capabilities if c != capability]
+            return self.registry.update_capabilities(avatar_id, current)
+        raise ValueError(f"未知模式: {mode}")
+
+    def run_task(
+        self,
+        avatar_id: str,
+        task: str,
+        payload: dict[str, Any] | None = None,
+        approved: bool = False,
+    ) -> dict[str, Any]:
+        """执行分身领域任务：领域校验 + 授权判定 + 执行 + 记录痕迹。
+
+        未授权的高权限 / 外部操作一律拒绝；分身只在自身领域做事。
+        """
+        profile = self.registry.get(avatar_id)
+        if profile is None:
+            return {
+                "status": "denied",
+                "reason": f"分身不存在: {avatar_id}",
+            }
+        return run_avatar_task(
+            avatar_id=avatar_id,
+            task=task,
+            payload=payload,
+            approved=approved,
+            gate=self.tool_gate,
+            log=self.tool_log,
+            domain=profile.domain,
+        )
+
+    def tool_log_list(self, limit: int = 100) -> list[dict[str, Any]]:
+        return self.tool_log.list(limit=limit)

@@ -492,3 +492,11 @@
   - 存储隔离：`AvatarSystem` 在 ApiHandler 惰性初始化（import 不落盘），`create_server` 可用环境变量覆盖路径（测试隔离真实用户数据）。
   - **测试**：`test_avatars.py` 25 项（注册表 / 状态机 / 阈值 / 唤醒确认流程 / HTTP 端点冒烟）全绿；前端 `npm check` 通过。
   - 待办：S2 领域能力（分身的"双手"）、S3 协作与主记忆、S4 自我进化（自省回路 + 技能沉淀）。
+- **S2 领域能力（2026-10-14 第一版）**：
+  - 新增 `Source code engine/avatar_tasks.py`：`AvatarToolLog`（工具调用痕迹：来源分身 / 工具 / 决策 / 授权方式 / 结果，可追溯）、`AvatarToolGate`（授权闸门：本地低风险自动授权；需审批 / 外部操作默认拒绝，仅显式批准后执行；未登记任务一律拒绝）、`run_avatar_task`（领域校验 → 授权判定 → 执行 → 记录）。
+  - 领域任务（本地、确定性、可复现，不依赖外部模型 / 网络）：陪伴 `mood_echo`（情绪识别 + 回映文案）、学习 `local_retrieve`（本地文档检索 + 要点归纳）、创作 `script_draft`（演出 / 讲解脚本骨架）、技术 `safe_exec`（白名单命令：python 纯表达式、git 只读，拒绝危险 / 网络操作）。
+  - 能力清单可增删：`POST /v1/avatars/capabilities`（set / add / remove，配置而非硬编码，持久化）。
+  - 新端点：`POST /v1/avatars/task`（执行分身任务，带 approved 授权）、`GET /v1/avatars/tool-log`（授权痕迹查询）。
+  - 存储隔离延续：tool log 走 `AVATAR_TOOL_LOG_PATH` 环境变量，测试与真实数据隔离。
+  - **测试**：`test_avatars.py` 43 项（+18 项 S2：四分身真实任务演示、未授权拒绝、外部操作默认拒绝、危险命令拦截、能力增删、痕迹可追溯、HTTP 冒烟）全绿。
+  - 待办：S3 协作与主记忆（跨领域分发 / 并行 / 成果回写）、S4 自我进化。

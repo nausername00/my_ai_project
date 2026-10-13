@@ -302,5 +302,251 @@ class AvatarApiS1Test(unittest.TestCase):
         self.assertFalse(payload["threshold"]["enabled"])
 
 
+class AvatarTasksS2Test(unittest.TestCase):
+    """S2：分身领域能力（可复现任务）+ 工具授权痕迹 + 能力清单可配置。"""
+
+    def setUp(self) -> None:
+        self.system = make_system()
+
+    def test_companion_mood_echo(self) -> None:
+        result = self.system.run_task(
+            "companion", "mood_echo", {"text": "今天有点难过"}
+        )
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["result"]["mood"], "难过")
+        self.assertIn("我在", result["result"]["echo"])
+
+    def test_learning_local_retrieve(self) -> None:
+        docs = (
+            Path(__file__).resolve().parents[2] / "Docs & Compliance"
+        )
+        result = self.system.run_task(
+            "learning",
+            "local_retrieve",
+            {"query": "分身", "scope_dir": str(docs)},
+        )
+        self.assertEqual(result["status"], "ok")
+        self.assertGreaterEqual(result["result"]["hit_files"], 1)
+        snippets = [
+            m["snippet"]
+            for hit in result["result"]["hits"]
+            for m in hit["matches"]
+        ]
+        self.assertTrue(any("分身" in s for s in snippets))
+
+    def test_creation_script_draft(self) -> None:
+        result = self.system.run_task(
+            "creation", "script_draft", {"topic": "时间管理", "style": "讲解"}
+        )
+        self.assertEqual(result["status"], "ok")
+        self.assertIn("时间管理", result["result"]["script"]["opening"])
+        self.assertEqual(result["result"]["script"]["closing"], "总结一下：时间管理，记住最核心的一点就够了。下次见～")
+
+    def test_tech_safe_exec_calculation(self) -> None:
+        result = self.system.run_task(
+            "tech",
+            "safe_exec",
+            {"command": "python", "args": "-c print(1+1)"},
+            approved=True,
+        )
+        self.assertEqual(result["status"], "ok")
+        self.assertIn("2", result["result"]["stdout"])
+
+    def test_tech_rejects_dangerous_command(self) -> None:
+        result = self.system.run_task(
+            "tech",
+            "safe_exec",
+            {"command": "python", "args": "-c 'import os'"},
+            approved=True,
+        )
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("危险", result["reason"])
+
+    def test_task_outside_domain_denied(self) -> None:
+        result = self.system.run_task(
+            "companion", "safe_exec", {"command": "python", "args": "-c 1+1"}
+        )
+        self.assertEqual(result["status"], "denied")
+        self.assertIn("不属于分身领域", result["reason"])
+        entries = self.system.tool_log_list()
+        self.assertEqual(entries[-1]["decision"], "denied")
+        self.assertEqual(entries[-1]["result_status"], "blocked")
+
+    def test_unapproved_approval_task_denied(self) -> None:
+        # safe_exec 需要审批；未批准 → 拒绝并留下痕迹
+        result = self.system.run_task(
+            "tech", "safe_exec", {"command": "python", "args": "-c 1+1"}
+        )
+        self.assertEqual(result["status"], "denied")
+        self.assertEqual(result["authorization"], "denied")
+        entries = self.system.tool_log_list()
+        self.assertEqual(entries[-1]["authorization"], "denied")
+
+    def test_approved_task_runs_and_traces(self) -> None:
+        result = self.system.run_task(
+            "tech",
+            "safe_exec",
+            {"command": "python", "args": "-c print(2*3)"},
+            approved=True,
+        )
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["authorization"], "approved")
+        entries = self.system.tool_log_list()
+        self.assertEqual(entries[-1]["authorization"], "approved")
+        self.assertEqual(entries[-1]["result_status"], "ok")
+
+    def test_unknown_task_denied(self) -> None:
+        result = self.system.run_task("learning", "not_a_task", {})
+        self.assertEqual(result["status"], "denied")
+        self.assertIn("未登记", result["reason"])
+
+    def test_external_operation_denied_by_default(self) -> None:
+        result = self.system.run_task(
+            "learning", "external_search", {"query": "anything"}
+        )
+        self.assertEqual(result["status"], "denied")
+        self.assertIn("外部操作默认拒绝", result["reason"])
+
+    def test_capabilities_add_and_remove(self) -> None:
+        profile = self.system.update_capabilities(
+            "tech", mode="add", capability="network_audit"
+        )
+        self.assertIn("network_audit", profile.capabilities)
+        profile = self.system.update_capabilities(
+            "tech", mode="remove", capability="network_audit"
+        )
+        self.assertNotIn("network_audit", profile.capabilities)
+        # 持久化：重建系统后能力清单仍在
+        reloaded = AvatarRegistry(self.system.registry._path)
+        self.assertIn("code", reloaded.get("tech").capabilities)  # type: ignore[union-attr]
+
+    def test_capabilities_set_overwrites(self) -> None:
+        profile = self.system.update_capabilities(
+            "learning", mode="set", capabilities=["deep_dive"]
+        )
+        self.assertEqual(profile.capabilities, ["deep_dive"])
+
+    def test_tool_log_is_traceable(self) -> None:
+        self.system.run_task("creation", "script_draft", {"topic": "演示"})
+        self.system.run_task("tech", "safe_exec", {"command": "python", "args": "-c 1"})
+        entries = self.system.tool_log_list()
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(entries[0]["avatar_id"], "creation")
+        self.assertEqual(entries[0]["task"], "script_draft")
+        self.assertEqual(entries[0]["authorization"], "auto_local")
+        self.assertEqual(entries[0]["result_status"], "ok")
+        self.assertIn("at", entries[0])
+
+
+class AvatarApiS2Test(unittest.TestCase):
+    """S2 HTTP 端点冒烟：task / capabilities / tool-log。"""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.environment = patch.dict(
+            os.environ,
+            {
+                "MODEL_BACKEND": "placeholder",
+                "CHARACTER_CARD_PATH": os.path.join(self.temp_dir.name, "character.json"),
+                "CHARACTER_MEMORY_PATH": os.path.join(self.temp_dir.name, "memory.json"),
+                "CHARACTER_ASSET_DIR": self.temp_dir.name,
+                "CHARACTER_PRIVACY_PATH": os.path.join(self.temp_dir.name, "privacy.json"),
+                "CHARACTER_AFFECT_PATH": os.path.join(self.temp_dir.name, "affect.json"),
+                "AVATAR_REGISTRY_PATH": os.path.join(self.temp_dir.name, "avatars.json"),
+                "AVATAR_AWAKEN_LOG_PATH": os.path.join(
+                    self.temp_dir.name, "awaken_log.json"
+                ),
+                "AVATAR_TOOL_LOG_PATH": os.path.join(self.temp_dir.name, "tool_log.json"),
+            },
+        )
+        self.environment.start()
+        self.server = create_server()
+        self.thread = Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.connection = HTTPConnection("127.0.0.1", self.server.server_port)
+
+    def tearDown(self) -> None:
+        self.connection.close()
+        self.server.shutdown()
+        self.server.server_close()
+        self.environment.stop()
+        self.temp_dir.cleanup()
+
+    def _get(self, path: str) -> tuple[int, dict]:
+        self.connection.request("GET", path)
+        response = self.connection.getresponse()
+        return response.status, json.loads(response.read())
+
+    def _post(self, path: str, payload: dict) -> tuple[int, dict]:
+        self.connection.request(
+            "POST",
+            path,
+            json.dumps(payload),
+            {"Content-Type": "application/json"},
+        )
+        response = self.connection.getresponse()
+        return response.status, json.loads(response.read())
+
+    def test_task_endpoint_learning(self) -> None:
+        status, payload = self._post(
+            "/v1/avatars/task",
+            {
+                "avatar_id": "learning",
+                "task": "local_retrieve",
+                "payload": {
+                    "query": "分身",
+                    "scope_dir": str(Path(__file__).resolve().parents[1]),
+                },
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["status"], "ok")
+
+    def test_task_endpoint_unapproved_denied(self) -> None:
+        status, payload = self._post(
+            "/v1/avatars/task",
+            {
+                "avatar_id": "tech",
+                "task": "safe_exec",
+                "payload": {"command": "python", "args": "-c 1+1"},
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["status"], "denied")
+        self.assertEqual(payload["authorization"], "denied")
+
+    def test_task_endpoint_approved_runs(self) -> None:
+        status, payload = self._post(
+            "/v1/avatars/task",
+            {
+                "avatar_id": "tech",
+                "task": "safe_exec",
+                "payload": {"command": "python", "args": "-c print(2+2)"},
+                "approved": True,
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["result"]["stdout"].strip(), "4")
+
+    def test_capabilities_endpoint(self) -> None:
+        status, payload = self._post(
+            "/v1/avatars/capabilities",
+            {"avatar_id": "creation", "mode": "add", "capability": "storyboard"},
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("storyboard", payload["profile"]["capabilities"])
+
+    def test_tool_log_endpoint(self) -> None:
+        self._post(
+            "/v1/avatars/task",
+            {"avatar_id": "creation", "task": "script_draft", "payload": {"topic": "冒烟"}},
+        )
+        status, payload = self._get("/v1/avatars/tool-log")
+        self.assertEqual(status, 200)
+        self.assertGreaterEqual(len(payload["entries"]), 1)
+        self.assertEqual(payload["entries"][-1]["task"], "script_draft")
+
+
 if __name__ == "__main__":
     unittest.main()
