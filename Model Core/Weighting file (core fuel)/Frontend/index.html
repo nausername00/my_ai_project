@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'none';"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self';"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>墨小灵 · Moling</title>
@@ -309,6 +309,7 @@
             <figure class="character-display" id="character-display">
               <img id="welcome-avatar-image" alt="墨灵角色立绘" hidden />
               <span id="welcome-avatar-fallback" aria-hidden="true">墨</span>
+              <div id="live2d-stage" class="live2d-stage" hidden></div>
             </figure>
             <div class="welcome-copy">
               <h1>你好，我是墨小灵</h1>
@@ -701,7 +702,7 @@
                 <button class="icon-button" id="avatar-clear" type="button">移除立绘</button>
               </div>
             </div>
-            <p class="form-status avatar-help">其他模型格式会登记并预览资源清单；运行时渲染器尚未集成。</p>
+            <p class="form-status avatar-help">其他模型格式会登记并预览资源清单；Live2D 模型（.model3.json）已支持运行时渲染。</p>
           </section>
           <section class="model-preview-pane" aria-label="角色组合预览">
             <h3>组合预览</h3>
@@ -740,6 +741,9 @@
         </div>
       </dialog>
     </main>
+    <script src="./vendor/live2dcubismcore.min.js"></script>
+    <script src="./vendor/live2d-runtime.js"></script>
+    <script src="./live2d-avatar.js"></script>
     <script src="./voice-playback.js"></script>
     <script src="./avatar-display.js"></script>
     <script src="./renderer.js"></script>

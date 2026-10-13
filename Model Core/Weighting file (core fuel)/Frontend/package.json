@@ -71,9 +71,15 @@
   },
   "devDependencies": {
     "electron": "^41.0.0",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "pixi.js": "^6.5.10"
   },
   "allowScripts": {
     "electron@41.10.7": true
+  },
+  "dependencies": {
+    "@pixi/unsafe-eval": "^6.5.10",
+    "pixi-live2d-display": "^0.4.0"
   }
 }

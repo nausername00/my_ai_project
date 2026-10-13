@@ -4,6 +4,7 @@ const {
   dialog,
   ipcMain,
   nativeImage,
+  protocol,
   session,
   shell,
 } = require("electron");
@@ -12,6 +13,10 @@ const { execFileSync, spawn } = require("node:child_process");
 const fs = require("node:fs/promises");
 const net = require("node:net");
 const path = require("node:path");
+
+// moling:// 同源协议：主窗口页面与 Live2D 模型资源统一由本协议服务（Chromium CORS 只放行同源自定义 scheme）。
+// 必须在 app ready 之前注册特权（standard + fetch + stream）。
+registerMolingScheme();
 
 const { createOllamaSetup } = require("./ollama-setup.cjs");
 const {
@@ -38,6 +43,10 @@ const {
   workingPath: miniGameWorkingPath,
 } = require("./mini-game-drafts.cjs");
 const { pathToFileURL } = require("node:url");
+const {
+  registerMolingScheme,
+  registerMolingProtocol,
+} = require("./live2d-protocol.cjs");
 
 const projectRoot = path.resolve(__dirname, "..");
 const toolApprovalCapability = randomBytes(32).toString("hex");
@@ -91,6 +100,11 @@ function initializeDataPaths() {
     process.env.VOICE_RESOURCE_DIR ||
       path.join(app.getPath("userData"), "Character", "voice-resources"),
   );
+}
+
+// moling:// 协议：主窗口页面 + 模型资源统一服务（实现见 live2d-protocol.cjs）。
+async function registerMolingProtocolHandler() {
+  await registerMolingProtocol(app, projectRoot, __dirname);
 }
 
 async function chooseAndAnalyzeImage() {
@@ -1373,7 +1387,7 @@ function createWindow() {
     },
   });
   mainWindow.once("ready-to-show", () => mainWindow.show());
-  mainWindow.loadFile(path.join(__dirname, "index.html"));
+  mainWindow.loadURL("moling://local/index.html");
 }
 
 async function pushCharacterToFloating() {
@@ -1545,6 +1559,7 @@ async function syncBackendNotifications() {
 app.whenReady().then(async () => {
   try {
     initializeDataPaths();
+    registerMolingProtocolHandler();
     session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
       const allowed =
         Boolean(mainWindow) &&

@@ -4781,6 +4781,7 @@ document.addEventListener("DOMContentLoaded", () => {
   updateAgentReflectionButton();
   void loadCollaborationRoles();
   void initializeAvatarDisplayMode();
+  void initLive2DIfAvailable();
   refreshStatus();
   loadCharacter();
   loadCharacters();
@@ -4798,6 +4799,42 @@ document.addEventListener("DOMContentLoaded", () => {
     updateCharacterVoicePreviewState();
   });
 });
+
+// K3：Live2D 运行时接入。模型加载成功则显示动态角色（隐藏静态立绘）；失败保持静态立绘降级。
+let live2DInitialized = false;
+let live2DErrorShown = false;
+async function initLive2DIfAvailable() {
+  const stage = document.getElementById("live2d-stage");
+  const characterDisplay = document.getElementById("character-display");
+  const welcomeImage = document.getElementById("welcome-avatar-image");
+  const live2DReady =
+    window.MOLING_LIVE2D &&
+    window.MOLING_LIVE2D.PIXI &&
+    window.MOLING_LIVE2D.Live2DModel &&
+    window.MolingLive2D;
+  if (!stage || !live2DReady) return;
+  try {
+    await window.MolingLive2D.init(stage, {
+      modelUrl: "moling://local/model/狐仙花嫁/狐仙花嫁/狐仙花嫁.model3.json",
+    });
+    live2DInitialized = true;
+    stage.hidden = false;
+    characterDisplay.classList.add("has-live2d");
+    if (welcomeImage) welcomeImage.hidden = true;
+    const fallback = document.getElementById("welcome-avatar-fallback");
+    if (fallback) fallback.hidden = true;
+  } catch (error) {
+    console.warn("Live2D 模型加载失败，保持静态立绘：", error);
+    if (!live2DErrorShown) {
+      live2DErrorShown = true;
+      const status = document.getElementById("avatar-status");
+      if (status) {
+        status.textContent = "Live2D 模型加载失败，已回退到静态立绘。";
+        status.classList.add("error");
+      }
+    }
+  }
+}
 
 characterForm.addEventListener("input", () => {
   characterForm.dataset.dirty = "true";

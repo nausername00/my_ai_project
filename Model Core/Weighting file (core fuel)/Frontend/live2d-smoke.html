@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Live2D Smoke</title>
+    <style>
+      html, body { margin: 0; padding: 0; background: #111318; }
+      #live2d-stage { width: 300px; height: 400px; }
+    </style>
+  </head>
+  <body>
+    <div id="live2d-stage"></div>
+    <script src="./vendor/live2dcubismcore.min.js"></script>
+    <script src="./vendor/live2d-runtime.js"></script>
+    <script src="./live2d-avatar.js"></script>
+    <script>
+      (async () => {
+        const report = (ok, message) => {
+          document.title = ok ? "SMOKE_OK" : "SMOKE_FAIL";
+          window.smokeResult = { ok, message };
+        };
+        try {
+          window.__smokeErrors = [];
+          window.addEventListener("error", (e) => {
+            window.__smokeErrors.push(
+              (e.message || "") + " @ " + (e.filename || "") + ":" + (e.lineno || ""),
+            );
+          });
+          window.addEventListener("unhandledrejection", (e) => {
+            window.__smokeErrors.push(
+              "rejection: " + (e.reason && e.reason.message ? e.reason.message : String(e.reason)),
+            );
+          });
+          const diag = {
+            cubism: typeof window.Live2DCubismCore,
+            runtime: typeof window.MOLING_LIVE2D,
+            avatar: typeof window.MolingLive2D,
+            pixi:
+              typeof (window.MOLING_LIVE2D && window.MOLING_LIVE2D.PIXI),
+            live2dmodel:
+              typeof (window.MOLING_LIVE2D &&
+                window.MOLING_LIVE2D.Live2DModel),
+            scripts: Array.from(document.scripts).map((s) => s.src),
+          };
+          const ready =
+            window.Live2DCubismCore &&
+            window.MOLING_LIVE2D &&
+            window.MOLING_LIVE2D.PIXI &&
+            window.MOLING_LIVE2D.Live2DModel &&
+            window.MolingLive2D;
+          if (!ready) {
+            window.__smokeErrors.push("runtime globals missing");
+            throw new Error(
+              "运行时全局对象缺失 " +
+                JSON.stringify(diag) +
+                " errors=" +
+                JSON.stringify(window.__smokeErrors),
+            );
+          }
+          // 协议探针：直接 fetch 模型主文件
+          const probe = await fetch(
+            "moling://local/model/狐仙花嫁/狐仙花嫁/狐仙花嫁.model3.json",
+          )
+            .then((r) => ({ status: r.status, ok: r.ok }))
+            .catch((e) => ({ error: e.message }));
+          if (!probe.ok) {
+            throw new Error(
+              "协议探针失败 " + JSON.stringify(probe) + " errors=" + JSON.stringify(window.__smokeErrors),
+            );
+          }
+          // 表情文件探针（相对 model3 目录解析后的绝对 URL）
+          const expProbe = await fetch(
+            "moling://local/model/狐仙花嫁/狐仙花嫁/1星星眼.exp3.json",
+          )
+            .then((r) => ({ status: r.status, ok: r.ok, len: r.headers.get("content-length") }))
+            .catch((e) => ({ error: e.message }));
+          const stage = document.getElementById("live2d-stage");
+          const ok = await window.MolingLive2D.init(stage, {
+            modelUrl:
+              "moling://local/model/狐仙花嫁/狐仙花嫁/狐仙花嫁.model3.json",
+          });
+          if (!ok) throw new Error("init 未返回成功");
+          await new Promise((r) => setTimeout(r, 1200));
+          // 验证模型已加载、能切换表情、能播动作
+          const expDefs = window.MolingLive2D.getExpressionDefinitions();
+          const expOk = await window.MolingLive2D.setExpression("星星眼");
+          const motionOk = await window.MolingLive2D.setMotion("Idle", 0);
+          // 详细诊断：patch 后的 File、索引加载结果
+          const diag2 = await window.MolingLive2D._debugExpressionState();
+          report(
+            expOk && motionOk,
+            `loaded=${window.MolingLive2D.loaded} expr=星星眼(${expOk}) motion=Idle(${motionOk}) expProbe=${JSON.stringify(expProbe)} diag=${JSON.stringify(diag2)} defs=${JSON.stringify(expDefs.map((d) => d && d.Name))}`,
+          );
+        } catch (error) {
+          report(false, error.message);
+        }
+      })();
+    </script>
+  </body>
+</html>
