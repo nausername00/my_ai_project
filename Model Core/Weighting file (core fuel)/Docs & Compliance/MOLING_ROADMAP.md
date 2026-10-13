@@ -513,4 +513,10 @@
     - `IntrospectionLoop`（自省回路）：回放工具痕迹（≤100）+ 唤醒确认记录（≤10）→ 统计（ok / denied / failed / 拒绝原因分布 / 唤醒确认率）→ 规则式策略调整：确认率高（≥0.8，样本 ≥3）降低 `ask_min_length`（提前询问、减少等待）、低（≤0.3）提高（减少打扰），±20 步进、40–160 范围；样本不足不调整；调整可应用（apply=True）也可撤销（revert，恢复旧值）。复盘日志 `introspection_log.json` 可追溯。
   - 新端点：`GET /v1/avatars/skills`、`POST /v1/avatars/skills/register`、`POST /v1/avatars/introspect`（apply）、`GET /v1/avatars/introspection-log`、`POST /v1/avatars/introspection/revert`。
   - **测试**：`test_avatars.py` 72 项（+14 项 S4：K/S 技能卡预置与来源、技能卡被分身实际调用（script_draft 绑定 creation）、登记/重复拒绝、自省统计、高确认率调整应用、撤销恢复、低确认率减少打扰、样本不足不调整、日志可追溯、HTTP 冒烟）全绿。
-  - 待办：S5 手机陪伴与性格分化（远期，不设时间表）。
+  - 待办：S5 手机陪伴与性格分化（远期，不设时间表）；S5 前置·性格分化模板已作为补丁推进。
+- **S5 前置 · 性格分化模板（2026-10-14 第一版）**：
+  - 新增 `Source code engine/avatar_persona.py`：`PersonaRegistry`——四分身性格模板（语气 / 句式 / 情境措辞），8 种情境对齐 S1–S4 流程（task_ok / denied / failed / needs_input / wake_offer / suggestion / writeback_ok / greeting）；同一情境下四分身输出可被规则区分；懒落盘、未知分身 / 情境中性兜底不抛错。
+  - 集成：`AvatarSystem` 挂载 `personas` 注册表 + `persona_list / upsert_persona / persona_speak` 门面；`run_task` 结果装饰各分身性格消息（表现层，不改执行 / 授权逻辑）；`GET /v1/avatars/personas`、`POST /v1/avatars/personas`（登记 / 覆盖）。
+  - 存储隔离延续：`Character/personas.json` 默认，测试走 `PERSONA_PATH` 环境变量；`.gitignore` 追加 personas / tool_log / skills / introspection_log。
+  - **测试**：`test_avatars.py` 82 项（+10 项 S5：四分身默认性格齐全、同一情境输出可区分、变量替换、未知分身 / 情境兜底、定制持久化、非法 persona 拒绝、run_task 消息装饰、HTTP 冒烟）全绿。
+  - 待办：S5 其余（手机陪伴原型、性格参数深化）。

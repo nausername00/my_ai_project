@@ -18,6 +18,7 @@ from uuid import uuid4
 from avatar_tasks import AvatarToolGate, AvatarToolLog, run_avatar_task
 from avatar_collab import AvatarOrchestrator
 from avatar_evolution import IntrospectionLoop, SkillCardRegistry
+from avatar_persona import PersonaRegistry
 
 AvatarStatus = Literal["active", "sleeping"]
 
@@ -414,6 +415,7 @@ class AvatarSystem:
             self.awaken_log,
             base_dir / "introspection_log.json",
         )
+        self.personas = PersonaRegistry(base_dir / "personas.json")
 
     def status(self) -> dict[str, Any]:
         avatars = [p.to_dict() for p in self.registry.list()]
@@ -497,7 +499,7 @@ class AvatarSystem:
                 "status": "denied",
                 "reason": f"分身不存在: {avatar_id}",
             }
-        return run_avatar_task(
+        result = run_avatar_task(
             avatar_id=avatar_id,
             task=task,
             payload=payload,
@@ -506,6 +508,26 @@ class AvatarSystem:
             log=self.tool_log,
             domain=profile.domain,
         )
+        # 表现层装饰：按分身性格渲染情境消息（不改执行 / 授权逻辑）
+        result["message"] = self.persona_speak(
+            avatar_id,
+            {
+                "ok": "task_ok",
+                "denied": "task_denied",
+                "failed": "task_failed",
+                "pending": "needs_input",
+            }.get(str(result.get("status", "")), "task_ok"),
+            result=self._task_result_text(result),
+        )
+        return result
+
+    @staticmethod
+    def _task_result_text(result: dict[str, Any]) -> str:
+        for key in ("summary", "result", "echo", "draft", "output"):
+            value = result.get(key)
+            if isinstance(value, str) and value:
+                return value
+        return str(result.get("status", "已完成"))
 
     def tool_log_list(self, limit: int = 100) -> list[dict[str, Any]]:
         return self.tool_log.list(limit=limit)
@@ -599,3 +621,17 @@ class AvatarSystem:
 
     def revert_adjustment(self, adjustment_id: str) -> dict[str, Any]:
         return self.introspection.revert(adjustment_id)
+
+    def persona_list(self) -> list[dict[str, Any]]:
+        """四分身性格模板列表（S5 前置）。"""
+        return self.personas.list()
+
+    def upsert_persona(self, persona: dict[str, Any]) -> dict[str, Any]:
+        """登记 / 覆盖分身性格（配置而非硬编码）。"""
+        return self.personas.upsert(persona)
+
+    def persona_speak(
+        self, avatar_id: str, situation: str, **variables: Any
+    ) -> str:
+        """按分身性格渲染情境消息；未知分身 / 情境回落中性兜底。"""
+        return self.personas.speak(avatar_id, situation, **variables)

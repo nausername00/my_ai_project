@@ -447,6 +447,12 @@ class ApiHandler(BaseHTTPRequestHandler):
                 {"entries": self.get_avatar_system().introspection_list()},
             )
             return
+        if path == "/v1/avatars/personas":
+            self._send_json(
+                HTTPStatus.OK,
+                {"personas": self.get_avatar_system().persona_list()},
+            )
+            return
         if path == "/v1/privacy":
             self._send_json(HTTPStatus.OK, self.character_store.get_privacy_settings())
             return
@@ -702,6 +708,14 @@ class ApiHandler(BaseHTTPRequestHandler):
                 )
                 self._send_json(HTTPStatus.OK, result)
             except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/avatars/personas":
+            try:
+                payload = self._read_json()
+                persona = self.get_avatar_system().upsert_persona(payload)
+                self._send_json(HTTPStatus.OK, {"persona": persona})
+            except ValueError as error:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         if path == "/v1/partners/evaluate":

@@ -92,3 +92,7 @@ Model Core/Weighting file (core fuel)/Character/affect-*.json
 Model Core/Weighting file (core fuel)/Is it feasible/
 Model Core/Weighting file (core fuel)/Character/avatars.json
 Model Core/Weighting file (core fuel)/Character/awaken_log.json
+Model Core/Weighting file (core fuel)/Character/tool_log.json
+Model Core/Weighting file (core fuel)/Character/skills.json
+Model Core/Weighting file (core fuel)/Character/introspection_log.json
+Model Core/Weighting file (core fuel)/Character/personas.json

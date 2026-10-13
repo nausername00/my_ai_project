@@ -979,5 +979,147 @@ class AvatarApiS4Test(unittest.TestCase):
         self.assertGreaterEqual(len(payload["entries"]), 1)
 
 
+class AvatarPersonaS5Test(unittest.TestCase):
+    """S5 前置：性格分化（四分身语气可区分、模板可定制、兜底不抛错）。"""
+
+    def setUp(self) -> None:
+        tmp = tempfile.mkdtemp(prefix="moling_avatars_s5_")
+        self.store = FakeMemoryStore()
+        self.system = AvatarSystem(
+            registry_path=Path(tmp) / "avatars.json",
+            awaken_log_path=Path(tmp) / "awaken_log.json",
+            character_store=self.store,
+        )
+
+    def test_default_personas_present(self) -> None:
+        ids = {p["avatar_id"] for p in self.system.persona_list()}
+        self.assertEqual(ids, {"companion", "learning", "creation", "tech"})
+        for avatar_id in ids:
+            persona = self.system.personas.get(avatar_id)
+            self.assertIsNotNone(persona)
+            self.assertIn("situations", persona)  # type: ignore[union-attr]
+
+    def test_same_situation_distinct_outputs(self) -> None:
+        companion = self.system.persona_speak("companion", "task_ok", result="检查通过")
+        learning = self.system.persona_speak("learning", "task_ok", result="检查通过")
+        creation = self.system.persona_speak("creation", "task_ok", result="检查通过")
+        tech = self.system.persona_speak("tech", "task_ok", result="检查通过")
+        # 同一情境、同一事实，四个分身措辞可被规则区分
+        self.assertIn("我们做到了", companion)
+        self.assertIn("结论", learning)
+        self.assertIn("这个感觉", creation)
+        self.assertIn("已记录", tech)
+        self.assertEqual(len({companion, learning, creation, tech}), 4)
+
+    def test_template_variable_substitution(self) -> None:
+        message = self.system.persona_speak("tech", "task_ok", result="渲染 12 帧")
+        self.assertIn("渲染 12 帧", message)
+
+    def test_unknown_avatar_falls_back(self) -> None:
+        message = self.system.persona_speak("ghost", "task_ok", result="x")
+        self.assertIsInstance(message, str)
+        self.assertTrue(message)
+
+    def test_unknown_situation_falls_back(self) -> None:
+        message = self.system.persona_speak("tech", "no_such_situation")
+        self.assertIsInstance(message, str)
+        self.assertTrue(message)
+
+    def test_upsert_custom_persona(self) -> None:
+        self.system.upsert_persona(
+            {
+                "avatar_id": "companion",
+                "name": "定制陪伴",
+                "tone": "cozy",
+                "situations": {"task_ok": "搞定啦：{result}"},
+            }
+        )
+        message = self.system.persona_speak("companion", "task_ok", result="整理完成")
+        self.assertIn("搞定啦", message)
+        self.assertIn("整理完成", message)
+
+    def test_invalid_persona_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self.system.upsert_persona({"avatar_id": "x"})
+        with self.assertRaises(ValueError):
+            self.system.upsert_persona(
+                {"avatar_id": "x", "name": "X", "situations": {"task_ok": ""}}
+            )
+
+    def test_run_task_message_decorated(self) -> None:
+        # run_task 结果附带该分身的性格消息（表现层装饰）
+        result = self.system.run_task("creation", "script_draft", {"topic": "演示"})
+        self.assertEqual(result["status"], "ok")
+        self.assertIn("这个感觉", result["message"])
+
+
+class AvatarApiS5Test(unittest.TestCase):
+    """S5 前置 HTTP 冒烟：personas 列表与登记。"""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.environment = patch.dict(
+            os.environ,
+            {
+                "MODEL_BACKEND": "placeholder",
+                "CHARACTER_CARD_PATH": os.path.join(self.temp_dir.name, "character.json"),
+                "CHARACTER_MEMORY_PATH": os.path.join(self.temp_dir.name, "memory.json"),
+                "CHARACTER_ASSET_DIR": self.temp_dir.name,
+                "CHARACTER_PRIVACY_PATH": os.path.join(self.temp_dir.name, "privacy.json"),
+                "CHARACTER_AFFECT_PATH": os.path.join(self.temp_dir.name, "affect.json"),
+                "AVATAR_REGISTRY_PATH": os.path.join(self.temp_dir.name, "avatars.json"),
+                "AVATAR_AWAKEN_LOG_PATH": os.path.join(
+                    self.temp_dir.name, "awaken_log.json"
+                ),
+                "AVATAR_TOOL_LOG_PATH": os.path.join(self.temp_dir.name, "tool_log.json"),
+            },
+        )
+        self.environment.start()
+        self.server = create_server()
+        self.thread = Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.connection = HTTPConnection("127.0.0.1", self.server.server_port)
+
+    def tearDown(self) -> None:
+        self.connection.close()
+        self.server.shutdown()
+        self.server.server_close()
+        self.environment.stop()
+        self.temp_dir.cleanup()
+
+    def _get(self, path: str) -> tuple[int, dict]:
+        self.connection.request("GET", path)
+        response = self.connection.getresponse()
+        return response.status, json.loads(response.read())
+
+    def _post(self, path: str, payload: dict) -> tuple[int, dict]:
+        self.connection.request(
+            "POST",
+            path,
+            json.dumps(payload),
+            {"Content-Type": "application/json"},
+        )
+        response = self.connection.getresponse()
+        return response.status, json.loads(response.read())
+
+    def test_personas_endpoint(self) -> None:
+        status, payload = self._get("/v1/avatars/personas")
+        self.assertEqual(status, 200)
+        ids = {p["avatar_id"] for p in payload["personas"]}
+        self.assertEqual(ids, {"companion", "learning", "creation", "tech"})
+
+    def test_personas_upsert_endpoint(self) -> None:
+        status, payload = self._post(
+            "/v1/avatars/personas",
+            {
+                "avatar_id": "companion",
+                "name": "定制陪伴",
+                "situations": {"task_ok": "搞定啦：{result}"},
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["persona"]["name"], "定制陪伴")
+
+
 if __name__ == "__main__":
     unittest.main()
