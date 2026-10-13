@@ -1,0 +1,14 @@
+{
+  "name": "k6-demo-greeting",
+  "width": 1280,
+  "height": 720,
+  "fps": 10,
+  "layout": { "characterSide": "right" },
+  "backgrounds": ["#111318", "#f5f0e8"],
+  "tracks": [
+    { "t": 0,    "dur": 2.5, "expression": "心心眼", "speech": true, "text": "大家好，我是墨灵！今天由我来当讲解员。" },
+    { "t": 2.5,  "dur": 3.0, "expression": "星星眼", "speech": true, "text": "我们聊聊一个有趣的概念——Live2D 演出。" },
+    { "t": 5.5,  "dur": 3.0, "expression": null,     "speech": true, "text": "提问时间：想知道它是怎么动起来的吗？" },
+    { "t": 8.5,  "dur": 2.5, "expression": "脸红",    "speech": true, "text": "感谢大家的陪伴，我们下次再见～" }
+  ]
+}

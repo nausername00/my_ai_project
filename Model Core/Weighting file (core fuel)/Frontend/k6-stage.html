@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>K6 Stage</title>
+    <style>
+      html, body { margin: 0; padding: 0; overflow: hidden; background: transparent; }
+      #k6-stage { position: fixed; inset: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="k6-stage"></div>
+    <script src="./vendor/live2dcubismcore.min.js"></script>
+    <script src="./vendor/live2d-runtime.js"></script>
+    <script src="./live2d-avatar.js"></script>
+    <script>
+      // K6 演出舞台：主进程通过 executeJavaScript 调 runRender(timeline, opts)
+      window.addEventListener("error", (e) => {
+        if (window.k6) window.k6.reportError((e.message || "error") + " @" + (e.filename || ""));
+      });
+      window.runRender = async function (timeline, opts) {
+        const stage = document.getElementById("k6-stage");
+        opts = opts || {};
+        const initOk = await window.MolingLive2D.init(stage, {
+          modelUrl: opts.modelUrl ||
+            "moling://local/model/狐仙花嫁/狐仙花嫁/狐仙花嫁.model3.json",
+          fixedSize: { width: timeline.width || 1280, height: timeline.height || 720 },
+        });
+        if (!initOk) throw new Error("Live2D init failed");
+        window.MolingLive2D.setCharacterSide(opts.side || "right", stage);
+        window.MolingLive2D.setBackground(opts.background || null);
+        const info = await window.MolingLive2D.renderTimeline(timeline, async (dataURL, name) => {
+          await window.k6.saveFrame(dataURL, name);
+          window.k6.reportProgress({ name });
+        });
+        return info;
+      };
+    </script>
+  </body>
+</html>

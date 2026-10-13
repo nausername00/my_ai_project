@@ -120,12 +120,14 @@
       window.__molingLive2DTickerRegistered = true;
     }
 
+    // 固定输出尺寸（K6 演出舞台）：禁用 DPR 缩放与容器跟随，保证输出尺寸可控。
+    const fixed = options.fixedSize;
     app = new PIXI.Application({
       backgroundAlpha: 0,
       antialias: true,
       autoStart: true,
-      resizeTo: container,
-      resolution: window.devicePixelRatio || 1,
+      resizeTo: fixed ? undefined : container,
+      resolution: fixed ? 1 : window.devicePixelRatio || 1,
       // 保留绘制缓冲：让窗口截图/录屏能稳定捕获 WebGL 内容（含 capturePage）
       preserveDrawingBuffer: true,
     });
@@ -146,11 +148,15 @@
     // motionManager/expressionManager 的 definitions 为同一引用，patch 一次即生效）。
     patchModelSubResourceURLs(modelUrl);
 
-    // 显式对齐画布与容器尺寸（resizeTo 在 display:none 容器上会得到 0，调用方应确保已显示）
-    const cw = container.clientWidth || container.getBoundingClientRect().width || 300;
-    const ch = container.clientHeight || container.getBoundingClientRect().height || 400;
-    if (cw > 0 && ch > 0) {
-      app.renderer.resize(Math.floor(cw), Math.floor(ch));
+    if (fixed && fixed.width > 0 && fixed.height > 0) {
+      app.renderer.resize(Math.floor(fixed.width), Math.floor(fixed.height));
+    } else {
+      // 显式对齐画布与容器尺寸（resizeTo 在 display:none 容器上会得到 0，调用方应确保已显示）
+      const cw = container.clientWidth || container.getBoundingClientRect().width || 300;
+      const ch = container.clientHeight || container.getBoundingClientRect().height || 400;
+      if (cw > 0 && ch > 0) {
+        app.renderer.resize(Math.floor(cw), Math.floor(ch));
+      }
     }
 
     fitModel(container);
@@ -360,6 +366,167 @@
     }
   }
 
+  // K6：演出布局——人物靠左/居中/靠右（默认居中）。side: "left"|"center"|"right"
+  // 注意：model.width/height 是含 scale 的显示 bounds，缩放计算必须用局部原始 bounds。
+  function setCharacterSide(side, container) {
+    if (!model || !container) return;
+    const cw = container.clientWidth || container.getBoundingClientRect().width || 300;
+    const ch = container.clientHeight || container.getBoundingClientRect().height || 400;
+    let bw = 0;
+    let bh = 0;
+    try {
+      const lb = model.getLocalBounds();
+      bw = lb.width;
+      bh = lb.height;
+    } catch {
+      /* ignore */
+    }
+    if (!bw || bw <= 0 || !bh || bh <= 0) {
+      bw = model.width || cw;
+      bh = model.height || ch;
+    }
+    // 演出目标：角色高度约占画面 58%（留出字幕/舞台空间），宽度不超 45%
+    const targetH = ch * 0.58;
+    const targetW = cw * 0.45;
+    const scale = Math.min(targetH / bh, targetW / bw);
+    if (!Number.isFinite(scale) || scale <= 0) return;
+    model.scale.set(scale);
+    model.anchor.set(0.5, 0.5);
+    const cx = side === "left" ? cw * 0.3 : side === "right" ? cw * 0.7 : cw * 0.5;
+    model.x = cx;
+    model.y = ch * 0.52;
+  }
+
+  // K6：演出背景色（透明 PNG 序列请传 null 移除背景）。color 为 "#rrggbb"
+  // 用 renderer.background（clear 颜色）控制，比 Graphics 层可靠且真正写入 alpha。
+  function setBackground(color) {
+    if (!app) return;
+    const old = app.stage.getChildByName("k6-bg");
+    if (old) {
+      old.destroy();
+    }
+    if (!color) {
+      try {
+        app.renderer.background.alpha = 0;
+      } catch {
+        /* PIXI 版本差异兜底 */
+      }
+      return;
+    }
+    const intColor = parseInt(String(color).replace("#", ""), 16);
+    try {
+      app.renderer.background.color = intColor;
+      app.renderer.background.alpha = 1;
+    } catch {
+      /* ignore */
+    }
+    const PIXI = window.MOLING_LIVE2D.PIXI;
+    const g = new PIXI.Graphics();
+    g.name = "k6-bg";
+    g.beginFill(intColor, 1)
+      .drawRect(0, 0, app.renderer.width, app.renderer.height)
+      .endFill();
+    app.stage.addChildAt(g, 0);
+  }
+
+  // K6：演出字幕（PIXI.Text 画进 canvas，透明/视频序列都包含字幕层）
+  let captionText = null;
+  function setCaption(text) {
+    if (!app) return;
+    if (!captionText) {
+      const PIXI = window.MOLING_LIVE2D.PIXI;
+      captionText = new PIXI.Text("", {
+        fontFamily: "Microsoft YaHei, sans-serif",
+        fontSize: 30,
+        fill: "#ffffff",
+        stroke: "#000000",
+        strokeThickness: 4,
+        wordWrap: true,
+        wordWrapWidth: app.renderer.width * 0.9,
+        align: "center",
+      });
+      captionText.name = "k6-caption";
+      app.stage.addChild(captionText);
+    }
+    captionText.text = text || "";
+    captionText.anchor.set(0.5, 0);
+    captionText.x = app.renderer.width / 2;
+    captionText.y = Math.max(8, app.renderer.height - captionText.height - 24);
+  }
+
+  // K6：演出时间线渲染。timeline = { fps, tracks:[{t,dur,expression,mouth,param,speech,text}] }
+  // 逐帧：切换轨道状态（表情/口型/参数）-> 渲染 -> 回调 onFrame(dataURL, fileName)。
+  // 说明：隐藏窗口的 rAF 会被节流，帧循环用 setTimeout 对齐帧率。
+  async function renderTimeline(timeline, onFrame) {
+    if (!model) throw new Error("Live2D 模型未加载");
+    const fps = Math.max(1, Math.min(30, timeline.fps || 10));
+    const tracks = (timeline.tracks || []).slice().sort((a, b) => a.t - b.t);
+    const totalDur =
+      tracks.reduce((m, t) => Math.max(m, t.t + (t.dur || 0)), 0) || 1;
+    const frameCount = Math.max(1, Math.ceil(totalDur * fps));
+    const frameMs = 1000 / fps;
+    const findTrack = (t) =>
+      tracks.find((tr) => t >= tr.t && t < tr.t + (tr.dur || 0));
+    const applyTrack = async (tr) => {
+      if (tr.expression) {
+        await setExpression(tr.expression);
+      } else {
+        await resetExpression();
+      }
+      if (typeof tr.mouth === "number") setMouth(tr.mouth);
+      if (tr.param) {
+        for (const [k, v] of Object.entries(tr.param)) setParam(k, v);
+      }
+      setCaption(tr.text || "");
+    };
+    let active = null;
+    // 首帧预热：Live2D 纹理/首帧渲染是异步的，先手动渲染 3 帧确保输出非空
+    for (let w = 0; w < 3; w++) {
+      app.renderer.render(app.stage);
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    for (let i = 0; i < frameCount; i++) {
+      const t = i / fps;
+      const tr = findTrack(t);
+      if (tr !== active) {
+        active = tr;
+        if (tr) {
+          await applyTrack(tr);
+        } else {
+          await resetExpression();
+          setMouth(0);
+        }
+      }
+      // 说话段口型微动（模拟语音起伏；真实音频音量驱动见 K5，视频版以波形占位）
+      if (active && active.speech) {
+        setMouth(0.3 + 0.35 * Math.abs(Math.sin(t * Math.PI * 3)));
+      }
+      let dataURL;
+      try {
+        dataURL = app.view.toDataURL("image/png");
+      } catch (e) {
+        dataURL = "";
+      }
+      if (onFrame && dataURL) {
+        await onFrame(dataURL, `frame_${String(i).padStart(5, "0")}.png`);
+      }
+      if (i < frameCount - 1) {
+        await new Promise((r) => setTimeout(r, frameMs));
+      }
+    }
+    await resetExpression();
+    setMouth(0);
+    return { frameCount, totalDur, fps };
+  }
+
+  // 调试：读回模型与渲染器引用（K6 诊断用）
+  function _debugModel() {
+    return model;
+  }
+  function _debugApp() {
+    return app;
+  }
+
   window.MolingLive2D = {
     init,
     setExpression,
@@ -370,10 +537,16 @@
     stopTalking,
     setParam,
     resetExpression,
+    setCharacterSide,
+    setBackground,
+    setCaption,
+    renderTimeline,
     dispose,
     getExpressionDefinitions,
     _debugExpressionState,
     _debugMouth,
+    _debugModel,
+    _debugApp,
     get MOOD_EXPRESSION_MAP() {
       return MOOD_EXPRESSION_MAP;
     },
