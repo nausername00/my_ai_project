@@ -500,3 +500,10 @@
   - 存储隔离延续：tool log 走 `AVATAR_TOOL_LOG_PATH` 环境变量，测试与真实数据隔离。
   - **测试**：`test_avatars.py` 43 项（+18 项 S2：四分身真实任务演示、未授权拒绝、外部操作默认拒绝、危险命令拦截、能力增删、痕迹可追溯、HTTP 冒烟）全绿。
   - 待办：S3 协作与主记忆（跨领域分发 / 并行 / 成果回写）、S4 自我进化。
+- **S3 协作与主记忆（2026-10-14 第一版）**：
+  - 新增 `Source code engine/avatar_collab.py`：`AvatarOrchestrator`——主墨灵拆解消息 → 领域子任务（同领域去重）→ 并行执行（ThreadPoolExecutor ≤3）→ 汇总给用户；技术子任务需用户提供具体命令（不凭空生成，needs_input）。
+  - 成果回写：`AvatarSystem.writeback`——统一入口，`source=avatar:<id>`、带时间戳；未批准拒绝（记忆主权唯一：分身不能直接写主记忆）；批准后写入 J4 记忆系统，返回 memory id 可单独撤销（`DELETE /v1/memory/<id>` 复用）。
+  - 新端点：`POST /v1/avatars/plan`（任务计划）、`POST /v1/avatars/execute`（唤醒确认 → 并行执行 → 汇总，可选回写）、`POST /v1/avatars/writeback`（成果回写）。
+  - `AvatarSystem` 构造可注入 `character_store`（api/app 惰性与 create_server 均已接线）。
+  - **测试**：`test_avatars.py` 58 项（+15 项 S3：跨领域计划识别、同领域去重、协作执行、tech 待输入、唤醒确认记录、回写需批准、来源可追溯、可撤销、并行不覆盖、HTTP 冒烟）全绿。
+  - 待办：S4 自我进化（自省回路 + 技能沉淀）。

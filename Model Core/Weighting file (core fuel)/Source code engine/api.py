@@ -104,6 +104,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 character_root / "avatars.json",
                 character_root / "awaken_log.json",
                 character_root / "tool_log.json",
+                getattr(cls, "character_store", None),
             )
         return cls._avatar_system
     workspace_root = Path.cwd()
@@ -619,6 +620,45 @@ class ApiHandler(BaseHTTPRequestHandler):
                     task=str(payload.get("task", "")),
                     payload=payload.get("payload") or {},
                     approved=bool(payload.get("approved", False)),
+                )
+                self._send_json(HTTPStatus.OK, result)
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/avatars/plan":
+            try:
+                payload = self._read_json()
+                message = payload.get("message")
+                if not isinstance(message, str):
+                    raise ValueError("message 必填")
+                plan = self.get_avatar_system().plan_task(message)
+                self._send_json(HTTPStatus.OK, {"plan": plan})
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/avatars/execute":
+            try:
+                payload = self._read_json()
+                message = payload.get("message")
+                if not isinstance(message, str):
+                    raise ValueError("message 必填")
+                execution = self.get_avatar_system().execute_plan(
+                    message,
+                    approved=bool(payload.get("approved", False)),
+                    writeback=bool(payload.get("writeback", False)),
+                )
+                self._send_json(HTTPStatus.OK, {"execution": execution})
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/avatars/writeback":
+            try:
+                payload = self._read_json()
+                result = self.get_avatar_system().writeback(
+                    avatar_id=str(payload.get("avatar_id", "")),
+                    content=str(payload.get("content", "")),
+                    approved=bool(payload.get("approved", False)),
+                    reason=str(payload.get("reason", "")),
                 )
                 self._send_json(HTTPStatus.OK, result)
             except (TypeError, ValueError, json.JSONDecodeError) as error:

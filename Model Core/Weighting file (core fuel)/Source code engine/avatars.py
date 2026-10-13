@@ -16,6 +16,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 from avatar_tasks import AvatarToolGate, AvatarToolLog, run_avatar_task
+from avatar_collab import AvatarOrchestrator
 
 AvatarStatus = Literal["active", "sleeping"]
 
@@ -387,13 +388,14 @@ class AwakenLog:
 
 
 class AvatarSystem:
-    """分身系统门面：注册表 + 阈值 + 唤醒确认日志 + 工具闸门与痕迹。"""
+    """分身系统门面：注册表 + 阈值 + 唤醒确认日志 + 工具闸门与痕迹 + 协作与回写。"""
 
     def __init__(
         self,
         registry_path: str | Path,
         awaken_log_path: str | Path,
         tool_log_path: str | Path | None = None,
+        character_store: Any | None = None,
     ) -> None:
         self.registry = AvatarRegistry(registry_path)
         self.router = ThresholdRouter()
@@ -401,6 +403,8 @@ class AvatarSystem:
         tool_log = tool_log_path or (Path(awaken_log_path).parent / "tool_log.json")
         self.tool_log = AvatarToolLog(tool_log)
         self.tool_gate = AvatarToolGate(self.tool_log)
+        self._character_store = character_store
+        self.orchestrator = AvatarOrchestrator(self.run_task)
 
     def status(self) -> dict[str, Any]:
         avatars = [p.to_dict() for p in self.registry.list()]
@@ -496,3 +500,71 @@ class AvatarSystem:
 
     def tool_log_list(self, limit: int = 100) -> list[dict[str, Any]]:
         return self.tool_log.list(limit=limit)
+
+    def plan_task(self, message: str) -> dict[str, Any]:
+        """主墨灵拆解跨领域任务 → 子任务计划（同领域去重）。"""
+        return self.orchestrator.plan(message)
+
+    def execute_plan(
+        self,
+        message: str,
+        approved: bool = False,
+        writeback: bool = False,
+    ) -> dict[str, Any]:
+        """执行协作计划：唤醒涉及分身（记录确认）→ 并行执行 → 汇总。
+
+        writeback=True 且 approved=True 时，把协作摘要回写主记忆（带来源）。
+        """
+        execution = self.orchestrator.execute(
+            message,
+            approved=approved,
+            confirm_wake=self._record_collab_wake,
+        )
+        if writeback and approved and execution.get("status") == "ok":
+            memory = self.writeback(
+                avatar_id="main",
+                content=f"协作任务完成：{execution.get('summary', '')}",
+                approved=True,
+                reason="跨领域协作成果回写",
+            )
+            execution["writeback"] = memory
+        return execution
+
+    def _record_collab_wake(
+        self, avatar_ids: list[str], confirmed: bool, reason: str
+    ) -> dict[str, Any]:
+        return self.confirm_awaken(
+            avatar_ids=avatar_ids, confirmed=confirmed, reason=reason
+        )
+
+    def writeback(
+        self,
+        avatar_id: str,
+        content: str,
+        approved: bool = False,
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """成果回写主记忆（主权唯一：统一入口，带来源 avatar:<id>）。
+
+        未批准 → 拒绝（记忆只由主墨灵 / 用户确认后写入）；
+        批准 → 写入 J4 记忆系统并返回 memory id（可单独撤销）。
+        """
+        if self.registry.get(avatar_id) is None and avatar_id != "main":
+            return {"status": "denied", "reason": f"分身不存在: {avatar_id}"}
+        if not approved:
+            return {
+                "status": "denied",
+                "reason": "成果回写主记忆需用户确认（记忆主权唯一）",
+            }
+        if self._character_store is None:
+            return {"status": "failed", "reason": "主记忆存储不可用"}
+        try:
+            memory = self._character_store.add_memory(
+                content=content,
+                source=f"avatar:{avatar_id}",
+                visibility="model",
+                reason=reason or f"分身成果回写（{avatar_id}）",
+            )
+        except (TypeError, ValueError) as error:
+            return {"status": "failed", "reason": str(error)}
+        return {"status": "ok", "memory": memory}

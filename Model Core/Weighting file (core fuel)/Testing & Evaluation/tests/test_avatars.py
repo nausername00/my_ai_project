@@ -36,6 +36,40 @@ def make_system() -> AvatarSystem:
     )
 
 
+class FakeMemoryStore:
+    """最小主记忆替身：记录来源、可删除（验证主权唯一与可撤销）。"""
+
+    def __init__(self) -> None:
+        self._entries: dict[str, dict] = {}
+
+    def add_memory(
+        self,
+        content: str,
+        source: str = "user",
+        visibility: str = "model",
+        reason: str | None = None,
+    ) -> dict:
+        entry = {
+            "id": f"mem-{len(self._entries) + 1}",
+            "content": content,
+            "source": source,
+            "visibility": visibility,
+            "reason": reason,
+            "created_at": "2026-10-14T00:00:00",
+            "status": "active",
+        }
+        self._entries[entry["id"]] = entry
+        return dict(entry)
+
+    def delete_memory(self, memory_id: str) -> None:
+        if memory_id not in self._entries:
+            raise LookupError(f"memory not found: {memory_id}")
+        del self._entries[memory_id]
+
+    def list_memories(self) -> list[dict]:
+        return list(self._entries.values())
+
+
 class AvatarRegistryS1Test(unittest.TestCase):
     def test_seeds_four_default_avatars(self) -> None:
         system = make_system()
@@ -546,6 +580,188 @@ class AvatarApiS2Test(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertGreaterEqual(len(payload["entries"]), 1)
         self.assertEqual(payload["entries"][-1]["task"], "script_draft")
+
+
+class AvatarCollabS3Test(unittest.TestCase):
+    """S3：跨领域协作（拆解 / 去重 / 并行）+ 成果回写（来源 / 撤销 / 主权唯一）。"""
+
+    def setUp(self) -> None:
+        tmp = tempfile.mkdtemp(prefix="moling_avatars_s3_")
+        self.store = FakeMemoryStore()
+        self.system = AvatarSystem(
+            registry_path=Path(tmp) / "avatars.json",
+            awaken_log_path=Path(tmp) / "awaken_log.json",
+            character_store=self.store,
+        )
+
+    def test_plan_identifies_cross_domain(self) -> None:
+        plan = self.system.plan_task("做一期讲解视频：查资料、写脚本、跑渲染")
+        domains = plan["domains"]
+        self.assertIn("learning", domains)
+        self.assertIn("creation", domains)
+        self.assertIn("tech", domains)
+        # 同领域去重：每个领域至多一个子任务
+        task_ids = [t["avatar_id"] for t in plan["tasks"]]
+        self.assertEqual(len(task_ids), len(set(task_ids)))
+
+    def test_plan_same_domain_dedup(self) -> None:
+        plan = self.system.plan_task("查资料、再查资料、整理归纳")
+        self.assertEqual(plan["domains"], ["learning"])
+
+    def test_plan_empty_message(self) -> None:
+        plan = self.system.plan_task("")
+        self.assertEqual(plan["tasks"], [])
+
+    def test_execute_collaboration(self) -> None:
+        execution = self.system.execute_plan(
+            "做一期讲解视频：查资料写脚本", approved=True
+        )
+        self.assertEqual(execution["status"], "ok")
+        task_status = {t["domain"]: t["status"] for t in execution["tasks"]}
+        self.assertEqual(task_status.get("learning"), "ok")
+        self.assertEqual(task_status.get("creation"), "ok")
+        self.assertIn("learning", execution["active_avatars"])
+        self.assertIn("creation", execution["active_avatars"])
+
+    def test_execute_tech_needs_input(self) -> None:
+        execution = self.system.execute_plan("帮我写代码跑渲染", approved=True)
+        tech = next(t for t in execution["tasks"] if t["domain"] == "tech")
+        self.assertEqual(tech["status"], "pending")
+        self.assertIn("具体命令", tech["reason"])
+
+    def test_execute_records_wake_confirmation(self) -> None:
+        self.system.execute_plan("查资料整理一份总结", approved=True)
+        entries = self.system.awaken_log.list()
+        self.assertTrue(entries)
+        self.assertTrue(entries[-1]["confirmed"])
+        self.assertIn("learning", entries[-1]["avatar_ids"])
+
+    def test_writeback_requires_approval(self) -> None:
+        result = self.system.writeback(
+            "creation", "脚本已生成", approved=False
+        )
+        self.assertEqual(result["status"], "denied")
+        self.assertIn("主权唯一", result["reason"])
+        self.assertEqual(self.store.list_memories(), [])
+
+    def test_writeback_approved_with_source(self) -> None:
+        result = self.system.writeback(
+            "creation", "脚本已生成", approved=True, reason="S3 演示"
+        )
+        self.assertEqual(result["status"], "ok")
+        memory = result["memory"]
+        self.assertEqual(memory["source"], "avatar:creation")
+        self.assertEqual(memory["content"], "脚本已生成")
+        stored = self.store.list_memories()
+        self.assertEqual(len(stored), 1)
+        self.assertEqual(stored[0]["id"], memory["id"])
+
+    def test_writeback_revocable(self) -> None:
+        result = self.system.writeback(
+            "learning", "资料要点", approved=True
+        )
+        memory_id = result["memory"]["id"]
+        self.store.delete_memory(memory_id)
+        self.assertEqual(self.store.list_memories(), [])
+
+    def test_parallel_writeback_no_overwrite(self) -> None:
+        # 多条回写各自独立（主权唯一：不互相覆盖）
+        first = self.system.writeback("learning", "要点 A", approved=True)
+        second = self.system.writeback("creation", "脚本 B", approved=True)
+        self.assertNotEqual(first["memory"]["id"], second["memory"]["id"])
+        entries = self.store.list_memories()
+        self.assertEqual(len(entries), 2)
+
+    def test_execute_with_writeback(self) -> None:
+        execution = self.system.execute_plan(
+            "做一期讲解视频：查资料写脚本", approved=True, writeback=True
+        )
+        self.assertEqual(execution["status"], "ok")
+        self.assertIn("writeback", execution)
+        self.assertEqual(execution["writeback"]["status"], "ok")
+        memory = execution["writeback"]["memory"]
+        self.assertEqual(memory["source"], "avatar:main")
+        self.assertEqual(len(self.store.list_memories()), 1)
+
+
+class AvatarApiS3Test(unittest.TestCase):
+    """S3 HTTP 端点冒烟：plan / execute / writeback。"""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.environment = patch.dict(
+            os.environ,
+            {
+                "MODEL_BACKEND": "placeholder",
+                "CHARACTER_CARD_PATH": os.path.join(self.temp_dir.name, "character.json"),
+                "CHARACTER_MEMORY_PATH": os.path.join(self.temp_dir.name, "memory.json"),
+                "CHARACTER_ASSET_DIR": self.temp_dir.name,
+                "CHARACTER_PRIVACY_PATH": os.path.join(self.temp_dir.name, "privacy.json"),
+                "CHARACTER_AFFECT_PATH": os.path.join(self.temp_dir.name, "affect.json"),
+                "AVATAR_REGISTRY_PATH": os.path.join(self.temp_dir.name, "avatars.json"),
+                "AVATAR_AWAKEN_LOG_PATH": os.path.join(
+                    self.temp_dir.name, "awaken_log.json"
+                ),
+                "AVATAR_TOOL_LOG_PATH": os.path.join(self.temp_dir.name, "tool_log.json"),
+            },
+        )
+        self.environment.start()
+        self.server = create_server()
+        self.thread = Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.connection = HTTPConnection("127.0.0.1", self.server.server_port)
+
+    def tearDown(self) -> None:
+        self.connection.close()
+        self.server.shutdown()
+        self.server.server_close()
+        self.environment.stop()
+        self.temp_dir.cleanup()
+
+    def _post(self, path: str, payload: dict) -> tuple[int, dict]:
+        self.connection.request(
+            "POST",
+            path,
+            json.dumps(payload),
+            {"Content-Type": "application/json"},
+        )
+        response = self.connection.getresponse()
+        return response.status, json.loads(response.read())
+
+    def test_plan_endpoint(self) -> None:
+        status, payload = self._post(
+            "/v1/avatars/plan",
+            {"message": "做一期讲解视频：查资料写脚本"},
+        )
+        self.assertEqual(status, 200)
+        domains = payload["plan"]["domains"]
+        self.assertIn("learning", domains)
+        self.assertIn("creation", domains)
+
+    def test_execute_endpoint(self) -> None:
+        status, payload = self._post(
+            "/v1/avatars/execute",
+            {"message": "做一期讲解视频：查资料写脚本", "approved": True},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["execution"]["status"], "ok")
+
+    def test_writeback_endpoint_unapproved_denied(self) -> None:
+        status, payload = self._post(
+            "/v1/avatars/writeback",
+            {"avatar_id": "creation", "content": "脚本", "approved": False},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["status"], "denied")
+
+    def test_writeback_endpoint_approved(self) -> None:
+        status, payload = self._post(
+            "/v1/avatars/writeback",
+            {"avatar_id": "creation", "content": "脚本已生成", "approved": True},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["memory"]["source"], "avatar:creation")
 
 
 if __name__ == "__main__":
