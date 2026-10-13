@@ -26,7 +26,13 @@ DEFAULT_PERSONAS: dict[str, dict[str, Any]] = {
         "name": "陪伴小墨",
         "tone": "warm",
         "traits": ["温柔", "松弛", "共情"],
-        "style": {"max_sentence": 24, "jargon": "low", "pronoun_bias": "we"},
+        "style": {
+            "max_sentence": 24,
+            "jargon": "low",
+            "pronoun_bias": "we",
+            "verbosity": "verbose",
+            "jargon_map": {},
+        },
         "openers": ["慢慢来，", "我在呢，", ""],
         "phrases": ["我们一步一步来", "我陪你一起看"],
         "situations": {
@@ -45,7 +51,13 @@ DEFAULT_PERSONAS: dict[str, dict[str, Any]] = {
         "name": "学习小墨",
         "tone": "patient",
         "traits": ["耐心", "求是", "循证"],
-        "style": {"max_sentence": 40, "jargon": "medium", "pronoun_bias": "you"},
+        "style": {
+            "max_sentence": 40,
+            "jargon": "medium",
+            "pronoun_bias": "you",
+            "verbosity": "normal",
+            "jargon_map": {},
+        },
         "openers": ["简单说就是，", "先给你结论：", ""],
         "phrases": ["再深入一点的话……", "依据是这样的："],
         "situations": {
@@ -64,7 +76,13 @@ DEFAULT_PERSONAS: dict[str, dict[str, Any]] = {
         "name": "创作小墨",
         "tone": "vivid",
         "traits": ["灵动", "画面感", "鼓励"],
-        "style": {"max_sentence": 32, "jargon": "low", "pronoun_bias": "you"},
+        "style": {
+            "max_sentence": 32,
+            "jargon": "low",
+            "pronoun_bias": "you",
+            "verbosity": "normal",
+            "jargon_map": {},
+        },
         "openers": ["试试这个感觉：", "换个角度想，", ""],
         "phrases": ["画面感一下就出来了", "大胆试，不满意我们再改"],
         "situations": {
@@ -83,7 +101,13 @@ DEFAULT_PERSONAS: dict[str, dict[str, Any]] = {
         "name": "技术小墨",
         "tone": "precise",
         "traits": ["严谨", "简洁", "边界意识"],
-        "style": {"max_sentence": 30, "jargon": "high", "pronoun_bias": "none"},
+        "style": {
+            "max_sentence": 30,
+            "jargon": "high",
+            "pronoun_bias": "none",
+            "verbosity": "normal",
+            "jargon_map": {"查看": "检索", "报告": "记录"},
+        },
         "openers": ["具体来说：", "结论：", ""],
         "phrases": ["注意边界：", "参数需确认："],
         "situations": {
@@ -179,7 +203,13 @@ class PersonaRegistry:
                 "name": str(persona["name"]),
                 "tone": str(persona.get("tone", "neutral")),
                 "traits": list(persona.get("traits", [])),
-                "style": dict(persona.get("style", {})),
+                "style": {
+                    "max_sentence": int(persona.get("style", {}).get("max_sentence", 0) or 0),
+                    "jargon": str(persona.get("style", {}).get("jargon", "low")),
+                    "pronoun_bias": str(persona.get("style", {}).get("pronoun_bias", "none")),
+                    "verbosity": str(persona.get("style", {}).get("verbosity", "normal")),
+                    "jargon_map": dict(persona.get("style", {}).get("jargon_map", {})),
+                },
                 "openers": list(persona.get("openers", [])),
                 "phrases": list(persona.get("phrases", [])),
                 "situations": dict(situations),
@@ -197,11 +227,32 @@ class PersonaRegistry:
         """按分身性格渲染情境消息；未知分身 / 情境回落中性兜底。"""
         persona = self._personas.get(avatar_id)
         template: str | None = None
+        style: dict[str, Any] = {}
         if persona is not None and isinstance(persona.get("situations"), dict):
             template = persona["situations"].get(situation)
+            style = persona.get("style") or {}
         if template is None:
             template = _NEUTRAL_SITUATIONS.get(situation, "已处理。")
-        return self._render(template, variables)
+        text = self._render(template, variables)
+        if persona is not None:
+            text = self._apply_style(persona, style, text)
+        return text
+
+    @staticmethod
+    def _apply_style(persona: dict[str, Any], style: dict[str, Any], text: str) -> str:
+        """性格参数真实生效（确定性、可测）：术语密度 → 措辞替换；活跃度 → 追加惯用语；回应长度 → 超长截断。"""
+        if style.get("jargon") == "high":
+            for word, term in (style.get("jargon_map") or {}).items():
+                if word:
+                    text = text.replace(word, term)
+        if style.get("verbosity") == "verbose":
+            phrases = persona.get("phrases") or []
+            if phrases and phrases[0]:
+                text = f"{text} {phrases[0]}"
+        max_len = int(style.get("max_sentence") or 0)
+        if max_len > 0 and len(text) > max_len:
+            text = text[: max_len - 1].rstrip() + "…"
+        return text
 
     @staticmethod
     def _render(template: str, variables: dict[str, Any]) -> str:

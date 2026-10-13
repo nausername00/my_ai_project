@@ -186,6 +186,29 @@ def safe_exec(command: str, args: str = "", timeout: int = 10) -> dict[str, Any]
     }
 
 
+def mix_audio(
+    voice: str,
+    music: str,
+    out: str,
+    music_gain_db: float = -6.0,
+) -> dict[str, Any]:
+    """创作分身：人声优先混音 v1（纯标准库 wave，不依赖 ffmpeg）。"""
+    from avatar_media import mix_voice_first
+
+    if not voice or not music or not out:
+        raise ValueError("人声、音乐与输出路径都不能为空")
+    return mix_voice_first(voice, music, out, music_gain_db=music_gain_db)
+
+
+def check_halo(image: str) -> dict[str, Any]:
+    """创作分身：透明素材边缘白边检查（深色 / 浅色背景合成前的质检）。"""
+    from asset_quality import check_halo as run_check
+
+    if not image:
+        raise ValueError("图片路径不能为空")
+    return run_check(image)
+
+
 # ── 任务声明：能力 → 实现 + 授权类别（配置驱动，可增删）─────────
 TASK_DECLARATIONS: dict[str, dict[str, Any]] = {
     "mood_echo": {
@@ -201,6 +224,16 @@ TASK_DECLARATIONS: dict[str, dict[str, Any]] = {
     "script_draft": {
         "avatar_domain": "creation",
         "risk": "local_reversible",
+        "requires_approval": False,
+    },
+    "mix_audio": {
+        "avatar_domain": "creation",
+        "risk": "local_reversible",
+        "requires_approval": False,
+    },
+    "check_halo": {
+        "avatar_domain": "creation",
+        "risk": "local_read",
         "requires_approval": False,
     },
     "safe_exec": {
@@ -219,6 +252,8 @@ _TASK_IMPLS: dict[str, Any] = {
     "mood_echo": mood_echo,
     "local_retrieve": local_retrieve,
     "script_draft": script_draft,
+    "mix_audio": mix_audio,
+    "check_halo": check_halo,
     "safe_exec": safe_exec,
 }
 
@@ -403,6 +438,15 @@ def run_avatar_task(
                 str(payload.get("topic", "")),
                 str(payload.get("style", "讲解")),
             )
+        elif task == "mix_audio":
+            result = impl(
+                str(payload.get("voice", "")),
+                str(payload.get("music", "")),
+                str(payload.get("out", "")),
+                float(payload.get("music_gain_db", -6.0)),
+            )
+        elif task == "check_halo":
+            result = impl(str(payload.get("image", "")))
         elif task == "safe_exec":
             result = impl(
                 str(payload.get("command", "")),

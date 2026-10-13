@@ -19,6 +19,7 @@ from avatar_tasks import AvatarToolGate, AvatarToolLog, run_avatar_task
 from avatar_collab import AvatarOrchestrator
 from avatar_evolution import IntrospectionLoop, SkillCardRegistry
 from avatar_persona import PersonaRegistry
+from avatar_advice import AvatarShortMemory, SuggestionEngine, build_daily_brief
 
 AvatarStatus = Literal["active", "sleeping"]
 
@@ -416,6 +417,7 @@ class AvatarSystem:
             base_dir / "introspection_log.json",
         )
         self.personas = PersonaRegistry(base_dir / "personas.json")
+        self.short_memory = AvatarShortMemory(base_dir / "short_memory.json")
 
     def status(self) -> dict[str, Any]:
         avatars = [p.to_dict() for p in self.registry.list()]
@@ -519,7 +521,29 @@ class AvatarSystem:
             }.get(str(result.get("status", "")), "task_ok"),
             result=self._task_result_text(result),
         )
+        # 表现层装饰：演出脚本人格化——脚本骨架套上对应分身的开场 / 收尾惯用语
+        if task == "script_draft":
+            draft = (result.get("result") or {}).get("script")
+            if isinstance(draft, dict):
+                result["script_styled"] = self.persona_script(avatar_id, draft)
         return result
+
+    def persona_script(
+        self,
+        avatar_id: str,
+        script: dict[str, Any],
+    ) -> dict[str, Any]:
+        """演出脚本人格化：按分身性格点缀脚本骨架（开场 / 收尾，纯表现层）。"""
+        styled = dict(script)
+        persona = self.personas.get(avatar_id)
+        openers = (persona or {}).get("openers") or []
+        phrases = (persona or {}).get("phrases") or []
+        if isinstance(styled.get("opening"), str) and openers and openers[0]:
+            styled["opening"] = f"{openers[0]}{styled['opening']}"
+        if isinstance(styled.get("closing"), str) and phrases and phrases[0]:
+            styled["closing"] = f"{styled['closing']} {phrases[0]}"
+        styled["persona"] = avatar_id
+        return styled
 
     @staticmethod
     def _task_result_text(result: dict[str, Any]) -> str:
@@ -635,3 +659,32 @@ class AvatarSystem:
     ) -> str:
         """按分身性格渲染情境消息；未知分身 / 情境回落中性兜底。"""
         return self.personas.speak(avatar_id, situation, **variables)
+
+    # ── C 组新思路：建议引擎 / 分身短记忆 / 每日简报 ──────────────────
+
+    def suggestions(self) -> list[dict[str, Any]]:
+        """把自省统计转成给用户的确定性建议（本地规则，无外部调用）。"""
+        stats = self.introspection.run(apply=False).get("stats", {})
+        return SuggestionEngine.stats_to_suggestions(stats)
+
+    def daily_brief(self) -> dict[str, Any]:
+        """每日自省简报：tool_log 统计 + 建议（本地确定性规则）。"""
+        log_entries = self.tool_log.list(limit=200)
+        return build_daily_brief(
+            log_entries,
+            SuggestionEngine.stats_to_suggestions(
+                self.introspection.run(apply=False).get("stats", {})
+            ),
+        )
+
+    def short_memory_get(self, avatar_id: str) -> dict[str, Any]:
+        """分身短记忆：工作偏好（主权边界内，不写主记忆）。"""
+        return self.short_memory.get(avatar_id)
+
+    def short_memory_set(
+        self, avatar_id: str, key: str, value: Any
+    ) -> dict[str, Any]:
+        return self.short_memory.set(avatar_id, key, value)
+
+    def short_memory_delete(self, avatar_id: str, key: str) -> dict[str, Any]:
+        return self.short_memory.delete(avatar_id, key)

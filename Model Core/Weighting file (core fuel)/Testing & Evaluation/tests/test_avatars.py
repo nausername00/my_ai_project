@@ -20,6 +20,8 @@ from threading import Thread
 from unittest.mock import patch
 
 from app import create_server
+from avatar_advice import AvatarShortMemory
+from avatar_media import CaptionTimelineStore
 from avatars import (
     AvatarRegistry,
     AvatarSystem,
@@ -950,19 +952,20 @@ class AvatarApiS4Test(unittest.TestCase):
         ids = {s["id"] for s in payload["skills"]}
         self.assertIn("live2d_render", ids)
         self.assertIn("document_retrieve", ids)
+        self.assertIn("mix_audio", ids)
 
     def test_skills_register_endpoint(self) -> None:
         status, payload = self._post(
             "/v1/avatars/skills/register",
             {
-                "id": "mix_audio",
-                "name": "人声优先混音",
-                "description": "背景音乐不盖人声（K6 待办）",
+                "id": "halo_check",
+                "name": "白边检查",
+                "description": "透明素材边缘白边自动检查（K6 待办）",
                 "capability": "video_script",
             },
         )
         self.assertEqual(status, 200)
-        self.assertEqual(payload["skill"]["id"], "mix_audio")
+        self.assertEqual(payload["skill"]["id"], "halo_check")
 
     def test_introspect_endpoint(self) -> None:
         status, payload = self._post(
@@ -1119,6 +1122,451 @@ class AvatarApiS5Test(unittest.TestCase):
         )
         self.assertEqual(status, 200)
         self.assertEqual(payload["persona"]["name"], "定制陪伴")
+
+
+class AvatarPersonaParamsS5Test(unittest.TestCase):
+    """A1 性格参数深化：jargon / verbosity / max_sentence 真实生效且确定性可测。"""
+
+    def setUp(self) -> None:
+        tmp = tempfile.mkdtemp(prefix="moling_avatars_a1_")
+        self.store = FakeMemoryStore()
+        self.system = AvatarSystem(
+            registry_path=Path(tmp) / "avatars.json",
+            awaken_log_path=Path(tmp) / "awaken_log.json",
+            character_store=self.store,
+        )
+
+    def test_default_styles_have_params(self) -> None:
+        for persona in self.system.persona_list():
+            style = persona["style"]
+            self.assertIn("jargon_map", style)
+            self.assertIn("verbosity", style)
+            self.assertIn("max_sentence", style)
+
+    def test_tech_jargon_high_replaces_terms(self) -> None:
+        text = self.system.persona_speak("tech", "task_ok", result="查看记录")
+        self.assertIn("检索记录", text)
+
+    def test_learning_medium_keeps_terms(self) -> None:
+        text = self.system.persona_speak("learning", "task_ok", result="查看记录")
+        self.assertNotIn("检索记录", text)
+
+    def test_companion_verbose_appends_phrase(self) -> None:
+        text = self.system.persona_speak("companion", "task_ok", result="检查通过")
+        self.assertTrue(text.endswith("我们一步一步来"))
+
+    def test_max_sentence_truncates(self) -> None:
+        self.system.upsert_persona(
+            {
+                "avatar_id": "tech",
+                "name": "技术小墨",
+                "situations": {"task_ok": "{result}"},
+                "style": {"max_sentence": 8, "jargon": "low", "verbosity": "normal"},
+            }
+        )
+        text = self.system.persona_speak("tech", "task_ok", result="这是一个很长的检查结果")
+        self.assertLessEqual(len(text), 8)
+        self.assertTrue(text.endswith("…"))
+
+    def test_upsert_normalizes_style_defaults(self) -> None:
+        self.system.upsert_persona(
+            {
+                "avatar_id": "creation",
+                "name": "创作小墨",
+                "situations": {"task_ok": "{result}"},
+                "style": {"max_sentence": 20, "jargon": "low"},
+            }
+        )
+        persona = self.system.personas.get("creation")
+        self.assertEqual(persona["style"]["verbosity"], "normal")  # type: ignore[index]
+        self.assertEqual(persona["style"]["jargon_map"], {})  # type: ignore[index]
+
+
+class AvatarScriptPersonaA2Test(unittest.TestCase):
+    """A2 演出脚本人格化：script_draft 结果套上对应分身开场 / 收尾。"""
+
+    def setUp(self) -> None:
+        tmp = tempfile.mkdtemp(prefix="moling_avatars_a2_")
+        self.store = FakeMemoryStore()
+        self.system = AvatarSystem(
+            registry_path=Path(tmp) / "avatars.json",
+            awaken_log_path=Path(tmp) / "awaken_log.json",
+            character_store=self.store,
+        )
+
+    def test_creation_script_styled(self) -> None:
+        result = self.system.run_task(
+            "creation", "script_draft", {"topic": "光合作用"}, approved=True
+        )
+        self.assertEqual(result["status"], "ok")
+        styled = result["script_styled"]
+        self.assertTrue(styled["opening"].startswith("试试这个感觉："))
+        self.assertIn("persona", styled)
+        self.assertEqual(styled["persona"], "creation")
+
+    def test_tech_script_styled_differs(self) -> None:
+        draft = {"opening": "今天想和你聊聊：光合作用", "body": "正文", "closing": "总结"}
+        styled = self.system.persona_script("tech", draft)
+        self.assertTrue(styled["opening"].startswith("具体来说："))
+        self.assertEqual(styled["persona"], "tech")
+
+    def test_script_styled_preserves_body(self) -> None:
+        result = self.system.run_task(
+            "creation", "script_draft", {"topic": "光合作用"}, approved=True
+        )
+        body = result["result"]["script"]["body"]
+        self.assertEqual(result["script_styled"]["body"], body)
+
+
+class AvatarMediaMixAudioA3Test(unittest.TestCase):
+    """A3 人声优先混音（纯标准库 wave）：输出存在、时长以人声为准、峰值受控、任务链路可跑。"""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.mkdtemp(prefix="moling_avatars_a3_")
+        self.voice = self._make_tone(Path(self.tmp) / "voice.wav", freq=440, amp=8000, frames=8000)
+        self.music = self._make_tone(Path(self.tmp) / "music.wav", freq=220, amp=16000, frames=16000)
+        self.store = FakeMemoryStore()
+        self.system = AvatarSystem(
+            registry_path=Path(self.tmp) / "avatars.json",
+            awaken_log_path=Path(self.tmp) / "awaken_log.json",
+            character_store=self.store,
+        )
+
+    @staticmethod
+    def _make_tone(path: Path, freq: int, amp: int, frames: int, rate: int = 8000) -> Path:
+        import array
+        import math
+        import wave as wave_module
+
+        samples = array.array("h")
+        for i in range(frames):
+            samples.append(int(amp * math.sin(2 * math.pi * freq * i / rate)))
+        with wave_module.open(str(path), "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(rate)
+            w.writeframes(samples.tobytes())
+        return path
+
+    def test_mix_voice_first_output(self) -> None:
+        from avatar_media import mix_voice_first
+
+        out = Path(self.tmp) / "mix.wav"
+        info = mix_voice_first(self.voice, self.music, out, music_gain_db=-6.0)
+        self.assertEqual(info["status"], "ok")
+        self.assertTrue(out.exists())
+        self.assertEqual(info["frames"], 8000)
+        self.assertEqual(info["mode"], "voice_first_v1")
+
+    def test_mix_peak_bounded_by_voice_plus_ducked_music(self) -> None:
+        import array
+        import wave as wave_module
+
+        from avatar_media import mix_voice_first
+
+        out = Path(self.tmp) / "mix2.wav"
+        mix_voice_first(self.voice, self.music, out, music_gain_db=-6.0)
+        with wave_module.open(str(out), "rb") as w:
+            samples = array.array("h")
+            samples.frombytes(w.readframes(w.getnframes()))
+        peak = max(abs(s) for s in samples)
+        # -6dB ≈ 0.5 增益：峰值不应超过 人声 8000 + 音乐×0.5 8000 = 16000（clamp 后）
+        self.assertLessEqual(peak, 16000)
+
+    def test_mix_audio_task_via_system(self) -> None:
+        out = Path(self.tmp) / "task_mix.wav"
+        result = self.system.run_task(
+            "creation",
+            "mix_audio",
+            {"voice": str(self.voice), "music": str(self.music), "out": str(out)},
+            approved=True,
+        )
+        self.assertEqual(result["status"], "ok")
+        self.assertTrue(out.exists())
+
+    def test_mix_audio_missing_path_rejected(self) -> None:
+        result = self.system.run_task(
+            "creation", "mix_audio", {"voice": "", "music": "", "out": ""}, approved=True
+        )
+        self.assertEqual(result["status"], "failed")
+
+    def test_mix_audio_skill_card_registered(self) -> None:
+        card = self.system.skills.by_invoke("mix_audio")
+        self.assertIsNotNone(card)
+        self.assertEqual(card["source"], "K6")  # type: ignore[index]
+
+
+class AvatarAssetQualityB1Test(unittest.TestCase):
+    """B1 边缘白边检查：透明素材质检可复现、风险分级正确。"""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.mkdtemp(prefix="moling_avatars_b1_")
+        self.store = FakeMemoryStore()
+        self.system = AvatarSystem(
+            registry_path=Path(self.tmp) / "avatars.json",
+            awaken_log_path=Path(self.tmp) / "awaken_log.json",
+            character_store=self.store,
+        )
+
+    @staticmethod
+    def _make_image(path: Path, mode: str) -> Path:
+        from PIL import Image
+
+        img = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+        pixels = img.load()
+        for y in range(8, 24):
+            for x in range(8, 24):
+                pixels[x, y] = (120, 60, 200, 255)
+        if mode == "halo":
+            for y in range(5, 27):
+                for x in range(5, 27):
+                    if img.getpixel((x, y))[3] == 0:
+                        pixels[x, y] = (250, 250, 252, 90)  # 半透明白 → 白边
+        elif mode == "dark_edge":
+            for y in range(5, 27):
+                for x in range(5, 27):
+                    if img.getpixel((x, y))[3] == 0:
+                        pixels[x, y] = (40, 30, 60, 90)  # 半透明深色 → 无白边
+        img.save(str(path))
+        return path
+
+    def test_halo_image_flagged_high(self) -> None:
+        image = self._make_image(Path(self.tmp) / "halo.png", "halo")
+        result = self.system.run_task(
+            "creation", "check_halo", {"image": str(image)}, approved=True
+        )
+        self.assertEqual(result["status"], "ok")
+        self.assertIn("risk", result["result"])
+        self.assertGreater(result["result"]["halo_ratio"], 0.15)
+
+    def test_dark_edge_low_risk(self) -> None:
+        image = self._make_image(Path(self.tmp) / "dark.png", "dark_edge")
+        result = self.system.run_task(
+            "creation", "check_halo", {"image": str(image)}, approved=True
+        )
+        self.assertEqual(result["status"], "ok")
+        self.assertLessEqual(result["result"]["halo_ratio"], 0.02)
+
+    def test_missing_image_rejected(self) -> None:
+        result = self.system.run_task(
+            "creation",
+            "check_halo",
+            {"image": str(Path(self.tmp) / "nope.png")},
+            approved=True,
+        )
+        self.assertEqual(result["status"], "failed")
+
+
+class PerformanceRulesB2Test(unittest.TestCase):
+    """B2 动作清单成文：演出规则 JSON 结构可读、字段完整。"""
+
+    def test_rules_file_structure(self) -> None:
+        import json as json_module
+
+        path = (
+            Path(__file__).resolve().parent.parent.parent
+            / "Docs & Compliance"
+            / "performance_rules.json"
+        )
+        self.assertTrue(path.exists())
+        data = json_module.loads(path.read_text(encoding="utf-8"))
+        self.assertGreaterEqual(len(data["semantic_actions"]), 4)
+        self.assertGreaterEqual(len(data["stage_rules"]), 3)
+        for action in data["semantic_actions"]:
+            for key in ("cue", "motion", "timing"):
+                self.assertIn(key, action)
+        self.assertIn("mouth_curve", data)
+
+
+class CaptionTimelineB3Test(unittest.TestCase):
+    """B3 字幕时间戳数据层：可编辑、可保存、换音重算口型。"""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.mkdtemp(prefix="moling_avatars_b3_")
+        self.store = CaptionTimelineStore(Path(self.tmp) / "captions.json")
+
+    def test_set_and_edit_timestamp(self) -> None:
+        self.store.set("clip1", [{"start": 0.0, "end": 1.0, "text": "你好"}])
+        info = self.store.edit_timestamp("clip1", 0, 0.2, 1.4)
+        self.assertEqual(info["start"], 0.2)
+        self.assertEqual(info["end"], 1.4)
+        captions = self.store.get("clip1")
+        self.assertEqual(captions[0]["text"], "你好")
+
+    def test_invalid_captions_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self.store.set("clip2", [])
+
+    def test_align_mouth_recomputes(self) -> None:
+        import array
+        import wave as wave_module
+
+        voice = Path(self.tmp) / "voice.wav"
+        samples = array.array("h")
+        samples.extend([0] * 4000)  # 前半静音 → closed
+        samples.extend([12000] * 4000)  # 后半响亮 → open
+        with wave_module.open(str(voice), "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(8000)
+            w.writeframes(samples.tobytes())
+        self.store.set("clip3", [{"start": 0.0, "end": 0.5, "text": "前"},
+                                 {"start": 0.5, "end": 1.0, "text": "后"}])
+        info = self.store.align_mouth("clip3", voice)
+        aligned = self.store.get("clip3")
+        self.assertEqual(info["status"], "ok")
+        self.assertEqual(aligned[0]["mouth"], "closed")
+        self.assertEqual(aligned[1]["mouth"], "open")
+
+    def test_persisted_across_reload(self) -> None:
+        self.store.set("clip4", [{"start": 0.0, "end": 1.0, "text": "持久"}])
+        reloaded = CaptionTimelineStore(self.store.path)
+        self.assertEqual(reloaded.get("clip4")[0]["text"], "持久")
+
+
+class SuggestionEngineC1Test(unittest.TestCase):
+    """C1 建议引擎：自省统计 → 确定性建议（本地规则）。"""
+
+    def test_empty_stats_no_suggestions(self) -> None:
+        from avatar_advice import SuggestionEngine
+
+        suggestions = SuggestionEngine.stats_to_suggestions(
+            {"tool_total": 0, "denied": 0, "failed": 0}
+        )
+        self.assertEqual(suggestions, [])
+
+    def test_denied_boundary_suggestion(self) -> None:
+        from avatar_advice import SuggestionEngine
+
+        suggestions = SuggestionEngine.stats_to_suggestions(
+            {
+                "tool_total": 10,
+                "denied": 3,
+                "denied_reasons": {"requires_permission": 3},
+                "failed": 0,
+                "wake_total": 0,
+                "wake_ratio": 0.0,
+            }
+        )
+        kinds = {s["kind"] for s in suggestions}
+        self.assertIn("approval_boundary", kinds)
+
+    def test_failed_reliability_suggestion(self) -> None:
+        from avatar_advice import SuggestionEngine
+
+        suggestions = SuggestionEngine.stats_to_suggestions(
+            {
+                "tool_total": 10,
+                "denied": 0,
+                "failed": 4,
+                "wake_total": 0,
+                "wake_ratio": 0.0,
+            }
+        )
+        self.assertIn("task_reliability", {s["kind"] for s in suggestions})
+
+    def test_steady_fallback(self) -> None:
+        from avatar_advice import SuggestionEngine
+
+        suggestions = SuggestionEngine.stats_to_suggestions(
+            {
+                "tool_total": 5,
+                "denied": 0,
+                "failed": 0,
+                "wake_total": 0,
+                "wake_ratio": 0.0,
+            }
+        )
+        self.assertEqual(suggestions[0]["kind"], "steady")
+
+    def test_threshold_suggestion_on_low_wake_ratio(self) -> None:
+        from avatar_advice import SuggestionEngine
+
+        suggestions = SuggestionEngine.stats_to_suggestions(
+            {
+                "tool_total": 5,
+                "denied": 0,
+                "failed": 0,
+                "wake_total": 5,
+                "wake_ratio": 0.2,
+            }
+        )
+        self.assertIn("threshold", {s["kind"] for s in suggestions})
+
+
+class AvatarShortMemoryC2Test(unittest.TestCase):
+    """C2 分身短记忆：工作偏好存储（主权边界内），可撤销、可持久化。"""
+
+    def setUp(self) -> None:
+        tmp = tempfile.mkdtemp(prefix="moling_avatars_c2_")
+        self.store = FakeMemoryStore()
+        self.system = AvatarSystem(
+            registry_path=Path(tmp) / "avatars.json",
+            awaken_log_path=Path(tmp) / "awaken_log.json",
+            character_store=self.store,
+        )
+
+    def test_set_get_delete_via_system(self) -> None:
+        self.system.short_memory_set("creation", "preferred_style", "讲解")
+        self.system.short_memory_set("tech", "shell_verbosity", "brief")
+        self.assertEqual(
+            self.system.short_memory_get("creation"),
+            {"preferred_style": "讲解"},
+        )
+        result = self.system.short_memory_delete("creation", "preferred_style")
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(self.system.short_memory_get("creation"), {})
+
+    def test_persisted_across_reload(self) -> None:
+        path = Path(self.system.short_memory.path)
+        self.system.short_memory_set("learning", "citation_style", "apa")
+        reloaded = AvatarShortMemory(path)
+        self.assertEqual(reloaded.get("learning"), {"citation_style": "apa"})
+
+    def test_value_type_guard(self) -> None:
+        with self.assertRaises(ValueError):
+            self.system.short_memory_set("creation", "key1", {"dict": "not-allowed"})
+
+    def test_invalid_key_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self.system.short_memory_set("creation", "", "x")
+
+
+class DailyBriefC3Test(unittest.TestCase):
+    """C3 每日自省简报：tool_log 统计 + 建议（本地确定性规则）。"""
+
+    def setUp(self) -> None:
+        tmp = tempfile.mkdtemp(prefix="moling_avatars_c3_")
+        self.store = FakeMemoryStore()
+        self.system = AvatarSystem(
+            registry_path=Path(tmp) / "avatars.json",
+            awaken_log_path=Path(tmp) / "awaken_log.json",
+            character_store=self.store,
+        )
+
+    def test_brief_structure_and_stats(self) -> None:
+        from avatar_advice import build_daily_brief
+
+        log = [
+            {"decision": "allowed", "error": None, "task": "mood_echo"},
+            {"decision": "allowed", "error": None, "task": "script_draft"},
+            {"decision": "denied", "task": "external_search"},
+            {"decision": "allowed", "error": "boom", "task": "safe_exec"},
+        ]
+        brief = build_daily_brief(log, [{"kind": "steady", "severity": "none", "text": "稳"}])
+        self.assertEqual(brief["tool_total"], 4)
+        self.assertEqual(brief["stats"], {"ok": 2, "denied": 1, "failed": 1})
+        self.assertIn("mood_echo", brief["skills_used"])
+        self.assertEqual(brief["mode"], "local_rule")
+
+    def test_system_daily_brief_empty(self) -> None:
+        brief = self.system.daily_brief()
+        self.assertEqual(brief["tool_total"], 0)
+        self.assertIn("date", brief)
+        self.assertIn("suggestions", brief)
+
+    def test_system_suggestions_empty(self) -> None:
+        self.assertEqual(self.system.suggestions(), [])
 
 
 if __name__ == "__main__":

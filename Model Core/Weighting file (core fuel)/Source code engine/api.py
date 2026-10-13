@@ -453,6 +453,25 @@ class ApiHandler(BaseHTTPRequestHandler):
                 {"personas": self.get_avatar_system().persona_list()},
             )
             return
+        if path == "/v1/avatars/suggestions":
+            self._send_json(
+                HTTPStatus.OK,
+                {"suggestions": self.get_avatar_system().suggestions()},
+            )
+            return
+        if path == "/v1/avatars/daily-brief":
+            self._send_json(
+                HTTPStatus.OK,
+                self.get_avatar_system().daily_brief(),
+            )
+            return
+        if path.startswith("/v1/avatars/") and path.endswith("/short-memory"):
+            avatar_id = path.split("/")[4]
+            self._send_json(
+                HTTPStatus.OK,
+                {"memory": self.get_avatar_system().short_memory_get(avatar_id)},
+            )
+            return
         if path == "/v1/privacy":
             self._send_json(HTTPStatus.OK, self.character_store.get_privacy_settings())
             return
@@ -718,6 +737,25 @@ class ApiHandler(BaseHTTPRequestHandler):
             except ValueError as error:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
+        if "/short-memory" in path and path.startswith("/v1/avatars/"):
+            parts = path.split("/")
+            avatar_id = parts[4]
+            if parts[-1] == "short-memory" and len(parts) == 6:
+                try:
+                    payload = self._read_json()
+                    result = self.get_avatar_system().short_memory_set(
+                        avatar_id, str(payload["key"]), payload["value"]
+                    )
+                    self._send_json(HTTPStatus.OK, result)
+                except (ValueError, KeyError, TypeError) as error:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                return
+            if len(parts) == 7:
+                key = parts[6]
+                result = self.get_avatar_system().short_memory_delete(avatar_id, key)
+                status = HTTPStatus.OK if result.get("status") == "ok" else HTTPStatus.NOT_FOUND
+                self._send_json(status, result)
+                return
         if path == "/v1/partners/evaluate":
             try:
                 payload = self._read_json()

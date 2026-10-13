@@ -520,3 +520,22 @@
   - 存储隔离延续：`Character/personas.json` 默认，测试走 `PERSONA_PATH` 环境变量；`.gitignore` 追加 personas / tool_log / skills / introspection_log。
   - **测试**：`test_avatars.py` 82 项（+10 项 S5：四分身默认性格齐全、同一情境输出可区分、变量替换、未知分身 / 情境兜底、定制持久化、非法 persona 拒绝、run_task 消息装饰、HTTP 冒烟）全绿。
   - 待办：S5 其余（手机陪伴原型、性格参数深化）。
+- **A/B/C/D 完善轮（2026-10-14）**：按用户锁定的顺序推进后续目标。
+  - **A · 顺势深化**：
+    - 性格参数真实生效：`speak` 渲染后应用 `jargon`（high 术语替换）/ `verbosity`（verbose 追加惯用语）/ `max_sentence`（超长截断），`upsert_persona` 规范化补齐默认值——同一情境下四分身不仅措辞不同，参数也可配置。
+    - 演出脚本人格化：`AvatarSystem.persona_script` 给 `script_draft` 脚本骨架套对应分身开场 / 收尾（`script_styled` 字段，纯表现层）。
+    - 人声优先混音技能卡：`avatar_media.py` 纯标准库 wave 实现 `mix_voice_first`（音乐降音量叠加、时长以人声为准、峰值受控）；任务 `mix_audio` + 技能卡（source K6）。
+  - **B · 已登记待办（数据 / 后端可落地部分）**：
+    - 白边检查：`asset_quality.py` `check_halo`——透明素材边缘半透明白边自动分级；任务 + 技能卡（source K6）。
+    - 动作清单成文：`Docs & Compliance/performance_rules.json`——语义动作映射（提问→思考、惊喜→拍手、强调→停半拍）、舞台规则、部件分层清单。
+    - 字幕时间戳数据层：`CaptionTimelineStore`——字幕 {start,end,text} 可编辑、可保存；`compute_mouth_curve` 按音量重算口型曲线，`align_mouth` 按时间戳对齐（换音重算）。
+  - **C · 新思路**：
+    - 建议引擎：`avatar_advice.py` `SuggestionEngine`——自省统计 → 确定性建议（授权边界 / 任务可靠性 / 阈值 / 平稳），`GET /v1/avatars/suggestions`。
+    - 分身短记忆：`AvatarShortMemory`——各分身工作偏好（主权边界内，不写主记忆），`GET|POST /v1/avatars/<id>/short-memory`、`DELETE .../<key>`。
+    - 每日自省简报：`build_daily_brief`——tool_log 统计 + 建议，`GET /v1/avatars/daily-brief`。
+  - **D · 拍板与远期**：
+    - 外部伙伴评审团拍板：**维持"逐次预览 + 明确授权才外联、默认关闭"**（`/v1/partners/evaluate` 需 `external_consent=True` 才参与外部），不主动外联；任务 #23 收尾。
+    - 手机陪伴原型：设计草案 `MOLING_MOBILE_PLAN.md`（会话断点续接 + 摘要续聊 + 默认关闭的简报通道），**远期不设时间表**。
+    - 3D / Blender 方向：远期，不登记具体目标。
+  - **测试**：`test_avatars.py` 116 项（+34：A 参数化渲染 / 脚本人格化 / 混音、B 白边 / 规则文件 / 字幕时间戳、C 建议 / 短记忆 / 简报）全绿；全量回归 367 项。
+  - 待办：演出规则可配置 UI（前端，动作映射 / 时间线可编辑 UI）、手机陪伴原型（远期）、3D 方向（远期）。
