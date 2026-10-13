@@ -128,6 +128,11 @@ contextBridge.exposeInMainWorld(
     deleteGoal: (goalId) => ipcRenderer.invoke("companion:delete-goal", goalId),
     getAffect: () => ipcRenderer.invoke("companion:get-affect"),
     setAffect: (mood) => ipcRenderer.invoke("companion:set-affect", mood),
+    avatarStatus: () => ipcRenderer.invoke("companion:avatar-status"),
+    avatarAssess: (message) =>
+      ipcRenderer.invoke("companion:avatar-assess", message),
+    avatarAwaken: (avatarIds, confirmed, reason) =>
+      ipcRenderer.invoke("companion:avatar-awaken", avatarIds, confirmed, reason),
     setAvatarDisplayMode: (mode) =>
       ipcRenderer.invoke("companion:set-avatar-display-mode", mode),
     exportMemories: () => ipcRenderer.invoke("companion:export-memories"),

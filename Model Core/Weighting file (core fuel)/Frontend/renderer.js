@@ -4225,9 +4225,83 @@ async function handleAnalyzeImage() {
   }
 }
 
+let _avatarNameMap = null;
+async function avatarNameFor(avatarId) {
+  try {
+    if (!_avatarNameMap) {
+      const status = await window.companion.avatarStatus();
+      _avatarNameMap = {};
+      for (const a of status?.avatars || []) _avatarNameMap[a.id] = a.name;
+    }
+    return _avatarNameMap[avatarId] || avatarId;
+  } catch {
+    return avatarId;
+  }
+}
+
+async function renderAvatarAskCard(prompt, assessResult) {
+  const suggested = assessResult?.suggested_avatars || [];
+  const card = addMessage("", "assistant", "avatar-ask-card");
+  card.classList.add("avatar-ask");
+  card.innerHTML = `
+    <div class="avatar-ask-title">💭 这个任务有点复杂，要不要叫醒更多墨灵的帮助？</div>
+    <div class="avatar-ask-names">${suggested.length
+      ? suggested.map((id) => `<span class="avatar-chip">${id}</span>`).join(" ")
+      : "主墨灵想喊几个帮手"}</div>
+    <div class="avatar-ask-actions">
+      <button class="avatar-btn avatar-btn-wake" data-ids="${suggested.join(",")}">叫醒 TA 们</button>
+      <button class="avatar-btn avatar-btn-alone">不用，主墨灵来</button>
+    </div>`;
+  const chipMap = {};
+  for (const id of suggested) chipMap[id] = await avatarNameFor(id);
+  const namesEl = card.querySelector(".avatar-ask-names");
+  if (namesEl) {
+    namesEl.innerHTML = suggested
+      .map((id) => `<span class="avatar-chip">${chipMap[id]}</span>`)
+      .join(" ");
+  }
+  const wakeBtn = card.querySelector(".avatar-btn-wake");
+  const aloneBtn = card.querySelector(".avatar-btn-alone");
+  const done = (text) => {
+    card.innerHTML = `<div class="avatar-ask-title">${text}</div>`;
+    card.classList.add("avatar-ask-done");
+    card.classList.remove("avatar-ask");
+  };
+  wakeBtn.addEventListener("click", async () => {
+    wakeBtn.disabled = true;
+    aloneBtn.disabled = true;
+    try {
+      await window.companion.avatarAwaken(suggested, true, "用户选择唤醒分身");
+      const names = suggested.map((id) => chipMap[id]).join("、");
+      done(`✨ 已叫醒：${names || "分身"}。正在交给 TA 们…`);
+      void sendMessage(prompt);
+    } catch (error) {
+      done(`叫醒失败：${error.message}`);
+      sendButton.disabled = false;
+    }
+  });
+  aloneBtn.addEventListener("click", async () => {
+    await window.companion.avatarAwaken(suggested, false, "用户选择主墨灵直做");
+    card.remove();
+    void sendMessage(prompt);
+  });
+  return card;
+}
+
 async function sendMessage(text) {
   const prompt = text.trim();
   if (!prompt || sendButton.disabled) return;
+  // S1 分身阈值：复杂 / 跨领域任务先询问是否唤醒更多墨灵
+  try {
+    const assess = await window.companion.avatarAssess(prompt);
+    if (assess?.decision === "ask" && sendButton.disabled === false) {
+      sendButton.disabled = true;
+      await renderAvatarAskCard(prompt, assess);
+      return; // 等待用户在卡片上的选择
+    }
+  } catch {
+    // 阈值接口不可用时保持原流程（主墨灵直做）
+  }
   const previousHistory = conversationHistory;
   const historyForRequest = previousHistory.slice(-20);
   welcome.hidden = true;

@@ -90,3 +90,5 @@ Web.config
 Model Core/Weighting file (core fuel)/Character/assets/models/
 Model Core/Weighting file (core fuel)/Character/affect-*.json
 Model Core/Weighting file (core fuel)/Is it feasible/
+Model Core/Weighting file (core fuel)/Character/avatars.json
+Model Core/Weighting file (core fuel)/Character/awaken_log.json

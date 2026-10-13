@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 from agent import route_cognition
+from avatars import AvatarSystem
 from asset_check import check_assets, delivery_manifest, format_manifest
 from discovery import discover_file, observe_context
 from explore import (
@@ -91,6 +92,19 @@ class ApiHandler(BaseHTTPRequestHandler):
     )
     speech_service = SpeechService()
     proposal_store = ProposalStore("Character/proposals.json")
+    # 分身系统惰性初始化：不在 import 时创建实例（避免启动即写文件、
+    # 也避免类属性被测试进程共享污染）。create_server 可显式重设（测试用 env 路径）。
+    _avatar_system: "AvatarSystem | None" = None
+
+    @classmethod
+    def get_avatar_system(cls) -> "AvatarSystem":
+        if cls._avatar_system is None:
+            character_root = Path(__file__).resolve().parent.parent / "Character"
+            cls._avatar_system = AvatarSystem(
+                character_root / "avatars.json",
+                character_root / "awaken_log.json",
+            )
+        return cls._avatar_system
     workspace_root = Path.cwd()
     tool_capability = ""
     vision_capability = ""
@@ -404,6 +418,15 @@ class ApiHandler(BaseHTTPRequestHandler):
                 },
             )
             return
+        if path == "/v1/avatars":
+            self._send_json(HTTPStatus.OK, self.get_avatar_system().status())
+            return
+        if path == "/v1/avatars/awaken-log":
+            self._send_json(
+                HTTPStatus.OK,
+                {"entries": self.get_avatar_system().awaken_log.list()},
+            )
+            return
         if path == "/v1/privacy":
             self._send_json(HTTPStatus.OK, self.character_store.get_privacy_settings())
             return
@@ -491,6 +514,80 @@ class ApiHandler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path.startswith("/v1/social/") and not self._is_local_request():
             self._send_json(HTTPStatus.FORBIDDEN, {"error": "social API is 127.0.0.1 only"})
+            return
+        if path == "/v1/avatars/create":
+            try:
+                payload = self._read_json()
+                if not isinstance(payload.get("name"), str) or not payload.get("name").strip():
+                    raise ValueError("name 必填")
+                domain = str(payload.get("domain", ""))
+                profile = self.get_avatar_system().registry.create(
+                    name=payload["name"].strip(),
+                    domain=domain,
+                    description=str(payload.get("description", "")),
+                    capabilities=payload.get("capabilities"),
+                )
+                self._send_json(HTTPStatus.OK, {"avatar": profile.to_dict()})
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/avatars/wake":
+            try:
+                payload = self._read_json()
+                avatar_id = str(payload.get("id", ""))
+                profile = self.get_avatar_system().registry.wake(
+                    avatar_id, payload.get("breakpoint")
+                )
+                self._send_json(HTTPStatus.OK, {"avatar": profile.to_dict()})
+            except KeyError as error:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": str(error)})
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/avatars/sleep":
+            try:
+                payload = self._read_json()
+                avatar_id = str(payload.get("id", ""))
+                profile = self.get_avatar_system().registry.sleep(
+                    avatar_id, payload.get("breakpoint")
+                )
+                self._send_json(HTTPStatus.OK, {"avatar": profile.to_dict()})
+            except KeyError as error:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": str(error)})
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/avatars/assess":
+            try:
+                payload = self._read_json()
+                message = payload.get("message")
+                if not isinstance(message, str):
+                    raise ValueError("message 必填")
+                self._send_json(
+                    HTTPStatus.OK, self.get_avatar_system().assess(message)
+                )
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/avatars/awaken":
+            try:
+                payload = self._read_json()
+                entry = self.get_avatar_system().confirm_awaken(
+                    avatar_ids=payload.get("avatar_ids", []),
+                    confirmed=bool(payload.get("confirmed", False)),
+                    reason=str(payload.get("reason", "")),
+                )
+                self._send_json(HTTPStatus.OK, {"entry": entry})
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/avatars/threshold":
+            try:
+                payload = self._read_json()
+                settings = self.get_avatar_system().router.update_settings(payload)
+                self._send_json(HTTPStatus.OK, {"threshold": settings})
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         if path == "/v1/partners/evaluate":
             try:

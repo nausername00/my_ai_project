@@ -2960,6 +2960,69 @@ button {
   color: #ff9292;
 }
 
+/* S1 分身唤醒确认卡片 */
+.avatar-ask {
+  border: 1px dashed rgba(124, 111, 255, 0.55);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 8px 0;
+  background: rgba(124, 111, 255, 0.08);
+  max-width: 460px;
+}
+.avatar-ask-title {
+  font-size: 13px;
+  color: #e6e2ff;
+  margin-bottom: 8px;
+}
+.avatar-ask-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.avatar-chip {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 11px;
+  background: rgba(124, 111, 255, 0.22);
+  border: 1px solid rgba(124, 111, 255, 0.5);
+  color: #cfc6ff;
+}
+.avatar-ask-actions {
+  display: flex;
+  gap: 8px;
+}
+.avatar-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #fff;
+}
+.avatar-btn-wake {
+  background: linear-gradient(135deg, #4d3fd8, #7c6fff);
+}
+.avatar-btn-alone {
+  background: rgba(255, 255, 255, 0.12);
+  color: #cfc6ff;
+}
+.avatar-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.avatar-ask-done {
+  border: 1px solid rgba(121, 210, 164, 0.45);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin: 8px 0;
+  background: rgba(121, 210, 164, 0.08);
+  max-width: 460px;
+  color: #a8e6c5;
+  font-size: 13px;
+}
+
 .sr-only {
   position: absolute;
   overflow: hidden;

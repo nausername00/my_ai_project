@@ -314,6 +314,14 @@ async function callApi(route, method = "GET", body, extraHeaders = {}) {
     "/v1/engine/list": ["GET"],
     "/v1/engine/switch": ["POST"],
     "/v1/notify": ["GET", "POST"],
+    "/v1/avatars": ["GET"],
+    "/v1/avatars/awaken-log": ["GET"],
+    "/v1/avatars/create": ["POST"],
+    "/v1/avatars/wake": ["POST"],
+    "/v1/avatars/sleep": ["POST"],
+    "/v1/avatars/assess": ["POST"],
+    "/v1/avatars/awaken": ["POST"],
+    "/v1/avatars/threshold": ["POST"],
   };
   const routePath = new URL(route, "http://127.0.0.1").pathname;
   const allowedMethods =
@@ -1179,6 +1187,19 @@ function registerIpcHandlers() {
     callApi("/v1/privacy", "POST", settings),
   );
   ipcMain.handle("companion:get-proposals", () => callApi("/v1/proposals"));
+  ipcMain.handle("companion:avatar-status", () => callApi("/v1/avatars"));
+  ipcMain.handle("companion:avatar-assess", (_event, message) =>
+    callApi("/v1/avatars/assess", "POST", { message }),
+  );
+  ipcMain.handle(
+    "companion:avatar-awaken",
+    (_event, avatarIds, confirmed, reason) =>
+      callApi("/v1/avatars/awaken", "POST", {
+        avatar_ids: avatarIds,
+        confirmed,
+        reason,
+      }),
+  );
   ipcMain.handle("companion:update-proposal-settings", (_event, settings) =>
     callApi("/v1/proposals/settings", "PUT", settings),
   );
