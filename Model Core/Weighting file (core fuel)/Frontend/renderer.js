@@ -790,6 +790,72 @@ function setVoiceStatus(message, isError = false) {
   voiceStatus.classList.toggle("error", isError);
 }
 
+// K5：实时音量驱动 Live2D 口型。返回 true 表示音量分析已启用（调用方无需回退近似口型）。
+let lipSyncCtx = null;
+let lipSyncAnalyser = null;
+let lipSyncRAF = 0;
+let lipSyncSrc = null;
+
+function stopLipSync() {
+  if (lipSyncRAF) {
+    cancelAnimationFrame(lipSyncRAF);
+    lipSyncRAF = 0;
+  }
+  if (lipSyncSrc) {
+    try {
+      lipSyncSrc.disconnect();
+    } catch {
+      /* ignore */
+    }
+    lipSyncSrc = null;
+  }
+  if (lipSyncCtx) {
+    try {
+      lipSyncCtx.close();
+    } catch {
+      /* ignore */
+    }
+    lipSyncCtx = null;
+  }
+  lipSyncAnalyser = null;
+  window.MolingLive2D?.setMouth(0);
+}
+
+function startLipSync(playback) {
+  stopLipSync();
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx || !playback || !window.MolingLive2D) return false;
+  try {
+    lipSyncCtx = new Ctx();
+    lipSyncSrc = lipSyncCtx.createMediaElementSource(playback);
+    lipSyncAnalyser = lipSyncCtx.createAnalyser();
+    lipSyncAnalyser.fftSize = 256;
+    lipSyncAnalyser.smoothingTimeConstant = 0.6;
+    lipSyncSrc.connect(lipSyncAnalyser);
+    lipSyncAnalyser.connect(lipSyncCtx.destination);
+    const timeBuf = new Float32Array(lipSyncAnalyser.fftSize);
+    const tick = () => {
+      if (!lipSyncAnalyser) return;
+      // 时域 RMS：对任意频谱内容按音量灵敏响应（频域平均对单频/窄带信号不敏感）
+      lipSyncAnalyser.getFloatTimeDomainData(timeBuf);
+      let sumSq = 0;
+      for (let i = 0; i < timeBuf.length; i++) {
+        sumSq += timeBuf[i] * timeBuf[i];
+      }
+      const rms = Math.sqrt(sumSq / timeBuf.length);
+      // 静音阈值压低（rms<0.02 闭嘴），0.02..0.17 平滑映射到 0..1
+      const v = Math.max(0, Math.min(1, (rms - 0.02) / 0.15));
+      window.MolingLive2D.setMouth(v);
+      lipSyncRAF = requestAnimationFrame(tick);
+    };
+    lipSyncRAF = requestAnimationFrame(tick);
+    return true;
+  } catch {
+    stopLipSync();
+    return false;
+  }
+}
+
 function addSpeechControl(message, text) {
   const button = document.createElement("button");
   button.type = "button";
@@ -829,6 +895,7 @@ function addSpeechControl(message, text) {
       const releaseAudioUrl = () => {
         URL.revokeObjectURL(audioUrl);
         if (activeAudio === playback) activeAudio = undefined;
+        stopLipSync();
         window.companion.notifySpeechState?.(false).catch(() => {});
       };
       const messageAvatar = message.querySelector(".message-avatar");
@@ -841,11 +908,17 @@ function addSpeechControl(message, text) {
       await playback.play();
       messageAvatar?.classList.add("listening");
       window.companion.notifySpeechState?.(true).catch(() => {});
+      // K5：播放期间按实时音量驱动 Live2D 口型；不可用则回退随机近似口型
+      if (!startLipSync(playback)) {
+        window.MolingLive2D?.startTalking();
+      }
       button.textContent = "重新播放";
     } catch (error) {
       playback?.pause();
       if (activeAudio === playback) activeAudio = undefined;
       if (audioUrl) URL.revokeObjectURL(audioUrl);
+      stopLipSync();
+      window.MolingLive2D?.stopTalking();
       window.companion.notifySpeechState?.(false).catch(() => {});
       button.textContent = `播放失败：${error.message}`;
     } finally {

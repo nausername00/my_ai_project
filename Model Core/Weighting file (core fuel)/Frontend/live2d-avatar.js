@@ -350,6 +350,16 @@
     return out;
   }
 
+  // 调试：读回嘴部参数当前值（K5 口型联动验证用）
+  function _debugMouth() {
+    if (!model || !model.internalModel || !model.internalModel.coreModel) return null;
+    try {
+      return model.internalModel.coreModel.getParameterValueById("ParamMouthOpenY");
+    } catch {
+      return null;
+    }
+  }
+
   window.MolingLive2D = {
     init,
     setExpression,
@@ -363,6 +373,7 @@
     dispose,
     getExpressionDefinitions,
     _debugExpressionState,
+    _debugMouth,
     get MOOD_EXPRESSION_MAP() {
       return MOOD_EXPRESSION_MAP;
     },
