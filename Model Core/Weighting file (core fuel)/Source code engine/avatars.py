@@ -526,7 +526,24 @@ class AvatarSystem:
             draft = (result.get("result") or {}).get("script")
             if isinstance(draft, dict):
                 result["script_styled"] = self.persona_script(avatar_id, draft)
+        # E1 表现层装饰：结构化汇报——行为参数 structured=True 时附要点列表版（新增字段，不改 message/status）
+        if self.persona_behavior(avatar_id).get("structured") and result.get(
+            "status"
+        ) in ("ok", "pending"):
+            summary = self._task_result_text(result)
+            if summary.strip():
+                result["report"] = self._to_bullet_report(summary)
         return result
+
+    def persona_behavior(self, avatar_id: str) -> dict[str, Any]:
+        """读取分身行为参数（E1）：output_style / structured / task_affinity，未知分身回落中性。"""
+        return self.personas.behavior_of(avatar_id)
+
+    @staticmethod
+    def _to_bullet_report(text: str) -> list[str]:
+        """把结果摘要转成要点列表（纯表现层辅助）：按句号 / 换行切分，去空。"""
+        parts = [p for p in text.replace("\n", "。").split("。") if p.strip()]
+        return parts if len(parts) > 1 else [text.strip()]
 
     def persona_script(
         self,

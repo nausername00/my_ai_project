@@ -541,6 +541,7 @@
   - 待办：演出规则可配置 UI（前端，动作映射 / 时间线可编辑 UI）、手机陪伴原型（远期）、3D 方向（远期）。
 - **外部评价采纳项（2026-10-14）**：两份外部评估（个人 AI 伙伴 / Agent / 平台三路线 + 12 层参考架构）经逐层对照，采纳 4 条增量；评价的"现状判断"因未核实源码不适用，方向判断与墨灵既有路线（路线一+二结合、单核心优先、记忆边界优先）一致。
   - E1 · 角色参与决策：persona 目前是表现层（装饰消息），深化为风格参数进一步影响任务倾向 / 输出格式（S5 后续）。
+    - **已完成（2026-10-14）**：新增 `behavior` 块（`output_style` brief/balanced/detailed、`structured`、`task_affinity`），`upsert` 规范化 + 非法值拒绝；`speak` 应用输出形态（brief 压缩到首句、detailed 追加惯用语、balanced 不处理）；`AvatarSystem.persona_behavior` 门面（未知分身回落中性）；`run_task` 对 structured=True 的成功任务附 `report` 要点列表（新增字段，message/status/授权逻辑不变）。测试 +10 项。
   - E2 · 记忆使用追踪：补"这条回复使用了哪些记忆条目"的记录与可视化（J4 遗留项）。
   - E3 · README 目录角色澄清：已完成——明确 `Model Core\Weighting file (core fuel)` 是核心配置目录而非神经网络权重，概念分离表入 README。
   - E4 · 平台治理（远期）：任务队列 / 资源监控 / 成本统计——单机单人场景当前收益低，登记远期，不设时间表。

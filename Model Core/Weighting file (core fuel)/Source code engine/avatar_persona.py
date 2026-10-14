@@ -137,6 +137,18 @@ _NEUTRAL_SITUATIONS: dict[str, str] = {
 
 _REQUIRED_PERSONA_FIELDS = ("avatar_id", "name", "situations")
 
+# E1 行为参数：输出形态偏好（纯表现层，不触碰执行 / 授权逻辑）
+_OUTPUT_STYLES = ("brief", "balanced", "detailed")
+
+
+def _neutral_behavior() -> dict[str, Any]:
+    """未配置行为参数时的中性默认（任何分身 / 未知分身均回落）。"""
+    return {
+        "output_style": "balanced",
+        "structured": False,
+        "task_affinity": [],
+    }
+
 
 class PersonaRegistry:
     """性格模板注册表：四分身语气 / 情境措辞，可查询、可登记 / 覆盖。"""
@@ -197,6 +209,15 @@ class PersonaRegistry:
         for key, template in situations.items():
             if not isinstance(template, str) or not template.strip():
                 raise ValueError(f"情境模板非法: {key}")
+        behavior = persona.get("behavior") or {}
+        output_style = str(behavior.get("output_style", "balanced"))
+        if output_style not in _OUTPUT_STYLES:
+            raise ValueError(
+                f"output_style 必须为 {'/'.join(_OUTPUT_STYLES)} 之一"
+            )
+        task_affinity = list(behavior.get("task_affinity", []))
+        if any(not isinstance(item, str) or not item.strip() for item in task_affinity):
+            raise ValueError("task_affinity 必须是非空字符串列表")
         with self._lock:
             normalized = {
                 "avatar_id": avatar_id,
@@ -210,6 +231,11 @@ class PersonaRegistry:
                     "verbosity": str(persona.get("style", {}).get("verbosity", "normal")),
                     "jargon_map": dict(persona.get("style", {}).get("jargon_map", {})),
                 },
+                "behavior": {
+                    "output_style": output_style,
+                    "structured": bool(behavior.get("structured", False)),
+                    "task_affinity": task_affinity,
+                },
                 "openers": list(persona.get("openers", [])),
                 "phrases": list(persona.get("phrases", [])),
                 "situations": dict(situations),
@@ -217,6 +243,18 @@ class PersonaRegistry:
             self._personas[avatar_id] = normalized
             self._save()
             return dict(normalized)
+
+    def behavior_of(self, avatar_id: str) -> dict[str, Any]:
+        """读取分身行为参数（E1）：未配置时回落中性默认，不抛错。"""
+        persona = self._personas.get(avatar_id)
+        behavior = (persona or {}).get("behavior")
+        if not isinstance(behavior, dict):
+            return _neutral_behavior()
+        return {
+            "output_style": behavior.get("output_style", "balanced"),
+            "structured": bool(behavior.get("structured", False)),
+            "task_affinity": list(behavior.get("task_affinity", [])),
+        }
 
     def speak(
         self,
@@ -236,6 +274,27 @@ class PersonaRegistry:
         text = self._render(template, variables)
         if persona is not None:
             text = self._apply_style(persona, style, text)
+            output_style = self.behavior_of(avatar_id)["output_style"]
+            text = self._apply_output_style(persona, output_style, text)
+        return text
+
+    @staticmethod
+    def _apply_output_style(
+        persona: dict[str, Any],
+        output_style: str,
+        text: str,
+    ) -> str:
+        """E1 行为参数生效（纯表现层）：brief 压缩到首句；detailed 追加惯用语；balanced 不处理。"""
+        if output_style == "brief":
+            for marker in ("。", "！", "？"):
+                idx = text.find(marker)
+                if idx >= 8:
+                    return text[: idx + 1]
+        elif output_style == "detailed":
+            phrases = persona.get("phrases") or []
+            tail = phrases[1] if len(phrases) > 1 else (phrases[0] if phrases else "")
+            if tail and not text.endswith(tail):
+                return f"{text} {tail}"
         return text
 
     @staticmethod

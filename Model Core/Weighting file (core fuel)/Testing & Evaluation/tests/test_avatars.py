@@ -1569,5 +1569,125 @@ class DailyBriefC3Test(unittest.TestCase):
         self.assertEqual(self.system.suggestions(), [])
 
 
+class AvatarBehaviorE1Test(unittest.TestCase):
+    """E1 角色参与决策：persona 行为参数（output_style / structured / task_affinity）
+    真实生效；只作用于表现层，不改变执行 / 授权逻辑。"""
+
+    def setUp(self) -> None:
+        self.system = make_system()
+
+    def _custom_persona(
+        self, behavior: dict[str, Any], phrases: list[str] | None = None
+    ) -> dict[str, Any]:
+        return {
+            "avatar_id": "behavior_test",
+            "name": "行为测试分身",
+            "tone": "neutral",
+            "traits": [],
+            "style": {
+                "max_sentence": 0,
+                "jargon": "low",
+                "pronoun_bias": "none",
+                "verbosity": "normal",
+                "jargon_map": {},
+            },
+            "behavior": behavior,
+            "openers": [],
+            "phrases": phrases or ["惯用语一", "惯用语二"],
+            "situations": {
+                "task_ok": "这是第一句完整的说明。这是第二句详细的内容。第三句补充。",
+                "greeting": "你好。",
+            },
+        }
+
+    def test_behavior_default_neutral(self) -> None:
+        behavior = self.system.persona_behavior("companion")
+        self.assertEqual(
+            behavior,
+            {"output_style": "balanced", "structured": False, "task_affinity": []},
+        )
+
+    def test_unknown_avatar_neutral(self) -> None:
+        self.assertEqual(
+            self.system.persona_behavior("nobody"),
+            {"output_style": "balanced", "structured": False, "task_affinity": []},
+        )
+
+    def test_behavior_upsert_normalized(self) -> None:
+        self.system.upsert_persona(
+            self._custom_persona(
+                {"output_style": "detailed", "structured": True, "task_affinity": ["mood_echo"]}
+            )
+        )
+        persona = next(
+            p for p in self.system.persona_list() if p["avatar_id"] == "behavior_test"
+        )
+        self.assertEqual(persona["behavior"]["output_style"], "detailed")
+        self.assertIs(persona["behavior"]["structured"], True)
+        self.assertEqual(persona["behavior"]["task_affinity"], ["mood_echo"])
+
+    def test_output_style_invalid_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self.system.upsert_persona(
+                self._custom_persona({"output_style": "huge", "structured": False})
+            )
+
+    def test_task_affinity_validation(self) -> None:
+        with self.assertRaises(ValueError):
+            self.system.upsert_persona(
+                self._custom_persona(
+                    {"output_style": "balanced", "task_affinity": [1, "x"]}
+                )
+            )
+
+    def test_speak_brief_compresses_to_first_sentence(self) -> None:
+        self.system.upsert_persona(
+            self._custom_persona({"output_style": "brief", "structured": False})
+        )
+        text = self.system.persona_speak("behavior_test", "task_ok", result="x")
+        self.assertTrue(text.endswith("。"))
+        self.assertIn("第一句", text)
+        self.assertNotIn("第二句", text)
+
+    def test_speak_detailed_appends_phrase(self) -> None:
+        self.system.upsert_persona(
+            self._custom_persona({"output_style": "detailed", "structured": False})
+        )
+        text = self.system.persona_speak("behavior_test", "task_ok", result="x")
+        self.assertTrue(text.endswith("惯用语二"))
+
+    def test_speak_balanced_untouched(self) -> None:
+        self.system.upsert_persona(
+            self._custom_persona({"output_style": "balanced", "structured": False})
+        )
+        text = self.system.persona_speak("behavior_test", "task_ok", result="x")
+        self.assertIn("第二句", text)
+        self.assertNotIn("惯用语", text)
+
+    def test_run_task_structured_report(self) -> None:
+        companion = next(
+            p for p in self.system.persona_list() if p["avatar_id"] == "companion"
+        )
+        companion["behavior"] = {
+            "output_style": "balanced",
+            "structured": True,
+            "task_affinity": [],
+        }
+        self.system.upsert_persona(companion)
+        result = self.system.run_task(
+            "companion", "mood_echo", {"text": "今天有点累"}
+        )
+        self.assertEqual(result["status"], "ok")
+        self.assertIsInstance(result["report"], list)
+        self.assertGreaterEqual(len(result["report"]), 1)
+
+    def test_run_task_report_absent_without_structured(self) -> None:
+        result = self.system.run_task(
+            "companion", "mood_echo", {"text": "今天有点累"}
+        )
+        self.assertEqual(result["status"], "ok")
+        self.assertNotIn("report", result)
+
+
 if __name__ == "__main__":
     unittest.main()
