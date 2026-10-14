@@ -15,9 +15,6 @@ const net = require("node:net");
 const path = require("node:path");
 
 // moling:// 同源协议：主窗口页面与 Live2D 模型资源统一由本协议服务（Chromium CORS 只放行同源自定义 scheme）。
-// 必须在 app ready 之前注册特权（standard + fetch + stream）。
-registerMolingScheme();
-
 const { createOllamaSetup } = require("./ollama-setup.cjs");
 const {
   MAX_VOICE_SAMPLE_BYTES,
@@ -47,6 +44,9 @@ const {
   registerMolingScheme,
   registerMolingProtocol,
 } = require("./live2d-protocol.cjs");
+
+// 必须在 app ready 之前注册特权（standard + fetch + stream）。
+registerMolingScheme();
 
 const projectRoot = path.resolve(__dirname, "..");
 const toolApprovalCapability = randomBytes(32).toString("hex");
