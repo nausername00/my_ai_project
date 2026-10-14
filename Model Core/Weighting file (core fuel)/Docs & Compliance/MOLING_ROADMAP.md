@@ -553,5 +553,7 @@
     - **已完成（2026-10-14）**：api.py 模块级 `_METRICS`（线程安全计数，路径按前两段归组），`_tracked` 装饰器统一包装 do_GET/POST/PUT/DELETE（成功/异常均记录，异常计错误率），`GET /v1/status/metrics` 返回 `{started_at, uptime_s, requests[], totals}`；设置面板新增"状态"tab——汇总行 + 按接口分组表（次数/平均延迟/错误）+ 手动刷新；main.cjs IPC `companion:status-metrics`。测试 +7 项（test_status_metrics.py）。
   - E8 · 演出规则消费（E5 的规则从"档案"变成"剧本"：运行时真正读规则驱动 Live2D 动作）。
     - **已完成（2026-10-14）**：后端新增 `performance.py`——`classify_semantic_cue`（问句/感叹/强调词/讲解词 → 规范 cue 键）、`match_semantic_action`（cue 键头词与规则条目 cue 文本子串匹配）、`load_performance_rules`（读 performance_rules.json，缺失/损坏返回 None）；`POST /v1/performance/cue` 返回 `{cue, action}`。前端消费：发送消息时按 cue 触发 Live2D——提问→侧头思考（约 0.3s 后偏移、650ms 回归）、惊喜→表情切换后回归、强调→闭嘴静止（尊重"动作跟随语义走，别反复晃动"）；回复完成时 `settleToNeutral` 回归中性（对应规则"每个动作结束回到中性"）。main.cjs IPC `companion:classify-cue`。测试 +15 项（test_performance_cue.py）。
+  - E9 · 生成统计（12 层第 7 层剩余缺口的最轻形态：墨灵累计生成量）。
+    - **已完成（2026-10-14）**：api.py 模块级 `record_generation(chars, elapsed_ms)`（线程安全累计 count/chars/total_ms，主对话生成成功处调用；负值截断为 0）；`metrics_snapshot` 新增 `generations` 字段（count/chars/total_ms/avg_ms，空状态 avg=0）；状态页新增第二行汇总"墨灵已生成 N 次 · X 字符 · 平均 Y ms"，并如实标注"字符近似统计"（本后端不改 generate 签名，不以 token 计）。测试 +3 项（并入 test_status_metrics.py）。
   - E3 · README 目录角色澄清：已完成——明确 `Model Core\Weighting file (core fuel)` 是核心配置目录而非神经网络权重，概念分离表入 README。
   - E4 · 平台治理（远期）：任务队列 / 资源监控 / 成本统计——单机单人场景当前收益低，登记远期，不设时间表。

@@ -4106,6 +4106,11 @@ function renderStatusMetrics(metrics) {
   summary.className = "status-summary-line";
   summary.textContent = `已处理 ${totals.count || 0} 次请求 · ${totals.error_count || 0} 次错误 · 累计 ${(totals.total_ms || 0).toFixed(1)} ms · 运行 ${metrics.uptime_s || 0} s`;
   statusSummary.append(summary);
+  const generations = metrics.generations || {};
+  const generationLine = document.createElement("p");
+  generationLine.className = "status-summary-line";
+  generationLine.textContent = `墨灵已生成 ${generations.count || 0} 次 · ${(generations.chars || 0).toLocaleString()} 字符 · 平均 ${(generations.avg_ms || 0).toFixed(1)} ms（字符近似统计）`;
+  statusSummary.append(generationLine);
 
   statusList.replaceChildren();
   const requests = metrics.requests || [];

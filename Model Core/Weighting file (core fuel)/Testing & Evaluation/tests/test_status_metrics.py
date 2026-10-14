@@ -1,4 +1,4 @@
-"""E7 轻量可观测指标：请求计数/延迟/错误率 与 /v1/status/metrics 快照测试。"""
+"""E7 轻量可观测指标 + E9 生成统计：请求计数/延迟/错误率 与 /v1/status/metrics 快照测试。"""
 
 import unittest
 
@@ -100,6 +100,35 @@ class MetricsSnapshotTest(unittest.TestCase):
         wrapped(FakeHandler("/v1/a"))
         snapshot = api.metrics_snapshot()
         self.assertIn("avg_ms", snapshot["requests"][0])
+
+
+class GenerationStatsTest(unittest.TestCase):
+    """E9 生成统计：record_generation 累计与快照 generations 形状。"""
+
+    def setUp(self) -> None:
+        api._GENERATION_STATS.clear()
+        api._GENERATION_STATS.update({"count": 0.0, "chars": 0.0, "total_ms": 0.0})
+
+    def test_record_accumulates(self) -> None:
+        api.record_generation(120, 350.0)
+        api.record_generation(80, 150.0)
+        snapshot = api.metrics_snapshot()
+        generations = snapshot["generations"]
+        self.assertEqual(generations["count"], 2)
+        self.assertEqual(generations["chars"], 200)
+        self.assertEqual(generations["total_ms"], 500.0)
+        self.assertEqual(generations["avg_ms"], 250.0)
+
+    def test_empty_state_shape(self) -> None:
+        snapshot = api.metrics_snapshot()
+        self.assertEqual(snapshot["generations"]["count"], 0)
+        self.assertEqual(snapshot["generations"]["avg_ms"], 0.0)
+
+    def test_negative_inputs_clamped(self) -> None:
+        api.record_generation(-5, -10.0)
+        snapshot = api.metrics_snapshot()
+        self.assertEqual(snapshot["generations"]["chars"], 0)
+        self.assertEqual(snapshot["generations"]["total_ms"], 0.0)
 
 
 if __name__ == "__main__":

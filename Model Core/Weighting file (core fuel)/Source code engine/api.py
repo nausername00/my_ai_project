@@ -184,6 +184,19 @@ _METRICS: dict[str, dict[str, Any]] = {}
 _METRICS_STARTED = time()
 _METRICS_STARTED_ISO = datetime.now(timezone.utc).isoformat()
 
+# E9：生成统计（字符级近似，非 token——Ollama 非流式响应含 token 字段但本后端
+# 不改 generate 签名，以 len(text) 计字符，状态页如实标注）
+_GENERATION_LOCK = threading.Lock()
+_GENERATION_STATS: dict[str, float] = {"count": 0.0, "chars": 0.0, "total_ms": 0.0}
+
+
+def record_generation(chars: int, elapsed_ms: float) -> None:
+    """累计一次模型生成的字符数与耗时（主对话成功生成后调用）。"""
+    with _GENERATION_LOCK:
+        _GENERATION_STATS["count"] += 1
+        _GENERATION_STATS["chars"] += max(0, chars)
+        _GENERATION_STATS["total_ms"] += max(0.0, elapsed_ms)
+
 
 def _path_prefix(path: str) -> str:
     """路径归组前缀：/v1/memory/usage → /v1/memory；/health → /health。"""
@@ -249,11 +262,22 @@ def metrics_snapshot() -> dict[str, Any]:
             round(entry["total_ms"] / entry["count"], 1) if entry["count"] else 0.0
         )
     requests.sort(key=lambda e: e["count"], reverse=True)
+    with _GENERATION_LOCK:
+        generations = dict(_GENERATION_STATS)
+    generations["avg_ms"] = (
+        round(generations["total_ms"] / generations["count"], 1)
+        if generations["count"]
+        else 0.0
+    )
+    generations["total_ms"] = round(generations["total_ms"], 1)
+    generations["count"] = int(generations["count"])
+    generations["chars"] = int(generations["chars"])
     return {
         "started_at": _METRICS_STARTED_ISO,
         "uptime_s": round(time() - _METRICS_STARTED, 1),
         "requests": requests,
         "totals": totals,
+        "generations": generations,
     }
 
 
@@ -2040,6 +2064,7 @@ class ApiHandler(BaseHTTPRequestHandler):
             inference_started = perf_counter()
             text = self.engine.generate(request)
             inference_ms = round((perf_counter() - inference_started) * 1000, 1)
+            record_generation(len(text), inference_ms)
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
