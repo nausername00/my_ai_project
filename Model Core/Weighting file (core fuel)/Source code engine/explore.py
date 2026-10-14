@@ -85,6 +85,44 @@ _TOPIC_PATTERNS = (
 
 _PALETTES = ("sunrise", "ocean", "forest", "candy", "midnight")
 
+# E13 探索体验深化：提议文案随 cue 类型变化（想学 / 喜欢 / 兜底），
+# 让墨灵的主动提议更像在"跟上话题"而不是固定台词。
+_LEARNING_CUES = ("想学", "试试", "试试看", "玩玩", "玩一下", "想试")
+_JOY_CUES = (
+    "喜欢",
+    "爱好",
+    "有意思",
+    "有趣",
+    "好玩",
+    "迷上",
+    "爱上",
+    "超爱",
+    "最爱",
+    "画画",
+    "绘画",
+    "游戏",
+    "音乐",
+    "电影",
+    "动漫",
+    "烘焙",
+    "做饭",
+    "摄影",
+    "编程",
+    "coding",
+    "hobby",
+    "fun",
+    "最近在",
+)
+
+
+def _build_teaser(topic: str, cues: tuple[str, ...]) -> str:
+    """按命中的 cue 类型选提议文案；都不命中用兜底台词。"""
+    if any(cue in cues for cue in _LEARNING_CUES):
+        return f"你想学「{topic}」的话，要不要我先做一张 mini 概念小海报当热身？"
+    if any(cue in cues for cue in _JOY_CUES):
+        return f"「{topic}」这个话题我喜欢！要不要先画张 mini 概念小海报找找感觉？"
+    return f"我听见你在聊「{topic}」——要不要我先做一张 mini 概念小海报，我们一起看看感觉？"
+
 
 @dataclass(frozen=True)
 class ExplorationProposal:
@@ -147,7 +185,7 @@ def propose_exploration(message: str) -> dict[str, Any]:
     topic = _extract_topic(message)
     if not topic or not cues:
         return ExplorationProposal(False, "", "", "cover_svg", cues).to_dict()
-    teaser = f"我听见你在聊「{topic}」——要不要我先做一张 mini 概念小海报，我们一起看看感觉？"
+    teaser = _build_teaser(topic, cues)
     return ExplorationProposal(
         proposed=True,
         topic=topic,

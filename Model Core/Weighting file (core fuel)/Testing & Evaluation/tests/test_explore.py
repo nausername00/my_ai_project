@@ -12,6 +12,7 @@ from xml.etree import ElementTree
 
 from app import create_server
 from explore import (
+    _build_teaser,
     propose_exploration,
     record_exploration_reaction,
     run_exploration,
@@ -33,6 +34,26 @@ class ExploreModuleTests(unittest.TestCase):
     def test_propose_ignores_small_talk(self) -> None:
         proposal = propose_exploration("你好，今天天气不错")
         self.assertFalse(proposal["proposed"])
+
+    # E13 探索体验深化：提议文案随 cue 类型变化（想学 / 喜欢 / 兜底）
+    def test_teaser_uses_learning_tone(self) -> None:
+        proposal = propose_exploration("我想学做饭")
+        self.assertTrue(proposal["proposed"])
+        self.assertIn("想学", proposal["teaser"])
+        self.assertIn("做饭", proposal["teaser"])
+
+    def test_teaser_uses_joy_tone(self) -> None:
+        proposal = propose_exploration("我喜欢烘焙")
+        self.assertTrue(proposal["proposed"])
+        self.assertIn("喜欢", proposal["teaser"])
+        self.assertIn("烘焙", proposal["teaser"])
+
+    def test_teaser_default_fallback(self) -> None:
+        # 兜底分支在 propose_exploration 里实际不可达（命中的 cue 都属两类），
+        # 直接单测 _build_teaser 的防御性兜底
+        teaser = _build_teaser("奇怪话题", ("未知词",))
+        self.assertIn("奇怪话题", teaser)
+        self.assertIn("听见你在聊", teaser)
 
     def test_run_creates_svg_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
