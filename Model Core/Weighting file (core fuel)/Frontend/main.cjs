@@ -1174,6 +1174,7 @@ function registerIpcHandlers() {
   );
   ipcMain.handle("companion:list-memories", () => callApi("/v1/memory"));
   ipcMain.handle("companion:memory-usage", () => callApi("/v1/memory/usage"));
+  ipcMain.handle("companion:status-metrics", () => callApi("/v1/status/metrics"));
   ipcMain.handle("companion:get-performance-rules", () =>
     callApi("/v1/performance/rules"),
   );

@@ -197,6 +197,10 @@ const performanceStatus = document.getElementById("performance-status");
 const performanceActionAdd = document.getElementById("performance-action-add");
 const performancePartAdd = document.getElementById("performance-part-add");
 const performanceSave = document.getElementById("performance-save");
+const statusSummary = document.getElementById("status-summary");
+const statusList = document.getElementById("status-list");
+const statusNote = document.getElementById("status-note");
+const statusRefresh = document.getElementById("status-refresh");
 const proposalsEnabled = document.getElementById("proposals-enabled");
 const proposalsPaused = document.getElementById("proposals-paused");
 const proposalsFrequency = document.getElementById("proposals-frequency");
@@ -4085,6 +4089,55 @@ function setupPerformancePanel() {
   performanceSave.addEventListener("click", savePerformanceRules);
 }
 
+async function loadStatusMetrics() {
+  try {
+    const metrics = await window.companion.statusMetrics();
+    renderStatusMetrics(metrics);
+  } catch (error) {
+    statusNote.textContent = error.message;
+    statusNote.classList.add("error");
+  }
+}
+
+function renderStatusMetrics(metrics) {
+  statusSummary.replaceChildren();
+  const summary = document.createElement("p");
+  const totals = metrics.totals || {};
+  summary.className = "status-summary-line";
+  summary.textContent = `已处理 ${totals.count || 0} 次请求 · ${totals.error_count || 0} 次错误 · 累计 ${(totals.total_ms || 0).toFixed(1)} ms · 运行 ${metrics.uptime_s || 0} s`;
+  statusSummary.append(summary);
+
+  statusList.replaceChildren();
+  const requests = metrics.requests || [];
+  if (requests.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "memory-empty";
+    empty.textContent = "还没有请求记录。";
+    statusList.append(empty);
+    return;
+  }
+  for (const entry of requests) {
+    const row = document.createElement("div");
+    row.className = "status-entry";
+    const title = document.createElement("div");
+    title.className = "status-entry-title";
+    title.textContent = `${entry.method} ${entry.path}`;
+    const detail = document.createElement("div");
+    detail.className = "status-entry-detail";
+    const errorText =
+      entry.error_count > 0 ? ` · ${entry.error_count} 次错误` : "";
+    detail.textContent = `${entry.count} 次 · 平均 ${entry.avg_ms || 0} ms${errorText}`;
+    row.append(title, detail);
+    statusList.append(row);
+  }
+  statusNote.textContent = "";
+  statusNote.classList.remove("error");
+}
+
+function setupStatusPanel() {
+  statusRefresh.addEventListener("click", loadStatusMetrics);
+}
+
 function renderMemories(memories) {
   memoryList.replaceChildren();
   if (memories.length === 0) {
@@ -4672,7 +4725,7 @@ document.getElementById("settings-close").addEventListener("click", () => {
 document.querySelectorAll("[data-settings-tab]").forEach((button) => {
   button.addEventListener("click", () => {
     const selected = button.dataset.settingsTab;
-    for (const panel of ["persona", "memories", "affect", "proposals", "performance"]) {
+    for (const panel of ["persona", "memories", "affect", "proposals", "performance", "status"]) {
       document.getElementById(`${panel}-panel`).hidden = panel !== selected;
     }
     document.querySelectorAll("[data-settings-tab]").forEach((tab) => {
@@ -4682,6 +4735,7 @@ document.querySelectorAll("[data-settings-tab]").forEach((button) => {
     if (selected === "affect") loadAffect();
     if (selected === "proposals") loadProposals();
     if (selected === "performance") loadPerformanceRules();
+    if (selected === "status") loadStatusMetrics();
   });
 });
 
@@ -5132,6 +5186,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadMemories();
   loadAffect();
   setupPerformancePanel();
+  setupStatusPanel();
   refreshVoiceResources();
   void loadSpeechVoices();
   void refreshMiniGamePreviewState();

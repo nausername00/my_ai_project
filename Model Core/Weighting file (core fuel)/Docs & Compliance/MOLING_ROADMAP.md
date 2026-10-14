@@ -549,5 +549,7 @@
     - **已完成（2026-10-14）**：后端新增 `validate_performance_rules`（api.py）校验 semantic_actions/stage_rules/layered_parts/mouth_curve 结构与字段上限（非法拒绝、规范化写回）；`GET /v1/performance/rules`（读取 Docs & Compliance/performance_rules.json，解析/校验失败返回明确错误）；`PUT /v1/performance/rules`（校验后写回，自动更新 updated 日期）；设置面板新增"演出"tab——语义动作映射（cue/motion/timing 可增删改行）、舞台规则（逐行文本编辑）、部件分层清单（part/usage/layers 可增删改行）、口型曲线（mode/rule/recompute 编辑），保存按钮写回磁盘；main.cjs IPC `companion:get-performance-rules` / `companion:save-performance-rules`。测试 +11 项（test_performance_rules.py）。
   - E6 · 记忆相关性注入（12 层核对里记忆层唯一小缺口：不再只取"最近 20 条"，按当前话题挑相关记忆）。
     - **已完成（2026-10-14）**：memory.py 新增 `score_memory_relevance`——轻量词袋重叠打分（英文单词 + 中文 2-gram，无外部依赖）；`build_system_prompt` 新增可选 `context_text`：有上下文时按相关性排序注入 Top-N，全部不相关或无上下文时回退"最近 20 条"（与旧行为一致）；主对话生成（api.py）传入当前用户消息作为检索上下文；隐私开关、E2 使用追踪、撤销联动全部保持。测试 +5 项（test_j4_memory.py 28 项全绿）。
+  - E7 · 轻量可观测指标（12 层第 7 层的最轻形态：请求计数/延迟/错误率）。
+    - **已完成（2026-10-14）**：api.py 模块级 `_METRICS`（线程安全计数，路径按前两段归组），`_tracked` 装饰器统一包装 do_GET/POST/PUT/DELETE（成功/异常均记录，异常计错误率），`GET /v1/status/metrics` 返回 `{started_at, uptime_s, requests[], totals}`；设置面板新增"状态"tab——汇总行 + 按接口分组表（次数/平均延迟/错误）+ 手动刷新；main.cjs IPC `companion:status-metrics`。测试 +7 项（test_status_metrics.py）。
   - E3 · README 目录角色澄清：已完成——明确 `Model Core\Weighting file (core fuel)` 是核心配置目录而非神经网络权重，概念分离表入 README。
   - E4 · 平台治理（远期）：任务队列 / 资源监控 / 成本统计——单机单人场景当前收益低，登记远期，不设时间表。

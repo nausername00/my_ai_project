@@ -2918,6 +2918,37 @@ button {
   font-family: inherit;
 }
 
+/* E7：轻量运行时指标 */
+.status-summary-line {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #c9d1e4;
+}
+.status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+.status-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #191c23;
+}
+.status-entry-title {
+  font-size: 13px;
+  color: #e8ecf5;
+  font-family: monospace;
+}
+.status-entry-detail {
+  font-size: 12px;
+  color: #8b93a7;
+}
+
 /* J4：已暂停的记忆弱化显示，明确不进入回复提示 */
 .memory-entry.paused {
   opacity: 0.62;

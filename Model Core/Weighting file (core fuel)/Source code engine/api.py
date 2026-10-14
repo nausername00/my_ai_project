@@ -5,6 +5,7 @@ import io
 import ipaddress
 import base64
 import binascii
+import functools
 import json
 import math
 import os
@@ -167,6 +168,87 @@ def validate_performance_rules(data: Any) -> dict[str, Any]:
         "stage_rules": rules,
         "layered_parts": parts,
         "mouth_curve": mouth_curve,
+    }
+
+
+# ---------------------------------------------------------------------------
+# E7 轻量可观测指标：请求计数 / 延迟 / 错误率（单机版，无外部依赖）
+# ---------------------------------------------------------------------------
+_METRICS_LOCK = threading.Lock()
+_METRICS: dict[str, dict[str, Any]] = {}
+_METRICS_STARTED = time()
+_METRICS_STARTED_ISO = datetime.now(timezone.utc).isoformat()
+
+
+def _path_prefix(path: str) -> str:
+    """路径归组前缀：/v1/memory/usage → /v1/memory；/health → /health。"""
+    if path == "/" or path == "/health":
+        return path
+    parts = path.lstrip("/").split("/")
+    if not parts or not parts[0]:
+        return "/"
+    return "/" + "/".join(parts[:2])
+
+
+def _bump(path: str, method: str, elapsed_ms: float, error: bool = False) -> None:
+    prefix = _path_prefix(path)
+    key = f"{method} {prefix}"
+    entry = _METRICS.get(key)
+    if entry is None:
+        entry = {
+            "method": method,
+            "path": prefix,
+            "count": 0,
+            "error_count": 0,
+            "total_ms": 0.0,
+        }
+        _METRICS[key] = entry
+    entry["count"] += 1
+    entry["total_ms"] += elapsed_ms
+    if error:
+        entry["error_count"] += 1
+
+
+def _tracked(method: Any):
+    """包装 do_GET/do_POST/do_PUT/do_DELETE：统计请求、耗时与异常。"""
+
+    @functools.wraps(method)
+    def wrapper(self: Any) -> Any:
+        start = perf_counter()
+        failed = False
+        try:
+            return method(self)
+        except Exception:
+            failed = True
+            raise
+        finally:
+            elapsed = (perf_counter() - start) * 1000.0
+            with _METRICS_LOCK:
+                _bump(self.path, method.__name__, elapsed, error=failed)
+
+    return wrapper
+
+
+def metrics_snapshot() -> dict[str, Any]:
+    """运行时指标快照：按路径分组 + 汇总（供 /v1/status/metrics 与测试使用）。"""
+    with _METRICS_LOCK:
+        requests = [dict(entry) for entry in _METRICS.values()]
+        totals = {
+            "count": sum(e["count"] for e in requests),
+            "error_count": sum(e["error_count"] for e in requests),
+            "total_ms": round(sum(e["total_ms"] for e in requests), 1),
+        }
+    for entry in requests:
+        entry["total_ms"] = round(entry["total_ms"], 1)
+        entry["avg_ms"] = (
+            round(entry["total_ms"] / entry["count"], 1) if entry["count"] else 0.0
+        )
+    requests.sort(key=lambda e: e["count"], reverse=True)
+    return {
+        "started_at": _METRICS_STARTED_ISO,
+        "uptime_s": round(time() - _METRICS_STARTED, 1),
+        "requests": requests,
+        "totals": totals,
     }
 
 
@@ -426,6 +508,9 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = urlsplit(self.path).path
+        if path == "/v1/status/metrics":
+            self._send_json(HTTPStatus.OK, metrics_snapshot())
+            return
         if path == "/v1/agent/tools":
             self._send_json(
                 HTTPStatus.OK,
@@ -2338,3 +2423,9 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format: str, *args: Any) -> None:
         return
+
+    # E7：为四个请求方法统一包上轻量指标统计（计数/延迟/异常）
+    do_GET = _tracked(do_GET)  # type: ignore[assignment]
+    do_POST = _tracked(do_POST)  # type: ignore[assignment]
+    do_PUT = _tracked(do_PUT)  # type: ignore[assignment]
+    do_DELETE = _tracked(do_DELETE)  # type: ignore[assignment]

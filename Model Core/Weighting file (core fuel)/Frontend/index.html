@@ -379,6 +379,7 @@
           <button class="settings-tab" type="button" data-settings-tab="affect">模拟状态</button>
           <button class="settings-tab" type="button" data-settings-tab="proposals">提议</button>
           <button class="settings-tab" type="button" data-settings-tab="performance">演出</button>
+          <button class="settings-tab" type="button" data-settings-tab="status">状态</button>
         </nav>
         <section id="persona-panel">
           <div class="character-gallery-header">
@@ -456,6 +457,15 @@
           </div>
           <p class="form-status" id="performance-status" role="status"></p>
           <button class="save-button" id="performance-save" type="button">保存演出规则</button>
+        </section>
+        <section id="status-panel" hidden>
+          <p class="character-card-help">轻量运行时指标：请求计数、平均延迟与错误率（按接口分组，只统计本机运行）。</p>
+          <div class="status-summary" id="status-summary"></div>
+          <div class="status-list" id="status-list"></div>
+          <div class="memory-actions">
+            <button class="icon-button" id="status-refresh" type="button">刷新</button>
+          </div>
+          <p class="form-status" id="status-note" role="status"></p>
         </section>
         <section id="affect-panel" hidden>
           <div class="affect-settings">
