@@ -588,3 +588,12 @@
 | 12 策略与资源优化 | ⚠️ 部分：手动切换后端已有（/v1/engine/list + /v1/engine/switch） | 按任务难度/延迟/成本自动选模型（动态选型） | 多后端真实并行后（依赖第 7 层成本统计） |
 
 **收尾结论**：12 层中 7 层已闭环、2 层部分（第 5 层缺 OCR、第 8 层缺服务化）、3 层纯远期（第 10 手机陪伴、第 11 插件、第 12 动态选型）。远期项之间有关联：**手机陪伴 ← 服务化**（第 8 层前置）、**动态选型 ← 成本统计**（第 7 层）、**OCR ← 文档需求**。建议顺序：先 OCR（真实高频需求）→ 再服务化 + 手机陪伴 → 插件与动态选型最后（依赖前两者）。
+
+## 当前核心完善验证（2026-10-14）
+
+对活跃核心做健康审计后的结论与真实验证：
+- **占位/待办审计**：planner 占位 ReAct = 有意的零模型降级（真实模型下走完整真实 ReAct 循环：JSON 模式 + 工具目录约束 + 历史步骤拼接，已核实）；vision 占位文案 / api 占位模型防护 / game 通道预留（无目录注册无调用，诚实返回占位 note）/ 前端 main.js·bundle.js 迁移占位 / live2d-runtime.js 官方库 TODO——**全部为有意设计，无半成品缺口**。
+- **6 个 skipped 测试核实**：test_ollama_integration（需 RUN_OLLAMA_INTEGRATION=1）· test_speech_integration（需 RUN_SPEECH_INTEGRATION=1 与本地语音模型）· test_agent_tools 2 项（Windows 无 symlink）——均为合理的"需环境"跳过。
+- **真实 Ollama 集成测试首次跑通（2026-10-14）**：`RUN_OLLAMA_INTEGRATION=1 py -3 -m unittest test_ollama_integration` → **3 项通过（52.7s，真实 qwen2.5:3b 链路**：生成/翻译），临时目录全隔离，不污染 Character。
+- **E9 生成统计真实验收 PASS**：真实后端生成一次后 metrics.generations = {count:1, chars:30, total_ms:5000.5, avg_ms:5000.5}（从 0 递增）。
+- **README 一致性核对**：`Docs & Compliance\README.md` 的目录角色澄清 / 启动方式（双击 `启动墨灵.bat`）/ 外部 Ollama 模型说明与现状一致，无需修改。
