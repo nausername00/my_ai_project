@@ -11,6 +11,22 @@ Engineering layers (L0–L7) implement that constitution; they do not replace it
 evidence-based improvements for agency, correctability, privacy, voice, vision,
 and partner reviews.
 
+## 目录角色澄清（Repository roles）
+
+项目根下 `Model Core\Weighting file (core fuel)` 这一层的名称容易引起误解：它**不是神经网络权重（model weights）**，而是墨灵的**核心配置与能力目录（core fuel）**。各概念已分离，不混用：
+
+| 概念 | 实际位置 |
+|---|---|
+| 神经网络权重 / 大模型 | 外部 Ollama 模型（不随仓库分发，运行前单独拉取） |
+| 角色配置（persona） | `Character\personas.json`（S5 性格分化模板） |
+| 运行时代码 | `Source code engine\`（引擎、分身、任务门控、记忆） |
+| 记忆 / 运行时数据 | `Character\`（主记忆、awaken_log、tool_log、short_memory） |
+| 任务权重 / 授权矩阵 | `Source code engine\avatar_tasks.py`（本地低风险自动、需审批拒绝） |
+| 宪法与规范 | `Docs & Compliance\`（CORE_WORLD / ROADMAP / performance_rules） |
+| 依赖与工程配置 | `Engineering Config\`（安装 extras） |
+| 前端 | `Frontend\`（Electron：主窗口 + 悬浮窗） |
+| 测试 | `Testing & Evaluation\tests\` |
+
 ## Run
 
 From the repository root:
