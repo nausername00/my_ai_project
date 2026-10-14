@@ -14,7 +14,7 @@ from threading import RLock
 from typing import Any
 import uuid
 
-from memory import MemoryStore
+from memory import MemoryStore, MemoryUsageLog
 
 
 class CharacterValidationError(ValueError):
@@ -358,6 +358,10 @@ class CharacterStore:
             cross_scene_path=self.memory_path.with_name("cross_scene.json"),
             short_term_capacity=40,
         )
+        # E2：按回复的记忆使用时间线（与聚合计数互补，可撤销联动）
+        self.usage_log = MemoryUsageLog(
+            self.memory_path.with_name("memory_usage_log.json")
+        )
 
     @staticmethod
     def _validate_character_id(character_id: Any) -> str:
@@ -683,6 +687,13 @@ class CharacterStore:
         with self._memory_lock:
             return self.memory_store.record_memory_usage(memory_ids)
 
+    def memory_usage(self, limit: int = 50) -> dict[str, Any]:
+        """E2 记忆使用追踪查询：聚合统计 + 最近按回复时间线。"""
+        return {
+            "summary": self.usage_log.usage_summary(self.memory_store, limit=limit),
+            "recent": self.usage_log.list(limit=100),
+        }
+
     def export_memories(self) -> dict[str, Any]:
         return {
             "schema_version": 1,
@@ -954,7 +965,7 @@ class CharacterStore:
         ]
 
     def build_system_prompt(
-        self, simulated_affect: dict[str, str] | None = None
+        self, simulated_affect: dict[str, str] | None = None, reply_id: str | None = None
     ) -> str:
         card = self.load_card()
         privacy = self.get_privacy_settings()
@@ -964,10 +975,12 @@ class CharacterStore:
             if privacy["include_memories_in_prompt"]
             else []
         )
-        # J4：记录被采用进本回复提示的记忆（使用追踪）。
+        # J4/E2：记录被采用进本回复提示的记忆——聚合计数（use_count）+ 按回复时间线。
         if memories:
             try:
-                self.record_memory_usage([item["id"] for item in memories])
+                memory_ids = [item["id"] for item in memories]
+                self.record_memory_usage(memory_ids)
+                self.usage_log.record(reply_id or "reply", memory_ids)
             except CharacterValidationError:
                 pass  # 追踪失败不影响回复生成
         profile = [

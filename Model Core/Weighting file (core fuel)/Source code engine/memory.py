@@ -16,6 +16,7 @@ import json
 import math
 import re
 from pathlib import Path
+from threading import Lock
 import uuid
 from typing import Any, Iterable
 
@@ -34,6 +35,7 @@ __all__ = [
     "ShortTermBuffer",
     "LongTermStore",
     "CrossSceneSummary",
+    "MemoryUsageLog",
     "SEARCH_RESULT_KEY",
 ]
 
@@ -876,3 +878,102 @@ class MemoryStore:
                 "skipped_invalid_memories": skipped,
                 "imported_cross_scene": scene_added,
             }
+
+
+class MemoryUsageLog:
+    """E2 记忆使用追踪：按回复记录「哪次回复具体用了哪些记忆」的时间线。
+
+    与 J4 的聚合计数（MemoryEntry.use_count / last_used_at）互补：
+    聚合回答「某条记忆被用过多少次」，时间线回答「哪次回复用了哪些」。
+    撤销联动：已删除 / 已暂停的记忆不进 MemoryStore.list_memories()，
+    因此 usage_summary 聚合追踪中它们自然不再出现（撤销即从追踪消失）。
+    """
+
+    _MAX_ENTRIES = 500
+
+    def __init__(self, path: str | Path) -> None:
+        self._path = Path(path)
+        self._lock = Lock()
+        self._entries: list[dict[str, Any]] = []
+        self._load()
+
+    def _load(self) -> None:
+        if not self._path.is_file():
+            return
+        try:
+            data = json.loads(self._path.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                self._entries = [
+                    e
+                    for e in data
+                    if isinstance(e, dict)
+                    and isinstance(e.get("reply_id"), str)
+                    and isinstance(e.get("memory_ids"), list)
+                ]
+        except (OSError, ValueError, TypeError):
+            self._entries = []
+
+    def _save(self) -> None:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._path.write_text(
+            json.dumps(
+                self._entries[-self._MAX_ENTRIES :],
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+    def record(self, reply_id: str, memory_ids: Iterable[str]) -> int:
+        """记录一次回复使用的记忆（时间线）。非空字符串 id 才记录。"""
+        valid = [mid for mid in memory_ids if isinstance(mid, str) and mid.strip()]
+        if not valid:
+            return 0
+        with self._lock:
+            self._entries.append(
+                {
+                    "reply_id": reply_id,
+                    "used_at": utc_now_iso(),
+                    "memory_ids": valid,
+                }
+            )
+            self._save()
+            return len(valid)
+
+    def list(self, limit: int = 100) -> list[dict[str, Any]]:
+        """最近使用记录（时间倒序）。"""
+        with self._lock:
+            return list(reversed(self._entries[-limit:]))
+
+    def by_memory(self, memory_id: str) -> list[dict[str, Any]]:
+        """某条记忆的使用历史（时间倒序）。"""
+        with self._lock:
+            return list(
+                reversed(
+                    [
+                        e
+                        for e in self._entries
+                        if memory_id in e.get("memory_ids", [])
+                    ]
+                )
+            )
+
+    def usage_summary(
+        self, store: MemoryStore, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """聚合使用统计：只含活跃记忆（已删除 / 已暂停自然不出现）。
+
+        按最近使用时间倒序；从未使用的活跃记忆也列出（use_count=0）。
+        """
+        items = [
+            {
+                "memory_id": item["id"],
+                "source": item.get("source", "user"),
+                "reason": item.get("reason"),
+                "use_count": int(item.get("use_count", 0)),
+                "last_used_at": item.get("last_used_at"),
+            }
+            for item in store.list_memories()
+        ]
+        items.sort(key=lambda x: (x["last_used_at"] or ""), reverse=True)
+        return items[:limit]

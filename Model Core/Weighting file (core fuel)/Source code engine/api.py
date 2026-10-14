@@ -407,6 +407,12 @@ class ApiHandler(BaseHTTPRequestHandler):
                 },
             )
             return
+        if path == "/v1/memory/usage":
+            self._send_json(
+                HTTPStatus.OK,
+                self.character_store.memory_usage(),
+            )
+            return
         if path == "/v1/memory/export":
             self._send_json(HTTPStatus.OK, self.character_store.export_memories())
             return

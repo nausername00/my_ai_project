@@ -543,5 +543,6 @@
   - E1 · 角色参与决策：persona 目前是表现层（装饰消息），深化为风格参数进一步影响任务倾向 / 输出格式（S5 后续）。
     - **已完成（2026-10-14）**：新增 `behavior` 块（`output_style` brief/balanced/detailed、`structured`、`task_affinity`），`upsert` 规范化 + 非法值拒绝；`speak` 应用输出形态（brief 压缩到首句、detailed 追加惯用语、balanced 不处理）；`AvatarSystem.persona_behavior` 门面（未知分身回落中性）；`run_task` 对 structured=True 的成功任务附 `report` 要点列表（新增字段，message/status/授权逻辑不变）。测试 +10 项。
   - E2 · 记忆使用追踪：补"这条回复使用了哪些记忆条目"的记录与可视化（J4 遗留项）。
+    - **已完成（2026-10-14）**：新增 `MemoryUsageLog`（memory.py）——按回复记录 `{reply_id, used_at, memory_ids}` 时间线（倒序查询、按记忆查历史、上限 500 条落盘）；`build_system_prompt` 在注入记忆时同时记聚合计数（J4 use_count）与时间线；`CharacterStore.memory_usage()` 聚合查询（summary 只含活跃记忆——**已删除/已暂停的记忆从追踪中自然消失**，撤销联动验收通过）；`GET /v1/memory/usage` 端点；`.gitignore` 排除 memory_usage_log.json。测试 +9 项（test_j4_memory.py 23 项全绿）。
   - E3 · README 目录角色澄清：已完成——明确 `Model Core\Weighting file (core fuel)` 是核心配置目录而非神经网络权重，概念分离表入 README。
   - E4 · 平台治理（远期）：任务队列 / 资源监控 / 成本统计——单机单人场景当前收益低，登记远期，不设时间表。

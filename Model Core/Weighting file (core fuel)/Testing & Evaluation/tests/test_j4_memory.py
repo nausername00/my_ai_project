@@ -18,7 +18,7 @@ import unittest
 from pathlib import Path
 
 from character import CharacterStore, MemoryNotFoundError
-from memory import LongTermStore, MemoryEntry, MemoryStore
+from memory import LongTermStore, MemoryEntry, MemoryStore, MemoryUsageLog
 
 
 class MemoryEntryJ4Test(unittest.TestCase):
@@ -204,6 +204,109 @@ class CharacterStoreJ4Test(unittest.TestCase):
                 store.delete_memory(entry["id"])
             prompt = store.build_system_prompt()
             self.assertNotIn("要遗忘的事", prompt)
+
+
+class MemoryUsageLogE2Test(unittest.TestCase):
+    """E2 记忆使用追踪：按回复时间线 + 撤销联动（删除/暂停后不再出现在追踪）。"""
+
+    def _store(self, directory: str) -> tuple[MemoryStore, MemoryUsageLog]:
+        store = MemoryStore(
+            long_term_path=Path(directory) / "memory.json",
+            cross_scene_path=Path(directory) / "cross_scene.json",
+            short_term_capacity=40,
+        )
+        log = MemoryUsageLog(Path(directory) / "usage_log.json")
+        return store, log
+
+    def test_record_filters_non_string_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            _, log = self._store(directory)
+            self.assertEqual(log.record("r1", ["m1", 123, "", None]), 1)
+
+    def test_record_appends_timeline_reverse_chronological(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            _, log = self._store(directory)
+            log.record("r1", ["m1"])
+            log.record("r2", ["m2", "m3"])
+            recent = log.list()
+            self.assertEqual(recent[0]["reply_id"], "r2")
+            self.assertEqual(recent[1]["reply_id"], "r1")
+            self.assertEqual(recent[0]["memory_ids"], ["m2", "m3"])
+
+    def test_by_memory_returns_history(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            _, log = self._store(directory)
+            log.record("r1", ["m1"])
+            log.record("r2", ["m1", "m2"])
+            history = log.by_memory("m1")
+            self.assertEqual([h["reply_id"] for h in history], ["r2", "r1"])
+
+    def test_usage_summary_reflects_counts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store, log = self._store(directory)
+            a = store.add_memory("记忆A", source="user")
+            b = store.add_memory("记忆B", source="explore", reason="探索记录")
+            store.record_memory_usage([a["id"], b["id"], a["id"]])
+            summary = log.usage_summary(store)
+            by_id = {item["memory_id"]: item for item in summary}
+            self.assertEqual(by_id[a["id"]]["use_count"], 2)
+            self.assertEqual(by_id[b["id"]]["use_count"], 1)
+            self.assertEqual(by_id[b["id"]]["source"], "explore")
+
+    def test_deleted_memory_gone_from_tracking(self) -> None:
+        """验收：被撤销（删除）的记忆不再出现在聚合追踪中。"""
+        with tempfile.TemporaryDirectory() as directory:
+            store, log = self._store(directory)
+            a = store.add_memory("要撤销", source="user")
+            store.record_memory_usage([a["id"]])
+            store.delete_memory(a["id"])
+            summary = log.usage_summary(store)
+            self.assertNotIn(a["id"], [item["memory_id"] for item in summary])
+
+    def test_paused_memory_gone_from_tracking(self) -> None:
+        """验收：被暂停的记忆不再出现在聚合追踪中。"""
+        with tempfile.TemporaryDirectory() as directory:
+            store, log = self._store(directory)
+            a = store.add_memory("要暂停", source="user")
+            store.record_memory_usage([a["id"]])
+            store.pause_memory(a["id"])
+            summary = log.usage_summary(store)
+            self.assertNotIn(a["id"], [item["memory_id"] for item in summary])
+
+    def test_persist_and_reload_keeps_timeline(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store, log = self._store(directory)
+            log.record("r1", ["m1"])
+            reloaded = MemoryUsageLog(Path(directory) / "usage_log.json")
+            self.assertEqual(reloaded.list()[0]["reply_id"], "r1")
+
+
+class CharacterStoreE2Test(unittest.TestCase):
+    """E2 联动：build_system_prompt 自动记录时间线；memory_usage 查询端点数据。"""
+
+    def _store(self, directory: str) -> CharacterStore:
+        return CharacterStore(
+            str(Path(directory) / "character.json"),
+            str(Path(directory) / "memory.json"),
+            str(Path(directory) / "assets"),
+        )
+
+    def test_build_system_prompt_records_timeline(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = self._store(directory)
+            entry = store.add_memory("用户喜欢雨天", source="user")
+            store.build_system_prompt(reply_id="msg-1")
+            history = store.usage_log.by_memory(entry["id"])
+            self.assertEqual(history[0]["reply_id"], "msg-1")
+
+    def test_memory_usage_query_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = self._store(directory)
+            store.add_memory("偏好", source="user")
+            payload = store.memory_usage()
+            self.assertIn("summary", payload)
+            self.assertIn("recent", payload)
+            self.assertEqual(payload["summary"][0]["source"], "user")
 
 
 if __name__ == "__main__":
