@@ -544,5 +544,8 @@
     - **已完成（2026-10-14）**：新增 `behavior` 块（`output_style` brief/balanced/detailed、`structured`、`task_affinity`），`upsert` 规范化 + 非法值拒绝；`speak` 应用输出形态（brief 压缩到首句、detailed 追加惯用语、balanced 不处理）；`AvatarSystem.persona_behavior` 门面（未知分身回落中性）；`run_task` 对 structured=True 的成功任务附 `report` 要点列表（新增字段，message/status/授权逻辑不变）。测试 +10 项。
   - E2 · 记忆使用追踪：补"这条回复使用了哪些记忆条目"的记录与可视化（J4 遗留项）。
     - **已完成（2026-10-14）**：新增 `MemoryUsageLog`（memory.py）——按回复记录 `{reply_id, used_at, memory_ids}` 时间线（倒序查询、按记忆查历史、上限 500 条落盘）；`build_system_prompt` 在注入记忆时同时记聚合计数（J4 use_count）与时间线；`CharacterStore.memory_usage()` 聚合查询（summary 只含活跃记忆——**已删除/已暂停的记忆从追踪中自然消失**，撤销联动验收通过）；`GET /v1/memory/usage` 端点；`.gitignore` 排除 memory_usage_log.json。测试 +9 项（test_j4_memory.py 23 项全绿）。
+    - **前端可视化已完成（2026-10-14）**：记忆面板新增"最近采用记录"折叠区块——展示每次回复采用了哪些记忆（时间 + 内容摘要；已删除/不可见记忆明确标注），main.cjs 新增 IPC `companion:memory-usage`。
+  - E5 · 演出规则可配置 UI（B 组遗留，用户批准的方向 1）。
+    - **已完成（2026-10-14）**：后端新增 `validate_performance_rules`（api.py）校验 semantic_actions/stage_rules/layered_parts/mouth_curve 结构与字段上限（非法拒绝、规范化写回）；`GET /v1/performance/rules`（读取 Docs & Compliance/performance_rules.json，解析/校验失败返回明确错误）；`PUT /v1/performance/rules`（校验后写回，自动更新 updated 日期）；设置面板新增"演出"tab——语义动作映射（cue/motion/timing 可增删改行）、舞台规则（逐行文本编辑）、部件分层清单（part/usage/layers 可增删改行）、口型曲线（mode/rule/recompute 编辑），保存按钮写回磁盘；main.cjs IPC `companion:get-performance-rules` / `companion:save-performance-rules`。测试 +11 项（test_performance_rules.py）。
   - E3 · README 目录角色澄清：已完成——明确 `Model Core\Weighting file (core fuel)` 是核心配置目录而非神经网络权重，概念分离表入 README。
   - E4 · 平台治理（远期）：任务队列 / 资源监控 / 成本统计——单机单人场景当前收益低，登记远期，不设时间表。

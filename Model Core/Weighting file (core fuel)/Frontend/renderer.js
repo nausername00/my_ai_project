@@ -187,6 +187,16 @@ const includeMemories = document.getElementById("include-memories");
 const memoryUsageList = document.getElementById("memory-usage-list");
 const memoryUsageEmpty = document.getElementById("memory-usage-empty");
 const memoryUsageBlock = document.getElementById("memory-usage-block");
+const performanceActions = document.getElementById("performance-actions");
+const performanceParts = document.getElementById("performance-parts");
+const performanceStageRules = document.getElementById("performance-stage-rules");
+const performanceMouthMode = document.getElementById("performance-mouth-mode");
+const performanceMouthRule = document.getElementById("performance-mouth-rule");
+const performanceMouthRecompute = document.getElementById("performance-mouth-recompute");
+const performanceStatus = document.getElementById("performance-status");
+const performanceActionAdd = document.getElementById("performance-action-add");
+const performancePartAdd = document.getElementById("performance-part-add");
+const performanceSave = document.getElementById("performance-save");
 const proposalsEnabled = document.getElementById("proposals-enabled");
 const proposalsPaused = document.getElementById("proposals-paused");
 const proposalsFrequency = document.getElementById("proposals-frequency");
@@ -3945,6 +3955,136 @@ function truncateText(text, max) {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
+function setPerformanceStatus(message, isError = false) {
+  performanceStatus.textContent = message;
+  performanceStatus.classList.toggle("error", isError);
+}
+
+function makePerformanceActionRow(action = { cue: "", motion: "", timing: "" }) {
+  const row = document.createElement("div");
+  row.className = "performance-row";
+  const cue = document.createElement("input");
+  cue.className = "performance-input performance-input-cue";
+  cue.maxLength = 200;
+  cue.placeholder = "触发语义（cue）";
+  cue.value = action.cue || "";
+  const motion = document.createElement("input");
+  motion.className = "performance-input performance-input-motion";
+  motion.maxLength = 200;
+  motion.placeholder = "动作（motion）";
+  motion.value = action.motion || "";
+  const timing = document.createElement("input");
+  timing.className = "performance-input performance-input-timing";
+  timing.maxLength = 200;
+  timing.placeholder = "时机（timing）";
+  timing.value = action.timing || "";
+  const remove = document.createElement("button");
+  remove.className = "icon-button performance-remove";
+  remove.type = "button";
+  remove.textContent = "删除";
+  remove.addEventListener("click", () => row.remove());
+  row.append(cue, motion, timing, remove);
+  return row;
+}
+
+function makePerformancePartRow(part = { part: "", usage: "", layers: "" }) {
+  const row = document.createElement("div");
+  row.className = "performance-row";
+  const name = document.createElement("input");
+  name.className = "performance-input performance-input-part";
+  name.maxLength = 50;
+  name.placeholder = "部件名（part）";
+  name.value = part.part || "";
+  const usage = document.createElement("input");
+  usage.className = "performance-input performance-input-usage";
+  usage.maxLength = 200;
+  usage.placeholder = "用途（usage）";
+  usage.value = part.usage || "";
+  const layers = document.createElement("input");
+  layers.className = "performance-input performance-input-layers";
+  layers.maxLength = 20;
+  layers.placeholder = "图层数（layers）";
+  layers.value = part.layers || "";
+  const remove = document.createElement("button");
+  remove.className = "icon-button performance-remove";
+  remove.type = "button";
+  remove.textContent = "删除";
+  remove.addEventListener("click", () => row.remove());
+  row.append(name, usage, layers, remove);
+  return row;
+}
+
+async function loadPerformanceRules() {
+  try {
+    const rules = await window.companion.getPerformanceRules();
+    renderPerformanceRules(rules);
+  } catch (error) {
+    setPerformanceStatus(error.message, true);
+  }
+}
+
+function renderPerformanceRules(rules) {
+  performanceActions.replaceChildren();
+  for (const action of rules.semantic_actions || []) {
+    performanceActions.append(makePerformanceActionRow(action));
+  }
+  performanceStageRules.value = (rules.stage_rules || []).join("\n");
+  performanceParts.replaceChildren();
+  for (const part of rules.layered_parts || []) {
+    performanceParts.append(makePerformancePartRow(part));
+  }
+  const curve = rules.mouth_curve || {};
+  performanceMouthMode.value = curve.mode || "";
+  performanceMouthRule.value = curve.rule || "";
+  performanceMouthRecompute.value = curve.recompute || "";
+  setPerformanceStatus("");
+}
+
+async function savePerformanceRules() {
+  const actions = [];
+  for (const row of performanceActions.children) {
+    const inputs = row.querySelectorAll("input");
+    const [cue, motion, timing] = [...inputs].map((input) => input.value.trim());
+    if (cue || motion || timing) actions.push({ cue, motion, timing });
+  }
+  const parts = [];
+  for (const row of performanceParts.children) {
+    const inputs = row.querySelectorAll("input");
+    const [name, usage, layers] = [...inputs].map((input) => input.value.trim());
+    if (name || usage || layers) parts.push({ part: name, usage, layers });
+  }
+  const rules = {
+    version: 1,
+    semantic_actions: actions,
+    stage_rules: performanceStageRules.value
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+    layered_parts: parts,
+    mouth_curve: {
+      mode: performanceMouthMode.value.trim(),
+      rule: performanceMouthRule.value.trim(),
+      recompute: performanceMouthRecompute.value.trim(),
+    },
+  };
+  try {
+    const saved = await window.companion.savePerformanceRules(rules);
+    setPerformanceStatus(`已保存（更新于 ${saved.updated || "今天"}）`);
+  } catch (error) {
+    setPerformanceStatus(error.message, true);
+  }
+}
+
+function setupPerformancePanel() {
+  performanceActionAdd.addEventListener("click", () =>
+    performanceActions.append(makePerformanceActionRow()),
+  );
+  performancePartAdd.addEventListener("click", () =>
+    performanceParts.append(makePerformancePartRow()),
+  );
+  performanceSave.addEventListener("click", savePerformanceRules);
+}
+
 function renderMemories(memories) {
   memoryList.replaceChildren();
   if (memories.length === 0) {
@@ -4532,7 +4672,7 @@ document.getElementById("settings-close").addEventListener("click", () => {
 document.querySelectorAll("[data-settings-tab]").forEach((button) => {
   button.addEventListener("click", () => {
     const selected = button.dataset.settingsTab;
-    for (const panel of ["persona", "memories", "affect", "proposals"]) {
+    for (const panel of ["persona", "memories", "affect", "proposals", "performance"]) {
       document.getElementById(`${panel}-panel`).hidden = panel !== selected;
     }
     document.querySelectorAll("[data-settings-tab]").forEach((tab) => {
@@ -4541,6 +4681,7 @@ document.querySelectorAll("[data-settings-tab]").forEach((button) => {
     if (selected === "memories") loadMemories();
     if (selected === "affect") loadAffect();
     if (selected === "proposals") loadProposals();
+    if (selected === "performance") loadPerformanceRules();
   });
 });
 
@@ -4990,6 +5131,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadCharacters();
   loadMemories();
   loadAffect();
+  setupPerformancePanel();
   refreshVoiceResources();
   void loadSpeechVoices();
   void refreshMiniGamePreviewState();

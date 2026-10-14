@@ -2869,6 +2869,55 @@ button {
   color: #8b93a7;
 }
 
+/* E 轮：演出规则可配置 UI */
+.performance-block {
+  margin: 12px 0 16px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #1b1e25;
+}
+.performance-block h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: #e8ecf5;
+}
+.performance-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.performance-input {
+  flex: 1 1 120px;
+  min-width: 90px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #14171d;
+  color: #dde3ee;
+  font-size: 13px;
+}
+.performance-input-cue { flex-basis: 180px; }
+.performance-input-part { flex-basis: 130px; }
+.performance-input-layers { flex-basis: 70px; }
+.performance-remove {
+  flex: 0 0 auto;
+  color: #e07b7b;
+}
+.performance-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #14171d;
+  color: #dde3ee;
+  font-size: 13px;
+  resize: vertical;
+  font-family: inherit;
+}
+
 /* J4：已暂停的记忆弱化显示，明确不进入回复提示 */
 .memory-entry.paused {
   opacity: 0.62;

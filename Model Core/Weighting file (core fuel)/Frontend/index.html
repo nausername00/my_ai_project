@@ -378,6 +378,7 @@
           <button class="settings-tab" type="button" data-settings-tab="memories">记忆</button>
           <button class="settings-tab" type="button" data-settings-tab="affect">模拟状态</button>
           <button class="settings-tab" type="button" data-settings-tab="proposals">提议</button>
+          <button class="settings-tab" type="button" data-settings-tab="performance">演出</button>
         </nav>
         <section id="persona-panel">
           <div class="character-gallery-header">
@@ -421,6 +422,40 @@
             <div class="memory-usage-list" id="memory-usage-list"></div>
             <p class="memory-usage-empty" id="memory-usage-empty" hidden>暂无采用记录——记忆还没被注入过回复。</p>
           </details>
+        </section>
+        <section id="performance-panel" hidden>
+          <p class="character-card-help">演出规则保存在 <code>Docs &amp; Compliance/performance_rules.json</code>，供演出脚本与 UI 使用。改动后点击保存写回磁盘。</p>
+          <div class="performance-block">
+            <h3>语义动作映射</h3>
+            <p class="character-card-help">cue＝触发语义；motion＝动作；timing＝触发时机。动作跟随语义走，别反复晃动。</p>
+            <div id="performance-actions"></div>
+            <button class="icon-button" id="performance-action-add" type="button">＋ 添加动作</button>
+          </div>
+          <div class="performance-block">
+            <h3>舞台规则</h3>
+            <p class="character-card-help">每行一条规则。</p>
+            <textarea id="performance-stage-rules" rows="6" class="performance-textarea"></textarea>
+          </div>
+          <div class="performance-block">
+            <h3>部件分层清单</h3>
+            <p class="character-card-help">part＝部件名；usage＝用途；layers＝图层数。</p>
+            <div id="performance-parts"></div>
+            <button class="icon-button" id="performance-part-add" type="button">＋ 添加部件</button>
+          </div>
+          <div class="performance-block">
+            <h3>口型曲线</h3>
+            <label>模式
+              <input id="performance-mouth-mode" type="text" maxlength="50" class="performance-input" />
+            </label>
+            <label>规则
+              <input id="performance-mouth-rule" type="text" maxlength="500" class="performance-input" />
+            </label>
+            <label>换配音后
+              <input id="performance-mouth-recompute" type="text" maxlength="500" class="performance-input" />
+            </label>
+          </div>
+          <p class="form-status" id="performance-status" role="status"></p>
+          <button class="save-button" id="performance-save" type="button">保存演出规则</button>
         </section>
         <section id="affect-panel" hidden>
           <div class="affect-settings">

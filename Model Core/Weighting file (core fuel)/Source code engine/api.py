@@ -9,6 +9,7 @@ import json
 import math
 import os
 from collections import deque
+from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 import re
@@ -61,6 +62,113 @@ from social import collaborate_with_partners, get_social_status, list_local_part
 from speech import SpeechInputError, SpeechService, SpeechUnavailableError
 from proposals import ProposalStore
 from vision import VisionError, analyze_image
+
+
+# ---------------------------------------------------------------------------
+# 演出规则（K6/B 组成文配置）：读取与校验，供前端「演出规则」可配置 UI 使用
+# ---------------------------------------------------------------------------
+_PERFORMANCE_LIMITS = {
+    "semantic_actions": {"max_items": 100, "fields": {"cue": 200, "motion": 200, "timing": 200}},
+    "layered_parts": {"max_items": 50, "fields": {"part": 50, "usage": 200, "layers": 20}},
+    "stage_rules": {"max_items": 100, "text": 200},
+    "mouth_curve": {"fields": {"mode": 50, "rule": 500, "recompute": 500}},
+}
+
+
+def performance_rules_path() -> Path:
+    return (
+        Path(__file__).resolve().parent.parent
+        / "Docs & Compliance"
+        / "performance_rules.json"
+    )
+
+
+def _validate_text(value: Any, field: str, limit: int) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be a string")
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError(f"{field} must not be empty")
+    if len(stripped) > limit:
+        raise ValueError(f"{field} exceeds {limit} characters")
+    return stripped
+
+
+def _validate_action_item(item: Any) -> dict[str, str]:
+    if not isinstance(item, dict):
+        raise ValueError("semantic action must be an object")
+    limits = _PERFORMANCE_LIMITS["semantic_actions"]["fields"]
+    return {
+        "cue": _validate_text(item.get("cue"), "cue", limits["cue"]),
+        "motion": _validate_text(item.get("motion"), "motion", limits["motion"]),
+        "timing": _validate_text(item.get("timing"), "timing", limits["timing"]),
+    }
+
+
+def _validate_part_item(item: Any) -> dict[str, str]:
+    if not isinstance(item, dict):
+        raise ValueError("layered part must be an object")
+    limits = _PERFORMANCE_LIMITS["layered_parts"]["fields"]
+    return {
+        "part": _validate_text(item.get("part"), "part", limits["part"]),
+        "usage": _validate_text(item.get("usage"), "usage", limits["usage"]),
+        "layers": _validate_text(item.get("layers"), "layers", limits["layers"]),
+    }
+
+
+def validate_performance_rules(data: Any) -> dict[str, Any]:
+    """校验演出规则结构，返回规范化副本；非法时抛 ValueError。"""
+    if not isinstance(data, dict):
+        raise ValueError("performance rules must be an object")
+    actions_raw = data.get("semantic_actions")
+    if not isinstance(actions_raw, list):
+        raise ValueError("semantic_actions must be a list")
+    if len(actions_raw) > _PERFORMANCE_LIMITS["semantic_actions"]["max_items"]:
+        raise ValueError("too many semantic actions")
+    actions = [_validate_action_item(item) for item in actions_raw]
+
+    rules_raw = data.get("stage_rules")
+    if not isinstance(rules_raw, list):
+        raise ValueError("stage_rules must be a list")
+    if len(rules_raw) > _PERFORMANCE_LIMITS["stage_rules"]["max_items"]:
+        raise ValueError("too many stage rules")
+    rules = [
+        _validate_text(item, "stage rule", _PERFORMANCE_LIMITS["stage_rules"]["text"])
+        for item in rules_raw
+    ]
+
+    parts_raw = data.get("layered_parts")
+    if not isinstance(parts_raw, list):
+        raise ValueError("layered_parts must be a list")
+    if len(parts_raw) > _PERFORMANCE_LIMITS["layered_parts"]["max_items"]:
+        raise ValueError("too many layered parts")
+    parts = [_validate_part_item(item) for item in parts_raw]
+
+    curve = data.get("mouth_curve")
+    if not isinstance(curve, dict):
+        raise ValueError("mouth_curve must be an object")
+    curve_limits = _PERFORMANCE_LIMITS["mouth_curve"]["fields"]
+    mouth_curve = {
+        "mode": _validate_text(curve.get("mode"), "mode", curve_limits["mode"]),
+        "rule": _validate_text(curve.get("rule"), "rule", curve_limits["rule"]),
+        "recompute": _validate_text(
+            curve.get("recompute"), "recompute", curve_limits["recompute"]
+        ),
+    }
+
+    purpose = data.get("purpose")
+    if purpose is not None and not isinstance(purpose, str):
+        raise ValueError("purpose must be a string")
+
+    return {
+        "version": data.get("version", 1),
+        "purpose": purpose,
+        "semantic_actions": actions,
+        "stage_rules": rules,
+        "layered_parts": parts,
+        "mouth_curve": mouth_curve,
+    }
+
 
 
 TRANSLATION_LANGUAGES = {
@@ -412,6 +520,29 @@ class ApiHandler(BaseHTTPRequestHandler):
                 HTTPStatus.OK,
                 self.character_store.memory_usage(),
             )
+            return
+        if path == "/v1/performance/rules":
+            rules_path = performance_rules_path()
+            if not rules_path.is_file():
+                self._send_json(
+                    HTTPStatus.NOT_FOUND, {"error": "performance rules not found"}
+                )
+                return
+            try:
+                raw = json.loads(rules_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as error:
+                self._send_json(
+                    HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(error)}
+                )
+                return
+            try:
+                rules = validate_performance_rules(raw)
+            except ValueError as error:
+                self._send_json(
+                    HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(error)}
+                )
+                return
+            self._send_json(HTTPStatus.OK, rules)
             return
         if path == "/v1/memory/export":
             self._send_json(HTTPStatus.OK, self.character_store.export_memories())
@@ -1891,6 +2022,29 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     def do_PUT(self) -> None:
         path = urlsplit(self.path).path
+        if path == "/v1/performance/rules":
+            try:
+                payload = self._read_json()
+                rules = validate_performance_rules(payload)
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                return
+            rules = dict(rules)
+            rules["updated"] = datetime.now(timezone.utc).date().isoformat()
+            try:
+                rules_path = performance_rules_path()
+                rules_path.parent.mkdir(parents=True, exist_ok=True)
+                rules_path.write_text(
+                    json.dumps(rules, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+            except OSError as error:
+                self._send_json(
+                    HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(error)}
+                )
+                return
+            self._send_json(HTTPStatus.OK, rules)
+            return
         if path == "/v1/proposals/settings":
             try:
                 settings = self.proposal_store.update_settings(self._read_json())
