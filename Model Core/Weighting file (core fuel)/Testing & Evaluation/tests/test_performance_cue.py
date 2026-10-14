@@ -9,6 +9,7 @@ from unittest.mock import patch
 import api
 from performance import (
     classify_semantic_cue,
+    enrich_caption_tracks,
     load_performance_rules,
     match_semantic_action,
 )
@@ -130,6 +131,60 @@ class PerformanceCueEndpointTest(unittest.TestCase):
         seen = self._call("好的 谢谢")
         self.assertEqual(seen["payload"]["cue"], None)
         self.assertIsNone(seen["payload"]["action"])
+
+
+class EnrichCaptionTracksTest(unittest.TestCase):
+    """K6 视频合成消费：字幕轨 → 语义动作轨（提问侧头 / 强调闭嘴 / 其余自由）。"""
+
+    def _rules(self):
+        return rules_with()
+
+    def test_neutral_caption_only_speech_track(self) -> None:
+        tracks = enrich_caption_tracks(
+            [{"start": 0.0, "end": 2.0, "text": "好的 谢谢"}], self._rules()
+        )
+        self.assertEqual(len(tracks), 1)
+        self.assertEqual(tracks[0]["speech"], True)
+        self.assertNotIn("param", tracks[0])
+
+    def test_question_caption_appends_tilt_track(self) -> None:
+        tracks = enrich_caption_tracks(
+            [{"start": 1.0, "end": 3.0, "text": "你会画画吗？"}], self._rules()
+        )
+        self.assertEqual(len(tracks), 2)
+        tilt = tracks[1]
+        self.assertEqual(tilt["t"], 1.3)  # 提问后约 0.3s
+        self.assertEqual(tilt["dur"], 0.65)
+        self.assertEqual(tilt["param"]["ParamAngleX"], -18.0)
+
+    def test_emphasis_caption_appends_hold_track(self) -> None:
+        tracks = enrich_caption_tracks(
+            [{"start": 0.0, "end": 2.0, "text": "记住这个重点"}], self._rules()
+        )
+        self.assertEqual(len(tracks), 2)
+        hold = tracks[1]
+        self.assertEqual(hold["t"], 0.0)
+        self.assertEqual(hold["param"]["ParamMouthOpenY"], 0.0)
+
+    def test_short_caption_clamps_motion_duration(self) -> None:
+        tracks = enrich_caption_tracks(
+            [{"start": 0.0, "end": 0.3, "text": "为什么？"}], self._rules()
+        )
+        tilt = tracks[1]
+        self.assertLessEqual(tilt["dur"], 0.3)
+
+    def test_no_rules_keeps_captions_unchanged(self) -> None:
+        captions = [{"start": 0.0, "end": 1.0, "text": "你会画画吗？"}]
+        tracks = enrich_caption_tracks(captions, None)
+        self.assertEqual(len(tracks), 1)
+        self.assertNotIn("param", tracks[0])
+
+    def test_empty_and_invalid_inputs(self) -> None:
+        self.assertEqual(enrich_caption_tracks([], self._rules()), [])
+        tracks = enrich_caption_tracks(
+            [{"start": "bad", "end": 1.0, "text": "x"}], self._rules()
+        )
+        self.assertEqual(tracks, [])
 
 
 if __name__ == "__main__":

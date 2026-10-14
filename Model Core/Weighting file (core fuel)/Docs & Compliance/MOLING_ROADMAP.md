@@ -556,5 +556,7 @@
     - **已完成（2026-10-14）**：后端新增 `performance.py`——`classify_semantic_cue`（问句/感叹/强调词/讲解词 → 规范 cue 键）、`match_semantic_action`（cue 键头词与规则条目 cue 文本子串匹配）、`load_performance_rules`（读 performance_rules.json，缺失/损坏返回 None）；`POST /v1/performance/cue` 返回 `{cue, action}`。前端消费：发送消息时按 cue 触发 Live2D——提问→侧头思考（约 0.3s 后偏移、650ms 回归）、惊喜→表情切换后回归、强调→闭嘴静止（尊重"动作跟随语义走，别反复晃动"）；回复完成时 `settleToNeutral` 回归中性（对应规则"每个动作结束回到中性"）。main.cjs IPC `companion:classify-cue`。测试 +15 项（test_performance_cue.py）。
   - E9 · 生成统计（12 层第 7 层剩余缺口的最轻形态：墨灵累计生成量）。
     - **已完成（2026-10-14）**：api.py 模块级 `record_generation(chars, elapsed_ms)`（线程安全累计 count/chars/total_ms，主对话生成成功处调用；负值截断为 0）；`metrics_snapshot` 新增 `generations` 字段（count/chars/total_ms/avg_ms，空状态 avg=0）；状态页新增第二行汇总"墨灵已生成 N 次 · X 字符 · 平均 Y ms"，并如实标注"字符近似统计"（本后端不改 generate 签名，不以 token 计）。测试 +3 项（并入 test_status_metrics.py）。
+  - E10 · K6 视频合成消费演出规则（字幕时间线 → 语义动作轨道）。
+    - **已完成（2026-10-14）**：`performance.py` 新增 `enrich_caption_tracks(captions, rules)`——把 B 组字幕时间线（{start,end,text}）增强为 Live2D 时间线轨道（renderTimeline 可直接消费的 {t,dur,text,speech} + 语义动作段）：每条字幕分类 cue → 匹配规则 → 提问段附加侧头参数（ParamAngleX/Z，起始 +0.3s、0.65s）、强调段附加闭嘴静止（ParamMouthOpenY=0）；动作段超过字幕段时收窄，不侵入相邻台词；惊喜段依赖模型表达式定义名，本后端不编造表情名，不自动附加（实时对话版 E8 已以表情切换消费，此处如实留白）；无动作轨时段渲染器自动回归中性，符合"每个动作结束回到中性"。测试 +6 项（并入 test_performance_cue.py，21 项全绿）。
   - E3 · README 目录角色澄清：已完成——明确 `Model Core\Weighting file (core fuel)` 是核心配置目录而非神经网络权重，概念分离表入 README。
   - E4 · 平台治理（远期）：任务队列 / 资源监控 / 成本统计——单机单人场景当前收益低，登记远期，不设时间表。

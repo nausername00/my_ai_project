@@ -87,3 +87,53 @@ def load_performance_rules(path: str | Path | None = None) -> dict[str, Any] | N
     except (OSError, ValueError):
         return None
     return data if isinstance(data, dict) else None
+
+
+# K6 视频合成消费：字幕轨 → 语义动作轨（动作段时长上限与位置）。
+# 提问 → 侧头偏移段（起始 +0.3s，0.65s）；强调 → 闭嘴静止段（段首，0.4s）。
+# 惊喜在实时对话版（E8）以表情切换消费；视频版依赖模型的表达式定义名，
+# 本后端不编造表情名，故不自动附加（保持自由，不硬凑动作）。
+_SEMANTIC_MOTION: dict[str, tuple[float, float, dict[str, float]]] = {
+    "提问": (0.3, 0.65, {"ParamAngleX": -18.0, "ParamAngleZ": -8.0}),
+    "强调": (0.0, 0.4, {"ParamMouthOpenY": 0.0}),
+}
+
+
+def enrich_caption_tracks(
+    captions: list[dict[str, Any]], rules: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
+    """把字幕时间线（{start,end,text}）增强为 Live2D 时间线轨道（含语义动作段）。
+
+    K6 视频合成消费演出规则：每条字幕分类 cue → 匹配规则 → 附加对应动作段
+    （提问=侧头、强调=闭嘴静止；惊喜/讲解/未命中不附加，保持自由发挥）。
+    动作段不侵入相邻台词（超过字幕段时收窄）；无动作轨时段渲染器自动回归
+    中性，符合"每个动作结束回到中性"。
+    """
+    tracks: list[dict[str, Any]] = []
+    for caption in captions:
+        try:
+            start = float(caption.get("start", 0.0))
+            end = float(caption.get("end", 0.0))
+        except (TypeError, ValueError):
+            continue
+        text = str(caption.get("text", ""))
+        dur = max(0.0, end - start)
+        tracks.append({"t": start, "dur": dur, "text": text, "speech": True})
+        cue = classify_semantic_cue(text)
+        action = match_semantic_action(rules, cue)
+        if not (cue and action):
+            continue
+        head = cue.split("/")[0].strip()
+        motion = _SEMANTIC_MOTION.get(head)
+        if motion is None:
+            continue
+        offset, motion_dur, params = motion
+        motion_dur = min(motion_dur, max(dur, 0.2))
+        tracks.append(
+            {
+                "t": round(start + offset, 3),
+                "dur": round(motion_dur, 3),
+                "param": dict(params),
+            }
+        )
+    return tracks
