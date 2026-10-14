@@ -561,5 +561,7 @@
   - E11 · 角色数据一键备份（12 层第 8 层基础设施的最轻形态）。
     - **已完成（2026-10-14）**：新增 `backup.py`——`backup_character_data(character_root, backup_root, extra_files)` 把墨灵核心数据快照到 `Backups/character/<时间戳-微秒>/`：长期记忆（memory.json）、情绪状态（affect*.json）、隐私设置（privacy.json 如存在）、角色卡（characters/）与演出规则（performance_rules.json）；时间戳含微秒保证重复备份不互相覆盖；一个文件都没有时抛 ValueError 并清理空目录。**范围克制**：不备份大体积资产目录（assets/、Live2D 模型、立绘、视频输出），只保护"身份与记忆"文本数据。端点 `POST /v1/backup/create`（character_root/backup_root 支持实例注入，测试隔离）；设置"状态"tab 新增"备份角色数据"按钮，点击后显示备份目录与文件数。测试 +4 项（test_backup.py）。
     - **运行备注（2026-10-14 踩坑）**：全量测试前必须停掉正在运行的墨灵后端（`app.py` 占用 8000 端口）——运行中的后端会真实改写 `Character/` 下的 affect.json 等运行时文件，而 test_api.py 等部分测试用默认路径读取这些文件，后端在跑时会出现数十个 api 测试失败（曾误判为代码回归）。停掉后端后全量恢复绿。
+  - E12 · 生成互斥锁（E4 队列/并发控制的最轻形态：同一时刻只允许一次模型推理）。
+    - **已完成（2026-10-14）**：`InferenceEngine` 新增 `threading.Lock`（`_generation_lock`），`generate` 中 backend 调用整体持锁——并发请求（连发消息/生成时触发探索或协作）会排队等待而非同时打本地 Ollama，避免内存翻倍/抢占/超时。锁只包 backend 调用（校验不占锁）；异常时 `with` 自动释放。测试 +3 项（test_generation_lock.py：双线程完成时刻间隔 ≥ 单次耗时证明串行、单线程正常、异常后锁释放）。
   - E3 · README 目录角色澄清：已完成——明确 `Model Core\Weighting file (core fuel)` 是核心配置目录而非神经网络权重，概念分离表入 README。
   - E4 · 平台治理（远期）：任务队列 / 资源监控 / 成本统计——单机单人场景当前收益低，登记远期，不设时间表。

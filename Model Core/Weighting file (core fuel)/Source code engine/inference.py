@@ -9,6 +9,7 @@ import base64
 import importlib
 import json
 import os
+import threading
 from pathlib import Path
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
@@ -354,6 +355,9 @@ class InferenceEngine:
     def __init__(self, backend: InferenceBackend | None = None) -> None:
         self.backend = backend or PlaceholderBackend()
         self.model_name = self.backend.model_name
+        # E12 生成互斥锁：同一时刻只允许一次模型推理（本地单机并发会
+        # 内存翻倍/抢占/超时）。锁只包 backend 调用，排队由线程等待完成。
+        self._generation_lock = threading.Lock()
 
     @classmethod
     def from_environment(cls) -> "InferenceEngine":
@@ -483,5 +487,7 @@ class InferenceEngine:
             temperature=request.temperature,
         )
         if image is None:
-            return self.backend.generate(normalized_request)
-        return self.backend.generate(normalized_request, image=image)
+            with self._generation_lock:
+                return self.backend.generate(normalized_request)
+        with self._generation_lock:
+            return self.backend.generate(normalized_request, image=image)
