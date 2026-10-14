@@ -4141,6 +4141,18 @@ function renderStatusMetrics(metrics) {
 
 function setupStatusPanel() {
   statusRefresh.addEventListener("click", loadStatusMetrics);
+  const backupButton = document.getElementById("backup-create");
+  backupButton?.addEventListener("click", async () => {
+    statusNote.textContent = "正在备份…";
+    statusNote.classList.remove("error");
+    try {
+      const result = await window.companion.backupCreate();
+      statusNote.textContent = `已备份 ${result.count} 项到 ${result.backup_dir}`;
+    } catch (error) {
+      statusNote.textContent = error.message;
+      statusNote.classList.add("error");
+    }
+  });
 }
 
 function renderMemories(memories) {

@@ -1184,6 +1184,9 @@ function registerIpcHandlers() {
   ipcMain.handle("companion:classify-cue", (_event, text) =>
     callApi("/v1/performance/cue", "POST", { text }),
   );
+  ipcMain.handle("companion:backup-create", () =>
+    callApi("/v1/backup/create", "POST", {}),
+  );
   ipcMain.handle("companion:add-memory", (_event, memory) =>
     callApi("/v1/memory", "POST", memory),
   );
