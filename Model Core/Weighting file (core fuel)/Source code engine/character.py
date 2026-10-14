@@ -14,7 +14,7 @@ from threading import RLock
 from typing import Any
 import uuid
 
-from memory import MemoryStore, MemoryUsageLog
+from memory import MemoryStore, MemoryUsageLog, score_memory_relevance
 
 
 class CharacterValidationError(ValueError):
@@ -965,16 +965,40 @@ class CharacterStore:
         ]
 
     def build_system_prompt(
-        self, simulated_affect: dict[str, str] | None = None, reply_id: str | None = None
+        self,
+        simulated_affect: dict[str, str] | None = None,
+        reply_id: str | None = None,
+        context_text: str | None = None,
     ) -> str:
         card = self.load_card()
         privacy = self.get_privacy_settings()
         affect = simulated_affect or self.get_simulated_affect()
-        memories = (
-            [item for item in self.list_memories() if item["visibility"] == "model"][-20:]
-            if privacy["include_memories_in_prompt"]
-            else []
-        )
+        if privacy["include_memories_in_prompt"]:
+            model_memories = [
+                item
+                for item in self.list_memories()
+                if item["visibility"] == "model"
+            ]
+            # 相关性注入：有上下文时按词袋重叠打分排序，挑最相关的记忆；
+            # 无上下文或全部不相关时回退「最近 20 条」（与旧行为一致）。
+            if context_text and model_memories:
+                scored = [
+                    (score_memory_relevance(item["content"], context_text), item)
+                    for item in model_memories
+                ]
+                scored.sort(
+                    key=lambda pair: (
+                        pair[0],
+                        pair[1].get("last_used_at") or "",
+                    ),
+                    reverse=True,
+                )
+                relevant = [item for score, item in scored if score > 0][:20]
+                memories = relevant if relevant else model_memories[-20:]
+            else:
+                memories = model_memories[-20:]
+        else:
+            memories = []
         # J4/E2：记录被采用进本回复提示的记忆——聚合计数（use_count）+ 按回复时间线。
         if memories:
             try:

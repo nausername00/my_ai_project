@@ -36,6 +36,7 @@ __all__ = [
     "LongTermStore",
     "CrossSceneSummary",
     "MemoryUsageLog",
+    "score_memory_relevance",
     "SEARCH_RESULT_KEY",
 ]
 
@@ -977,3 +978,29 @@ class MemoryUsageLog:
         ]
         items.sort(key=lambda x: (x["last_used_at"] or ""), reverse=True)
         return items[:limit]
+
+
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+
+def _tokenize(text: str) -> set[str]:
+    tokens = set(_TOKEN_RE.findall(text.lower()))
+    cjk = re.sub(r"[^\u4e00-\u9fff]", "", text)
+    tokens.update(cjk[i : i + 2] for i in range(len(cjk) - 1))
+    return tokens
+
+
+def score_memory_relevance(content: str, query: str) -> int:
+    """轻量记忆相关性打分：上下文与记忆内容的词袋重叠数（无外部依赖）。
+
+    - 英文按单词、中文按 2-gram 切分，忽略大小写；
+    - 空 query 或空 content 返回 0（回退语义由调用方处理）；
+    - 只作排序用，数值本身无绝对意义。
+    """
+    if not query or not content:
+        return 0
+    query_tokens = _tokenize(query)
+    content_tokens = _tokenize(content)
+    if not query_tokens or not content_tokens:
+        return 0
+    return len(query_tokens & content_tokens)

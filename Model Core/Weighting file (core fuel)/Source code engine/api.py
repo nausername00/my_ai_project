@@ -1926,7 +1926,9 @@ class ApiHandler(BaseHTTPRequestHandler):
                 prompt=prompt,
                 max_tokens=payload.get("max_tokens", 128),
                 system_prompt=(
-                    self.character_store.build_system_prompt(simulated_affect)
+                    self.character_store.build_system_prompt(
+                        simulated_affect, context_text=prompt
+                    )
                     + "\n\n当前回应策略："
                     + cognitive_route.instruction
                     + "\n\n依据与纠正：如果用户追问依据，区分用户明确说过的内容、可见上下文、已提供的记忆和你的推测；不要伪造引文、来源或概率。用户纠正时先承认并按本次修正回应；除非用户明确要求保存，否则不要把纠正写入长期记忆。"

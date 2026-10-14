@@ -18,7 +18,13 @@ import unittest
 from pathlib import Path
 
 from character import CharacterStore, MemoryNotFoundError
-from memory import LongTermStore, MemoryEntry, MemoryStore, MemoryUsageLog
+from memory import (
+    LongTermStore,
+    MemoryEntry,
+    MemoryStore,
+    MemoryUsageLog,
+    score_memory_relevance,
+)
 
 
 class MemoryEntryJ4Test(unittest.TestCase):
@@ -307,6 +313,64 @@ class CharacterStoreE2Test(unittest.TestCase):
             self.assertIn("summary", payload)
             self.assertIn("recent", payload)
             self.assertEqual(payload["summary"][0]["source"], "user")
+
+
+class RelevanceMemoryE6Test(unittest.TestCase):
+    """E6 轻量相关性注入：按当前话题挑记忆，无上下文回退最近 20 条。"""
+
+    def _store(self, directory: str) -> CharacterStore:
+        return CharacterStore(
+            str(Path(directory) / "character.json"),
+            str(Path(directory) / "memory.json"),
+            str(Path(directory) / "assets"),
+        )
+
+    def test_score_memory_relevance_basic(self) -> None:
+        self.assertGreater(
+            score_memory_relevance("用户喜欢雨天散步", "下雨天怎么办"), 0
+        )
+        self.assertEqual(
+            score_memory_relevance("用户喜欢晴天", "下雨天怎么办"), 0
+        )
+        self.assertEqual(score_memory_relevance("", "提问"), 0)
+        self.assertEqual(score_memory_relevance("内容", ""), 0)
+
+    def test_context_picks_relevant_memory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = self._store(directory)
+            relevant = store.add_memory("用户喜欢雨天散步", source="user")
+            store.add_memory("用户养了一只猫叫年糕", source="user")
+            prompt = store.build_system_prompt(context_text="下雨天怎么办")
+            self.assertIn("雨天", prompt)
+            self.assertNotIn("年糕", prompt)
+            history = store.usage_log.by_memory(relevant["id"])
+            self.assertTrue(history)
+
+    def test_no_context_falls_back_to_recent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = self._store(directory)
+            store.add_memory("最早记忆", source="user")
+            for i in range(20):
+                store.add_memory(f"中间记忆{i}", source="user")
+            store.add_memory("最新记忆", source="user")
+            prompt = store.build_system_prompt()
+            self.assertIn("最新记忆", prompt)
+            self.assertNotIn("最早记忆", prompt)  # 22 条只注入最近 20 条
+
+    def test_all_zero_scores_falls_back_to_recent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = self._store(directory)
+            store.add_memory("关于花园的记录", source="user")
+            prompt = store.build_system_prompt(context_text="如何写代码")
+            self.assertIn("花园", prompt)  # 无相关记忆 → 仍注入最近记录
+
+    def test_privacy_off_still_no_memory_injection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = self._store(directory)
+            store.add_memory("雨天记忆", source="user")
+            store.set_privacy_settings({"include_memories_in_prompt": False})
+            prompt = store.build_system_prompt(context_text="今天会下雨吗")
+            self.assertNotIn("雨天记忆", prompt)
 
 
 if __name__ == "__main__":
