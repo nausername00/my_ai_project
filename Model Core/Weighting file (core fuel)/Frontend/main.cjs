@@ -1181,6 +1181,9 @@ function registerIpcHandlers() {
   ipcMain.handle("companion:save-performance-rules", (_event, rules) =>
     callApi("/v1/performance/rules", "PUT", rules),
   );
+  ipcMain.handle("companion:classify-cue", (_event, text) =>
+    callApi("/v1/performance/cue", "POST", { text }),
+  );
   ipcMain.handle("companion:add-memory", (_event, memory) =>
     callApi("/v1/memory", "POST", memory),
   );

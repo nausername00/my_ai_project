@@ -45,6 +45,11 @@ from partners import (
     list_partner_status,
     preview_external_reviews,
 )
+from performance import (
+    classify_semantic_cue,
+    load_performance_rules,
+    match_semantic_action,
+)
 from collaboration import list_collaborator_roles, run_collaboration
 from brain import create_brain_plan, verify_tool_observation
 from inference import (
@@ -779,6 +784,18 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
+        if path == "/v1/performance/cue":
+            try:
+                payload = self._read_json()
+                text = str(payload.get("text", ""))
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                return
+            cue = classify_semantic_cue(text)
+            rules = load_performance_rules(performance_rules_path())
+            action = match_semantic_action(rules, cue)
+            self._send_json(HTTPStatus.OK, {"cue": cue, "action": action})
+            return
         if path.startswith("/v1/social/") and not self._is_local_request():
             self._send_json(HTTPStatus.FORBIDDEN, {"error": "social API is 127.0.0.1 only"})
             return

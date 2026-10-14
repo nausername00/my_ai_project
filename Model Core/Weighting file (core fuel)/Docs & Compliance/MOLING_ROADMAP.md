@@ -551,5 +551,7 @@
     - **已完成（2026-10-14）**：memory.py 新增 `score_memory_relevance`——轻量词袋重叠打分（英文单词 + 中文 2-gram，无外部依赖）；`build_system_prompt` 新增可选 `context_text`：有上下文时按相关性排序注入 Top-N，全部不相关或无上下文时回退"最近 20 条"（与旧行为一致）；主对话生成（api.py）传入当前用户消息作为检索上下文；隐私开关、E2 使用追踪、撤销联动全部保持。测试 +5 项（test_j4_memory.py 28 项全绿）。
   - E7 · 轻量可观测指标（12 层第 7 层的最轻形态：请求计数/延迟/错误率）。
     - **已完成（2026-10-14）**：api.py 模块级 `_METRICS`（线程安全计数，路径按前两段归组），`_tracked` 装饰器统一包装 do_GET/POST/PUT/DELETE（成功/异常均记录，异常计错误率），`GET /v1/status/metrics` 返回 `{started_at, uptime_s, requests[], totals}`；设置面板新增"状态"tab——汇总行 + 按接口分组表（次数/平均延迟/错误）+ 手动刷新；main.cjs IPC `companion:status-metrics`。测试 +7 项（test_status_metrics.py）。
+  - E8 · 演出规则消费（E5 的规则从"档案"变成"剧本"：运行时真正读规则驱动 Live2D 动作）。
+    - **已完成（2026-10-14）**：后端新增 `performance.py`——`classify_semantic_cue`（问句/感叹/强调词/讲解词 → 规范 cue 键）、`match_semantic_action`（cue 键头词与规则条目 cue 文本子串匹配）、`load_performance_rules`（读 performance_rules.json，缺失/损坏返回 None）；`POST /v1/performance/cue` 返回 `{cue, action}`。前端消费：发送消息时按 cue 触发 Live2D——提问→侧头思考（约 0.3s 后偏移、650ms 回归）、惊喜→表情切换后回归、强调→闭嘴静止（尊重"动作跟随语义走，别反复晃动"）；回复完成时 `settleToNeutral` 回归中性（对应规则"每个动作结束回到中性"）。main.cjs IPC `companion:classify-cue`。测试 +15 项（test_performance_cue.py）。
   - E3 · README 目录角色澄清：已完成——明确 `Model Core\Weighting file (core fuel)` 是核心配置目录而非神经网络权重，概念分离表入 README。
   - E4 · 平台治理（远期）：任务队列 / 资源监控 / 成本统计——单机单人场景当前收益低，登记远期，不设时间表。

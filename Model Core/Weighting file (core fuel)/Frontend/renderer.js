@@ -4528,6 +4528,53 @@ async function renderAvatarAskCard(prompt, assessResult) {
   return card;
 }
 
+function settleToNeutral() {
+  if (!window.MolingLive2D?.loaded) return;
+  try {
+    window.MolingLive2D.resetExpression?.();
+    window.MolingLive2D.setMouth?.(0);
+    window.MolingLive2D.setParam?.("ParamAngleX", 0);
+    window.MolingLive2D.setParam?.("ParamAngleZ", 0);
+  } catch {
+    /* 演出恢复失败不打扰对话 */
+  }
+}
+
+// E8：演出规则消费——用户消息按语义 cue 触发 Live2D 动作，动作结束回归中性。
+async function performSemanticCue(text) {
+  if (!window.MolingLive2D?.loaded) return;
+  try {
+    const { cue, action } = await window.companion.classifyCue(text);
+    if (!cue || !action) return;
+    const cueHead = cue.split("/")[0].trim();
+    if (cueHead === "提问") {
+      // 思考：侧头 + 轻微前倾（提问后约 0.3s，对应规则 timing），随后回归中性
+      setTimeout(() => {
+        if (!window.MolingLive2D?.loaded) return;
+        window.MolingLive2D.setParam?.("ParamAngleX", -18);
+        window.MolingLive2D.setParam?.("ParamAngleZ", -8);
+        setTimeout(() => {
+          window.MolingLive2D.setParam?.("ParamAngleX", 0);
+          window.MolingLive2D.setParam?.("ParamAngleZ", 0);
+        }, 650);
+      }, 300);
+    } else if (cueHead === "惊喜") {
+      // 惊喜：表情快速切换后回归（模型无拍手动作时以表情代偿）
+      try {
+        window.MolingLive2D.setExpressionByMood?.("惊喜");
+        setTimeout(() => window.MolingLive2D.resetExpression?.(), 1200);
+      } catch {
+        /* 无惊喜表情时静默 */
+      }
+    } else if (cueHead === "强调") {
+      // 停半拍：闭嘴静止片刻（不额外晃动，尊重"动作跟随语义走"）
+      window.MolingLive2D.setMouth?.(0);
+    }
+  } catch {
+    /* 分类接口不可用时不打扰对话 */
+  }
+}
+
 async function sendMessage(text) {
   const prompt = text.trim();
   if (!prompt || sendButton.disabled) return;
@@ -4548,6 +4595,8 @@ async function sendMessage(text) {
   addMessage(prompt, "user");
   input.value = "";
   sendButton.disabled = true;
+  // E8：演出规则消费——按用户消息语义 cue 触发动作（提问→思考等）
+  void performSemanticCue(prompt);
   const pending = addMessage("正在等待本地模型…", "assistant", "pending");
   try {
     const result = await window.companion.generate(prompt, historyForRequest);
@@ -4556,6 +4605,8 @@ async function sendMessage(text) {
     addSpeechControl(pending, result.text);
     attachReplyTools(pending, result.evidence);
     modelStatus.textContent = `本地模型 · ${result.model}`;
+    // E8：收尾回归中性姿态（规则"每个动作结束回到中性"）
+    settleToNeutral();
     conversationHistory = [
       ...historyForRequest,
       { role: "user", content: prompt },
