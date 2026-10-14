@@ -1173,6 +1173,7 @@ function registerIpcHandlers() {
     callApi("/v1/agent/tool/verify", "POST", request),
   );
   ipcMain.handle("companion:list-memories", () => callApi("/v1/memory"));
+  ipcMain.handle("companion:memory-usage", () => callApi("/v1/memory/usage"));
   ipcMain.handle("companion:add-memory", (_event, memory) =>
     callApi("/v1/memory", "POST", memory),
   );

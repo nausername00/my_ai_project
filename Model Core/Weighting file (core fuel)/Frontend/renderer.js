@@ -184,6 +184,9 @@ const memoryList = document.getElementById("memory-list");
 const memoryStatus = document.getElementById("memory-status");
 const memoryForm = document.getElementById("memory-form");
 const includeMemories = document.getElementById("include-memories");
+const memoryUsageList = document.getElementById("memory-usage-list");
+const memoryUsageEmpty = document.getElementById("memory-usage-empty");
+const memoryUsageBlock = document.getElementById("memory-usage-block");
 const proposalsEnabled = document.getElementById("proposals-enabled");
 const proposalsPaused = document.getElementById("proposals-paused");
 const proposalsFrequency = document.getElementById("proposals-frequency");
@@ -3893,9 +3896,53 @@ async function loadMemories() {
     const result = await window.companion.listMemories();
     includeMemories.checked = result.privacy.include_memories_in_prompt;
     renderMemories(result.memories);
+    await loadMemoryUsage(result.memories);
   } catch (error) {
     setMemoryStatus(error.message, true);
   }
+}
+
+async function loadMemoryUsage(memories) {
+  if (!memoryUsageList || !memoryUsageEmpty) return;
+  try {
+    const usage = await window.companion.memoryUsage();
+    const byId = new Map((memories || []).map((m) => [m.id, m]));
+    renderMemoryUsage(usage.recent || [], byId);
+  } catch {
+    // 追踪数据不可用时静默折叠，不影响记忆面板主功能
+    if (memoryUsageBlock) memoryUsageBlock.hidden = true;
+  }
+}
+
+function renderMemoryUsage(recent, byId) {
+  memoryUsageList.replaceChildren();
+  memoryUsageEmpty.hidden = recent.length !== 0;
+  if (recent.length === 0) return;
+  for (const entry of recent) {
+    const row = document.createElement("div");
+    row.className = "memory-usage-entry";
+    const usedAt = new Date(entry.used_at).toLocaleString();
+    const label = document.createElement("div");
+    label.className = "memory-usage-meta";
+    label.textContent = `${usedAt} · 采用 ${entry.memory_ids.length} 条`;
+    row.append(label);
+    const snippets = document.createElement("ul");
+    snippets.className = "memory-usage-items";
+    for (const memoryId of entry.memory_ids) {
+      const item = document.createElement("li");
+      const memory = byId.get(memoryId);
+      item.textContent = memory
+        ? truncateText(memory.content, 60)
+        : `（记忆 ${memoryId} 已删除或不可见）`;
+      snippets.append(item);
+    }
+    row.append(snippets);
+    memoryUsageList.append(row);
+  }
+}
+
+function truncateText(text, max) {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 function renderMemories(memories) {

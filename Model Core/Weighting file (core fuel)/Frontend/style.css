@@ -2821,6 +2821,54 @@ button {
   background: #191c23;
 }
 
+/* E2：最近采用记录（哪次回复用了哪些记忆） */
+.memory-usage {
+  margin-top: 14px;
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  padding: 10px;
+  background: #171a20;
+}
+.memory-usage summary {
+  cursor: pointer;
+  color: #c9d1e4;
+  font-size: 13px;
+  user-select: none;
+}
+.memory-usage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 9px;
+}
+.memory-usage-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #191c23;
+}
+.memory-usage-meta {
+  font-size: 12px;
+  color: #8b93a7;
+}
+.memory-usage-items {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+  color: #c9d1e4;
+}
+.memory-usage-empty {
+  margin-top: 9px;
+  font-size: 12px;
+  color: #8b93a7;
+}
+
 /* J4：已暂停的记忆弱化显示，明确不进入回复提示 */
 .memory-entry.paused {
   opacity: 0.62;
