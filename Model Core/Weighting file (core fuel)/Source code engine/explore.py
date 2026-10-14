@@ -276,7 +276,7 @@ def run_exploration(
 
     card = character_store.load_card()
     system_prompt = character_store.build_system_prompt(
-        character_store.get_simulated_affect()
+        character_store.get_simulated_affect(), context_text=resolved
     )
     nickname = getattr(card, "nickname", "墨灵")
 
