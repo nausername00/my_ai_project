@@ -520,6 +520,12 @@
   - 存储隔离延续：`Character/personas.json` 默认，测试走 `PERSONA_PATH` 环境变量；`.gitignore` 追加 personas / tool_log / skills / introspection_log。
   - **测试**：`test_avatars.py` 82 项（+10 项 S5：四分身默认性格齐全、同一情境输出可区分、变量替换、未知分身 / 情境兜底、定制持久化、非法 persona 拒绝、run_task 消息装饰、HTTP 冒烟）全绿。
   - 待办：S5 其余（手机陪伴原型、性格参数深化）。
+- **S6 · 冰火三角思维角色（2026-10-15）**：给分身配「思路」维度，专司"打破常规 / 严格逻辑 / 引导排雷"三方协作。
+  - `avatar_persona.py` 扩展：新增 `thinking_mode ∈ (fire, ice, balance)` 行为维度（`upsert` 枚举校验、`behavior_of` 返回、中性默认 balance）；新增三个思维角色模板 `DEFAULT_THINKING_PERSONAS`——`fire_breakthrough`（破局·火：发散敢想）/ `ice_guardian`（守界·冰：严格结构化校验）/ `balance_mediator`（调和·衡：引导排雷权衡），各含 traits / style / 8 情境措辞；`list_thinking_roles()` 只读返回；未登记时 `behavior_of / speak` 回落静态模板（不污染 personas.json）。
+  - 新增 `avatar_trio.py`：三角协作回路 `run_trio(engine, system_prompt, task, *, fire, ice, balance, max_rounds)`——火发散方案 → 冰逐项校验（`_parse_review`：JSON 优先、关键字兜底、解析失败→unknown 保守处理）→ 平衡裁决（`_decide` 确定性：accept→adopt / revise→patch 火主体+冰修正 / reject→rework 打回火重做，到上限→defer 回主墨灵 / unknown→defer 安全兜底，**不靠多数票**）；只允许本机模型服务（`is_local_engine`）；全程不执行任何操作，仅产出建议 / 裁决 / 文案。真实模型 ice 调用不依赖 `json_mode`（弱模型强 JSON 会触发 repeat limit，改为提示引导 + 解析兜底，验收实测暴露并修复）。
+  - **测试**：新增 `test_trio.py` 14 项（三角角色清单、persona seed 后三 mode、非法 thinking_mode 拒绝、审校解析 JSON/关键字/unknown、裁决 adopt/patch/rework/defer 五路径、run_trio stub 全链路 adopt 单轮 + rework 两轮后 defer、远端引擎拒绝）；`test_avatars.py` 两处中性断言补 `thinking_mode: "balance"`（S6 扩展既有行为结构）。
+  - **验收**：单测 142 项（test_trio + test_avatars）全绿；全量回归 471 passed / 6 skipped（+14）；真实模型端到端（Ollama qwen2.5:0.5b，内存充足时）跑通：fire 出方案 → ice 返回 verdict=accept（JSON 瑕疵被兜底接住）→ 裁决 adopt，1.8s。
+  - 待办：三分身是否登记为可直接唤醒的独立分身（当前为协作注入的思维视角）——用户拍板后接 TaskRouter / 唤醒入口。
 - **A/B/C/D 完善轮（2026-10-14）**：按用户锁定的顺序推进后续目标。
   - **A · 顺势深化**：
     - 性格参数真实生效：`speak` 渲染后应用 `jargon`（high 术语替换）/ `verbosity`（verbose 追加惯用语）/ `max_sentence`（超长截断），`upsert_persona` 规范化补齐默认值——同一情境下四分身不仅措辞不同，参数也可配置。

@@ -123,6 +123,105 @@ DEFAULT_PERSONAS: dict[str, dict[str, Any]] = {
     },
 }
 
+# ── S6 三角思维角色（冰 / 火 / 平衡）────────────────────────────
+# 给分身的「思路」配专门角色：打破常规(火) → 严格校验(冰) → 引导与排雷(平衡)。
+# 与四分身并存：可登记为独立分身，也可作为协作时注入的思维视角。
+DEFAULT_THINKING_PERSONAS: dict[str, dict[str, Any]] = {
+    "fire_breakthrough": {
+        "avatar_id": "fire_breakthrough",
+        "name": "破局·火",
+        "tone": "bold",
+        "traits": ["打破常规", "发散", "敢想"],
+        "behavior": {
+            "output_style": "detailed",
+            "structured": False,
+            "task_affinity": [],
+            "thinking_mode": "fire",
+        },
+        "style": {
+            "max_sentence": 48,
+            "jargon": "low",
+            "pronoun_bias": "you",
+            "verbosity": "verbose",
+            "jargon_map": {},
+        },
+        "openers": ["跳出框架想：", "如果反过来呢？", "不妨大胆一点："],
+        "phrases": ["先别急着否定，", "这个角度还没试过"],
+        "situations": {
+            "task_ok": "方案在这：{result}。先跑起来看效果，不行我们再换思路。",
+            "task_denied": "这条野路先记着，等你点头我们再闯。",
+            "task_failed": "没成，但那说明这条路不对——换个更野的角度再来。",
+            "needs_input": "给我一个方向或一句话，我帮你把边界外的地方也想想。",
+            "wake_offer": "需要跳出常规的思路时叫我。",
+            "suggestion": "有个不按套路的主意：{result}，敢不敢试？",
+            "writeback_ok": "点子已存档，以后灵感来了直接用。",
+            "greeting": "嗨，今天要破什么局？",
+        },
+    },
+    "ice_guardian": {
+        "avatar_id": "ice_guardian",
+        "name": "守界·冰",
+        "tone": "strict",
+        "traits": ["严格逻辑", "结构化", "守边界"],
+        "behavior": {
+            "output_style": "balanced",
+            "structured": True,
+            "task_affinity": [],
+            "thinking_mode": "ice",
+        },
+        "style": {
+            "max_sentence": 42,
+            "jargon": "high",
+            "pronoun_bias": "none",
+            "verbosity": "normal",
+            "jargon_map": {"想法": "假设", "问题": "缺陷"},
+        },
+        "openers": ["按约束核一遍：", "结论先行：", ""],
+        "phrases": ["此处有边界：", "需补验证："],
+        "situations": {
+            "task_ok": "校验通过：{result}（条件与边界已逐项核对）。",
+            "task_denied": "该方案越界或未经授权，未放行；请补授权或改约束。",
+            "task_failed": "校验失败：结构与证据不足，结论不可采纳。",
+            "needs_input": "请提供任务约束与验收标准，缺项无法校验。",
+            "wake_offer": "需要严格审校或排雷时叫我。",
+            "suggestion": "风险点（按严重度排序）：{result}。",
+            "writeback_ok": "结论已入档，附带校验记录，可回溯。",
+            "greeting": "就绪。要核什么？",
+        },
+    },
+    "balance_mediator": {
+        "avatar_id": "balance_mediator",
+        "name": "调和·衡",
+        "tone": "steady",
+        "traits": ["引导", "排雷", "权衡"],
+        "behavior": {
+            "output_style": "balanced",
+            "structured": False,
+            "task_affinity": [],
+            "thinking_mode": "balance",
+        },
+        "style": {
+            "max_sentence": 40,
+            "jargon": "medium",
+            "pronoun_bias": "we",
+            "verbosity": "normal",
+            "jargon_map": {},
+        },
+        "openers": ["两边都听过了：", "先求稳，再谈新：", ""],
+        "phrases": ["风险与价值都要看", "先排雷，再前进"],
+        "situations": {
+            "task_ok": "已调和定案：{result}。创意保住，风险可控。",
+            "task_denied": "这一步先按住：创意虽好，边界或风险不允许现在动。",
+            "task_failed": "三方未达成可行方案，先回主墨灵，别硬闯。",
+            "needs_input": "请给出任务与可接受的风险边界，我来撮合三方。",
+            "wake_offer": "需要引导、排雷或仲裁时叫我。",
+            "suggestion": "平衡后的建议：{result}。",
+            "writeback_ok": "共识已记录，含分歧与裁决依据。",
+            "greeting": "我在，两边都听听再说。",
+        },
+    },
+}
+
 # 未知分身 / 未知情境的中性兜底（不抛错）
 _NEUTRAL_SITUATIONS: dict[str, str] = {
     "task_ok": "任务完成：{result}",
@@ -140,6 +239,10 @@ _REQUIRED_PERSONA_FIELDS = ("avatar_id", "name", "situations")
 # E1 行为参数：输出形态偏好（纯表现层，不触碰执行 / 授权逻辑）
 _OUTPUT_STYLES = ("brief", "balanced", "detailed")
 
+# S6 思维模式：给分身的「思路」分维度，不替换表现层，也不触碰执行 / 授权。
+# fire=打破常规(发散)  ice=严格逻辑与结构化约束(收敛)  balance=引导与排雷(在两者间平衡)
+_THINKING_MODES = ("fire", "ice", "balance")
+
 
 def _neutral_behavior() -> dict[str, Any]:
     """未配置行为参数时的中性默认（任何分身 / 未知分身均回落）。"""
@@ -147,6 +250,7 @@ def _neutral_behavior() -> dict[str, Any]:
         "output_style": "balanced",
         "structured": False,
         "task_affinity": [],
+        "thinking_mode": "balance",
     }
 
 
@@ -215,6 +319,11 @@ class PersonaRegistry:
             raise ValueError(
                 f"output_style 必须为 {'/'.join(_OUTPUT_STYLES)} 之一"
             )
+        thinking_mode = str(behavior.get("thinking_mode", "balance"))
+        if thinking_mode not in _THINKING_MODES:
+            raise ValueError(
+                f"thinking_mode 必须为 {'/'.join(_THINKING_MODES)} 之一"
+            )
         task_affinity = list(behavior.get("task_affinity", []))
         if any(not isinstance(item, str) or not item.strip() for item in task_affinity):
             raise ValueError("task_affinity 必须是非空字符串列表")
@@ -235,6 +344,7 @@ class PersonaRegistry:
                     "output_style": output_style,
                     "structured": bool(behavior.get("structured", False)),
                     "task_affinity": task_affinity,
+                    "thinking_mode": thinking_mode,
                 },
                 "openers": list(persona.get("openers", [])),
                 "phrases": list(persona.get("phrases", [])),
@@ -245,8 +355,14 @@ class PersonaRegistry:
             return dict(normalized)
 
     def behavior_of(self, avatar_id: str) -> dict[str, Any]:
-        """读取分身行为参数（E1）：未配置时回落中性默认，不抛错。"""
+        """读取分身行为参数（E1/S6）：未配置时回落中性默认，不抛错。
+
+        思维角色（破局·火/守界·冰/调和·衡）未登记时回落到静态模板，
+        不写入 personas.json。
+        """
         persona = self._personas.get(avatar_id)
+        if persona is None:
+            persona = DEFAULT_THINKING_PERSONAS.get(avatar_id)
         behavior = (persona or {}).get("behavior")
         if not isinstance(behavior, dict):
             return _neutral_behavior()
@@ -254,7 +370,12 @@ class PersonaRegistry:
             "output_style": behavior.get("output_style", "balanced"),
             "structured": bool(behavior.get("structured", False)),
             "task_affinity": list(behavior.get("task_affinity", [])),
+            "thinking_mode": behavior.get("thinking_mode", "balance"),
         }
+
+    def list_thinking_roles(self) -> list[dict[str, Any]]:
+        """S6：返回三角思维角色模板（破局·火 / 守界·冰 / 调和·衡），只读定义。"""
+        return [dict(template) for template in DEFAULT_THINKING_PERSONAS.values()]
 
     def speak(
         self,
@@ -264,6 +385,8 @@ class PersonaRegistry:
     ) -> str:
         """按分身性格渲染情境消息；未知分身 / 情境回落中性兜底。"""
         persona = self._personas.get(avatar_id)
+        if persona is None:
+            persona = DEFAULT_THINKING_PERSONAS.get(avatar_id)
         template: str | None = None
         style: dict[str, Any] = {}
         if persona is not None and isinstance(persona.get("situations"), dict):

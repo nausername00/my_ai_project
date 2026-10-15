@@ -1640,13 +1640,23 @@ class AvatarBehaviorE1Test(unittest.TestCase):
         behavior = self.system.persona_behavior("companion")
         self.assertEqual(
             behavior,
-            {"output_style": "balanced", "structured": False, "task_affinity": []},
+            {
+                "output_style": "balanced",
+                "structured": False,
+                "task_affinity": [],
+                "thinking_mode": "balance",
+            },
         )
 
     def test_unknown_avatar_neutral(self) -> None:
         self.assertEqual(
             self.system.persona_behavior("nobody"),
-            {"output_style": "balanced", "structured": False, "task_affinity": []},
+            {
+                "output_style": "balanced",
+                "structured": False,
+                "task_affinity": [],
+                "thinking_mode": "balance",
+            },
         )
 
     def test_behavior_upsert_normalized(self) -> None:
