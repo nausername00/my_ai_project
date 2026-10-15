@@ -306,7 +306,9 @@ class LongTermStore:
     def list(self, visibility: str | None = None, limit: int | None = None) -> list[MemoryEntry]:
         items = sorted(
             self._entries.values(),
-            key=lambda e: (e.created_at, e.id),
+            # Python's sort is stable, so equal-second timestamps retain the
+            # JSON/insertion order and truly recent entries remain at the end.
+            key=lambda e: e.created_at,
         )
         # J4：暂停的记忆不进入任何列表视图（包括检索上下文）。
         items = [e for e in items if e.status != "paused"]

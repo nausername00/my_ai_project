@@ -305,6 +305,8 @@
   const avatarEl = document.getElementById("avatar-wrap");
   const avatarText = document.getElementById("avatar-text");
   let characterUpdateVersion = 0;
+  let live2dReady = false;
+  let currentMood = "";
 
   function formatExpiry(expiresAt) {
     if (!Number.isFinite(expiresAt)) return "";
@@ -471,7 +473,7 @@
     }
     const moodKey = String(character.moodKey || "").toLowerCase();
     currentMood = moodKey;
-    if (live2dReady && moodKey) {
+    if (typeof live2dReady !== "undefined" && live2dReady && moodKey) {
       window.MolingLive2D.setExpressionByMood(moodKey);
     }
     const moodColor = MOOD_COLORS[moodKey] || "";
@@ -504,8 +506,6 @@
 
   // ── 悬浮窗 Live2D 动态形象（沐莹）────────────────────────────
   const live2dBox = document.getElementById("avatar-live2d");
-  let live2dReady = false;
-  let currentMood = "";
 
   function syncLive2dVisibility() {
     const isExpanded = panel.classList.contains("expanded");

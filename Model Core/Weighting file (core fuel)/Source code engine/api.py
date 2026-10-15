@@ -488,6 +488,17 @@ class ApiHandler(BaseHTTPRequestHandler):
         except ValueError:
             return False
 
+    def _reject_untrusted_browser_origin(self) -> bool:
+        """Block cross-origin browser writes to the loopback service (CSRF)."""
+        origin = getattr(self, "headers", {}).get("Origin")
+        if not origin or origin == "moling://local":
+            return False
+        self._send_json(
+            HTTPStatus.FORBIDDEN,
+            {"error": "cross-origin browser requests are not allowed"},
+        )
+        return True
+
     @classmethod
     def _append_notification(cls, notification: dict[str, Any]) -> dict[str, Any]:
         from time import time as _utc_time
@@ -808,6 +819,8 @@ class ApiHandler(BaseHTTPRequestHandler):
         self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
     def do_POST(self) -> None:
+        if self._reject_untrusted_browser_origin():
+            return
         path = urlsplit(self.path).path
         if path == "/v1/backup/create":
             try:
@@ -938,7 +951,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                     avatar_id=str(payload.get("avatar_id", "")),
                     task=str(payload.get("task", "")),
                     payload=payload.get("payload") or {},
-                    approved=bool(payload.get("approved", False)),
+                    approved=self._strict_json_bool(payload, "approved"),
                 )
                 self._send_json(HTTPStatus.OK, result)
             except (TypeError, ValueError, json.JSONDecodeError) as error:
@@ -963,8 +976,8 @@ class ApiHandler(BaseHTTPRequestHandler):
                     raise ValueError("message 必填")
                 execution = self.get_avatar_system().execute_plan(
                     message,
-                    approved=bool(payload.get("approved", False)),
-                    writeback=bool(payload.get("writeback", False)),
+                    approved=self._strict_json_bool(payload, "approved"),
+                    writeback=self._strict_json_bool(payload, "writeback"),
                 )
                 self._send_json(HTTPStatus.OK, {"execution": execution})
             except (TypeError, ValueError, json.JSONDecodeError) as error:
@@ -976,7 +989,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 result = self.get_avatar_system().writeback(
                     avatar_id=str(payload.get("avatar_id", "")),
                     content=str(payload.get("content", "")),
-                    approved=bool(payload.get("approved", False)),
+                    approved=self._strict_json_bool(payload, "approved"),
                     reason=str(payload.get("reason", "")),
                 )
                 self._send_json(HTTPStatus.OK, result)
@@ -2178,6 +2191,8 @@ class ApiHandler(BaseHTTPRequestHandler):
         }
 
     def do_PUT(self) -> None:
+        if self._reject_untrusted_browser_origin():
+            return
         path = urlsplit(self.path).path
         if path == "/v1/performance/rules":
             try:
@@ -2253,6 +2268,8 @@ class ApiHandler(BaseHTTPRequestHandler):
         self._send_json(HTTPStatus.OK, {"memory": updated})
 
     def do_DELETE(self) -> None:
+        if self._reject_untrusted_browser_origin():
+            return
         path = urlsplit(self.path).path
         characters_prefix = "/v1/characters/"
         if path.startswith(characters_prefix) and path[len(characters_prefix) :]:
@@ -2470,6 +2487,13 @@ class ApiHandler(BaseHTTPRequestHandler):
         if not isinstance(payload, dict):
             raise TypeError("request body must be a JSON object")
         return payload
+
+    @staticmethod
+    def _strict_json_bool(payload: dict[str, Any], key: str, default: bool = False) -> bool:
+        value = payload.get(key, default)
+        if not isinstance(value, bool):
+            raise ValueError(f"{key} must be a JSON boolean")
+        return value
 
     def _read_audio(self) -> tuple[bytes, str]:
         content_length = int(self.headers.get("Content-Length", "0"))

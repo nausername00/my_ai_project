@@ -398,6 +398,29 @@ class AvatarTasksS2Test(unittest.TestCase):
         self.assertEqual(result["status"], "failed")
         self.assertIn("危险", result["reason"])
 
+    def test_tech_calculator_rejects_code_execution_syntax(self) -> None:
+        for expression in (
+            "__import__('os').system('whoami')",
+            "().__class__.__mro__",
+            "1; print(2)",
+        ):
+            with self.subTest(expression=expression):
+                result = self.system.run_task(
+                    "tech",
+                    "safe_exec",
+                    {"command": "python", "args": f"-c {expression}"},
+                    approved=True,
+                )
+                self.assertEqual(result["status"], "failed")
+                self.assertIn("危险语法", result["reason"])
+        division_by_zero = self.system.run_task(
+            "tech",
+            "safe_exec",
+            {"command": "python", "args": "-c 1/0"},
+            approved=True,
+        )
+        self.assertEqual(division_by_zero["status"], "failed")
+
     def test_task_outside_domain_denied(self) -> None:
         result = self.system.run_task(
             "companion", "safe_exec", {"command": "python", "args": "-c 1+1"}
@@ -550,6 +573,19 @@ class AvatarApiS2Test(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(payload["status"], "denied")
         self.assertEqual(payload["authorization"], "denied")
+
+    def test_task_endpoint_rejects_non_boolean_approval(self) -> None:
+        status, payload = self._post(
+            "/v1/avatars/task",
+            {
+                "avatar_id": "tech",
+                "task": "safe_exec",
+                "payload": {"command": "python", "args": "-c 1+1"},
+                "approved": "false",
+            },
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("JSON boolean", payload["error"])
 
     def test_task_endpoint_approved_runs(self) -> None:
         status, payload = self._post(

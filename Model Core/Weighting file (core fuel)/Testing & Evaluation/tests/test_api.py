@@ -103,6 +103,28 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["model"], "placeholder")
 
+    def test_state_changing_routes_reject_cross_origin_browser_requests(self) -> None:
+        requests = (
+            ("POST", "/v1/backup/create", b"{}"),
+            ("PUT", "/v1/memory/not-real", b"{}"),
+            ("DELETE", "/v1/characters/not-real", b""),
+        )
+        for method, path, body in requests:
+            with self.subTest(method=method, path=path):
+                self.connection.request(
+                    method,
+                    path,
+                    body,
+                    {
+                        "Content-Type": "text/plain",
+                        "Origin": "https://attacker.example",
+                    },
+                )
+                response = self.connection.getresponse()
+                payload = json.loads(response.read())
+                self.assertEqual(response.status, 403)
+                self.assertIn("cross-origin", payload["error"])
+
     def test_vision_analysis_rejects_invalid_image_formats(self) -> None:
         for content_type, image in (
             ("image/gif", b"GIF89a"),

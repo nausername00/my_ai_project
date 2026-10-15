@@ -11,7 +11,7 @@ import json
 import os
 import threading
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Mapping, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen

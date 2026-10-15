@@ -11,7 +11,8 @@
 from __future__ import annotations
 
 import json
-import shlex
+import ast
+import operator
 import subprocess
 import threading
 from pathlib import Path
@@ -130,55 +131,100 @@ def script_draft(topic: str, style: str = "讲解") -> dict[str, Any]:
     }
 
 
-# 技术分身：白名单只读 / 计算命令；危险与外部操作一律拒绝
+# 技术分身：仅允许固定只读 Git 查询和纯 AST 数值计算；不执行模型提供的 Python 代码。
 SAFE_COMMANDS: dict[str, str] = {
-    "python": "python 计算（仅 -c 表达式，禁网络 / 文件写）",
+    "python": "数值计算（仅限安全的数字与算术运算，不启动解释器）",
     "git": "git 只读（status / log / rev-parse）",
 }
-DANGEROUS_TOKENS = (
-    "rm ", "del ", "format ", ">", "|", "&", "curl ", "wget ",
-    "http://", "https://", "pip ", "conda ", "shutdown ", "taskkill ",
-    "--force", "--delete", "shell:",
-)
+
+_BINARY_OPERATORS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+}
+_UNARY_OPERATORS = {ast.UAdd: operator.pos, ast.USub: operator.neg}
+
+
+def _calculate_expression(source: str) -> int | float:
+    """Evaluate a small arithmetic grammar without compiling or executing code."""
+    import re
+
+    match = re.fullmatch(r"\s*print\((.*)\)\s*", source, re.DOTALL)
+    expression = match.group(1) if match else source
+    try:
+        tree = ast.parse(expression, mode="eval")
+    except (SyntaxError, ValueError) as error:
+        raise ValueError("仅允许数字与算术表达式；危险语法已拒绝") from error
+    if sum(1 for _ in ast.walk(tree)) > 64:
+        raise ValueError("算术表达式过长")
+
+    def evaluate(node: ast.AST) -> int | float:
+        if isinstance(node, ast.Expression):
+            return evaluate(node.body)
+        if isinstance(node, ast.Constant) and type(node.value) in (int, float):
+            if abs(node.value) > 1_000_000_000:
+                raise ValueError("数值超出计算范围")
+            return node.value
+        if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPERATORS:
+            return _UNARY_OPERATORS[type(node.op)](evaluate(node.operand))
+        if isinstance(node, ast.BinOp) and type(node.op) in _BINARY_OPERATORS:
+            left, right = evaluate(node.left), evaluate(node.right)
+            if isinstance(node.op, ast.Pow) and abs(right) > 8:
+                raise ValueError("指数超出计算范围")
+            try:
+                result = _BINARY_OPERATORS[type(node.op)](left, right)
+            except (ArithmeticError, ValueError) as error:
+                raise ValueError("算术表达式无法计算") from error
+            if isinstance(result, (int, float)) and abs(result) > 1_000_000_000:
+                raise ValueError("计算结果超出范围")
+            return result
+        raise ValueError("仅允许数字与算术运算；危险语法已拒绝")
+
+    return evaluate(tree)
 
 
 def safe_exec(command: str, args: str = "", timeout: int = 10) -> dict[str, Any]:
-    """技术分身：白名单命令安全执行（超时 + 输出捕获，拒绝危险操作）。"""
+    """执行受限计算或固定 Git 查询；不会执行调用方提供的代码或命令参数。"""
     cmd = command.strip().lower()
     if cmd not in SAFE_COMMANDS:
         raise ValueError(f"命令不在白名单: {command}")
-    full = f"{command} {args}".strip()
-    if any(t in full.lower() for t in DANGEROUS_TOKENS):
-        raise ValueError("命令含危险 / 外部网络操作，已拒绝")
     if cmd == "python":
         expr = args.strip()
-        if not expr.startswith("-c "):
-            raise ValueError("python 仅允许 -c 表达式")
-        code = expr[3:].strip()
-        if any(
-            k in code
-            for k in ("import", "open(", "exec(", "eval(", "subprocess", "os.", "sys.")
-        ):
-            raise ValueError("表达式含危险能力，已拒绝")
+        if expr.startswith("-c "):
+            expr = expr[3:].strip()
+        value = _calculate_expression(expr)
+        return {
+            "task": "safe_exec",
+            "command": f"python -c {expr}",
+            "returncode": 0,
+            "stdout": f"{value}\n",
+            "stderr": "",
+            "mode": "safe_arithmetic",
+        }
+    subcommand = args.strip().lower()
+    fixed_args = {
+        "status": ["status", "--short"],
+        "log": ["log", "-5", "--oneline"],
+        "rev-parse": ["rev-parse", "--show-toplevel"],
+    }.get(subcommand)
+    if fixed_args is None:
+        raise ValueError("git 仅允许 status、log、rev-parse 固定只读查询")
+    try:
         result = subprocess.run(
-            ["python", "-c", code],
+            ["git", *fixed_args],
             capture_output=True,
             text=True,
-            timeout=timeout,
+            timeout=max(1, min(int(timeout), 10)),
         )
-    else:  # git
-        parts = shlex.split(args)
-        if not parts or parts[0] not in ("status", "log", "rev-parse"):
-            raise ValueError("git 仅允许 status / log / rev-parse 只读子命令")
-        result = subprocess.run(
-            ["git"] + parts,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
+    except subprocess.TimeoutExpired:
+        raise ValueError("Git 查询超时") from None
     return {
         "task": "safe_exec",
-        "command": full,
+        "command": f"git {subcommand}",
         "returncode": result.returncode,
         "stdout": (result.stdout or "")[:1000],
         "stderr": (result.stderr or "")[:500],
