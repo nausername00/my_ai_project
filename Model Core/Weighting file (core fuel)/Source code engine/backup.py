@@ -63,3 +63,123 @@ def backup_character_data(
         "count": len(copied),
         "created_at": timestamp,
     }
+
+
+# ---------------------------------------------------------------------------
+# 阶段 0：完整性校验 / 恢复预览 / 恢复（拒绝覆盖）/ 保留策略
+# ---------------------------------------------------------------------------
+
+
+def verify_backup(backup_dir: str | Path) -> dict[str, Any]:
+    """校验一份备份：文件存在、非空、JSON 可解析；返回逐文件报告。"""
+    root = Path(backup_dir)
+    if not root.is_dir():
+        raise ValueError(f"备份目录不存在: {backup_dir}")
+    errors: list[str] = []
+    checked: list[str] = []
+    for item in sorted(root.rglob("*")):
+        if not item.is_file():
+            continue
+        relative = item.relative_to(root).as_posix()
+        checked.append(relative)
+        try:
+            if item.stat().st_size < 1:
+                errors.append(f"{relative}: 文件为空")
+                continue
+            if item.suffix.lower() == ".json":
+                import json as _json
+
+                with item.open("r", encoding="utf-8") as handle:
+                    _json.load(handle)
+        except (OSError, ValueError) as error:
+            errors.append(f"{relative}: {error}")
+    return {
+        "backup_dir": str(root),
+        "ok": not errors,
+        "checked": checked,
+        "count": len(checked),
+        "errors": errors,
+    }
+
+
+def restore_preview(backup_dir: str | Path, target_root: str | Path) -> dict[str, Any]:
+    """列出恢复将产生的相对路径与目标绝对路径；不执行任何写入。"""
+    root = Path(backup_dir)
+    target = Path(target_root).resolve()
+    if not root.is_dir():
+        raise ValueError(f"备份目录不存在: {backup_dir}")
+    entries = []
+    for item in sorted(root.rglob("*")):
+        if not item.is_file():
+            continue
+        relative = item.relative_to(root)
+        entries.append(
+            {
+                "source": item.as_posix(),
+                "relative": relative.as_posix(),
+                "target": (target / relative).as_posix(),
+            }
+        )
+    return {"backup_dir": str(root), "target_root": str(target), "entries": entries}
+
+
+def restore_backup(
+    backup_dir: str | Path,
+    target_root: str | Path,
+    *,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """把备份恢复到 target_root；绝不覆盖已存在文件（冲突时拒绝写入）。
+
+    dry_run=True 时只做检查与冲突探测，不写入任何文件。
+    返回 {restored, conflicts, dry_run}；有冲突时不写任何冲突文件，其余照写。
+    """
+    preview = restore_preview(backup_dir, target_root)
+    target = Path(target_root)
+    restored: list[str] = []
+    conflicts: list[str] = []
+    for entry in preview["entries"]:
+        destination = Path(entry["target"])
+        if destination.exists():
+            conflicts.append(entry["relative"])
+            continue
+        if dry_run:
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(entry["source"], destination)
+        restored.append(entry["relative"])
+    return {
+        "backup_dir": str(target),
+        "dry_run": bool(dry_run),
+        "restored": sorted(restored),
+        "conflicts": sorted(conflicts),
+        "restored_count": len(restored),
+        "conflict_count": len(conflicts),
+    }
+
+
+def prune_backups(backup_root: str | Path, keep_last: int = 10) -> dict[str, Any]:
+    """保留最近 keep_last 份时间戳备份，删除更旧目录；返回删除清单。"""
+    root = Path(backup_root)
+    if not root.is_dir():
+        return {"removed": [], "kept": []}
+    directories = sorted(
+        (d for d in root.iterdir() if d.is_dir()),
+        key=lambda d: d.name,
+        reverse=True,
+    )
+    keep = max(1, int(keep_last))
+    to_remove = directories[keep:]
+    removed = []
+    for directory in to_remove:
+        try:
+            shutil.rmtree(directory, ignore_errors=True)
+            removed.append(directory.name)
+        except OSError:
+            continue
+    return {
+        "backup_root": str(root),
+        "removed": sorted(removed),
+        "kept": sorted(d.name for d in directories[:keep]),
+        "keep_last": keep,
+    }

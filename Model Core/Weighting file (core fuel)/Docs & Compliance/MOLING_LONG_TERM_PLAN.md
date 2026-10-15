@@ -61,6 +61,18 @@
 6. 为备份提供完整性校验、保留策略、恢复预览和隔离目录恢复演练；避免恢复覆盖当前数据。
 7. 统一测试入口及依赖说明，固定基础 Python/Node 版本；核心测试不依赖 Ollama、网络、语音下载或外部服务。
 
+### 阶段 0 加固落地记录（2026-10-15）
+
+以下把上表 7 项全部处理并登记证据；新增测试 9 项（审计 4 + 备份闭环 5），Python 基线由 448 升至 457。
+
+1. **受控环境验证**：Python 457 通过 / 6 跳过、Node 58 通过、语法检查通过、Electron 真实启动冒烟通过（F1 修复后主进程存活）。
+2. **API 副作用路由审查**：do_POST/PUT/DELETE 方法级 CSRF（`_reject_untrusted_browser_origin`，非 `moling://local` 来源 403）；`_read_json` 请求体 1MB 上限；审批/回写字段 `_strict_json_bool` 只接受真 JSON 布尔；工具执行路由 `/v1/agent/tool/execute` 用 `X-Moling-Tool-Capability` HMAC 能力令牌门禁（缺令牌或比对失败即 403，无副作用），并支持 trace 取消/超时；分身 task/execute/writeback 走严格审批；GET 的 social/notify 等敏感读保持 127.0.0.1-only。
+3. **任意代码执行路径**：全引擎扫描确认——`avatar_tasks.py` 已改为纯 AST 数值计算器（白名单算子/节点≤64/数值≤1e9/指数≤8）+ git 固定只读参数；`computer_use.py` 全部 `subprocess.Popen` 参数化（`shell=False`、路径经 `safe_relpath` 白名单、超时+取消）；无 `eval`/`exec`/`os.system` 调用（`model.eval()` 为 PyTorch 模式切换，非代码执行）。
+4. **API 默认边界**：`app.py` 默认绑定 127.0.0.1；`--host` 非回环时打印醒目认证警告；请求体上限（JSON 1MB、音频 25MB、图片 10MB/尺寸/像素限制）与字段长度限制齐备。
+5. **审计日志字段白名单**：新增 `audit.py`（JSONL 追加、5MB 轮转、失败静默、线程安全），只落盘 `ts/method/route/status/duration_ms/error/client` 七字段；`log_message` 占位改为真实审计，`_tracked` 为每个请求记录；白名单不含任何令牌/正文/内容字段名（测试断言）。
+6. **备份完整性/保留/恢复**：`backup.py` 新增 `verify_backup`（存在/非空/JSON 可解析）、`restore_preview`（只列不写）、`restore_backup`（默认 dry_run、拒绝覆盖已存在文件、其余照常恢复）、`prune_backups`（保留最近 N 份）；5 项测试覆盖损坏检出/预览/干跑零写入/拒绝覆盖/保留策略。
+7. **统一测试入口与版本固定**：新增 `Testing & Evaluation/run_all_tests.bat`（停 8000 → Python 全量 → 语法 → Node，汇总退出码）与 `TEST_BASELINE.md`（OS/Python 3.14.5/Node v22.23.2/Git 2.56/命令/基线/跳过原因）。
+
 ### 阶段 0 验收
 
 - 核心 Python 模块可以导入，API 可在隔离测试中启动；单元测试和桌面逻辑测试通过，跳过项逐项说明原因。

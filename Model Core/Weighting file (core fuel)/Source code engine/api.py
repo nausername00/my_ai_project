@@ -34,6 +34,8 @@ from explore import (
 )
 from pathlib import Path
 
+from audit import AuditLog
+
 from agent_tools import (
     PLAN_TOOL_NAMES,
     _trace_store,
@@ -244,7 +246,21 @@ def _tracked(method: Any):
             elapsed = (perf_counter() - start) * 1000.0
             with _METRICS_LOCK:
                 _bump(self.path, method.__name__, elapsed, error=failed)
-
+            # 阶段 0 审计：只记录元数据（白名单见 audit.py），绝不记录正文/令牌。
+            self._audit_method = method.__name__.removeprefix("do_").upper()
+            self._audit_route = urlsplit(self.path).path
+            self._audit_duration_ms = elapsed
+            self._audit_error = "exception" if failed else ""
+            client_addr = getattr(self, "client_address", None)
+            self._audit_client = (
+                "loopback"
+                if client_addr and client_addr[0] in ("127.0.0.1", "::1")
+                else "other" if client_addr else "unknown"
+            )
+            # 测试桩可能没有 log_message；生产 ApiHandler 必有。
+            log_message = getattr(self, "log_message", None)
+            if log_message is not None:
+                log_message("")
     return wrapper
 
 
@@ -315,6 +331,8 @@ class ApiHandler(BaseHTTPRequestHandler):
     # 分身系统惰性初始化：不在 import 时创建实例（避免启动即写文件、
     # 也避免类属性被测试进程共享污染）。create_server 可显式重设（测试用 env 路径）。
     _avatar_system: "AvatarSystem | None" = None
+    # 阶段 0 审计日志：字段白名单见 audit.py；create_server/测试可注入临时目录。
+    audit_log: "AuditLog | None" = None
 
     @classmethod
     def get_avatar_system(cls) -> "AvatarSystem":
@@ -528,6 +546,7 @@ class ApiHandler(BaseHTTPRequestHandler):
         return safe_note
 
     def _send_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
+        self._last_status = int(status)
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -541,6 +560,7 @@ class ApiHandler(BaseHTTPRequestHandler):
         content_type: str,
         body: bytes,
     ) -> None:
+        self._last_status = int(status)
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
@@ -2516,7 +2536,23 @@ class ApiHandler(BaseHTTPRequestHandler):
         return self.rfile.read(content_length), suffix
 
     def log_message(self, format: str, *args: Any) -> None:
-        return
+        """审计日志入口（阶段 0 字段白名单）。
+
+        只记录请求元数据（方法/路由/状态/耗时/错误类型/来源分类），
+        绝不记录请求体、记忆正文、对话、音频/图像内容或任何令牌。
+        日志不可用时静默跳过，不影响请求处理。
+        """
+        audit = getattr(ApiHandler, "audit_log", None)
+        if audit is None:
+            return
+        audit.record(
+            method=getattr(self, "_audit_method", ""),
+            route=getattr(self, "_audit_route", ""),
+            status=int(getattr(self, "_last_status", 200)),
+            duration_ms=float(getattr(self, "_audit_duration_ms", 0.0)),
+            error=str(getattr(self, "_audit_error", "")),
+            client=str(getattr(self, "_audit_client", "")),
+        )
 
     # E7：为四个请求方法统一包上轻量指标统计（计数/延迟/异常）
     do_GET = _tracked(do_GET)  # type: ignore[assignment]

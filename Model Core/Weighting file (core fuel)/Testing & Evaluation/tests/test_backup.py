@@ -6,7 +6,13 @@ import unittest
 from pathlib import Path
 
 import api
-from backup import backup_character_data
+from backup import (
+    backup_character_data,
+    prune_backups,
+    restore_backup,
+    restore_preview,
+    verify_backup,
+)
 
 
 def _make_data(root: Path) -> None:
@@ -78,6 +84,7 @@ class BackupCharacterDataTest(unittest.TestCase):
 
     def test_backup_endpoint_shape(self) -> None:
         handler = api.ApiHandler.__new__(api.ApiHandler)
+        handler.client_address = ("127.0.0.1", 0)
         seen = {}
         handler._send_json = lambda status, payload: seen.update(
             {"status": status, "payload": payload}
@@ -95,6 +102,88 @@ class BackupCharacterDataTest(unittest.TestCase):
         self.assertIn("backup_dir", seen["payload"])
         self.assertGreaterEqual(seen["payload"]["count"], 1)
         self.assertIn("memory.json", seen["payload"]["files"])
+
+
+class BackupLifecycleP0Test(unittest.TestCase):
+    """阶段 0：完整性校验 / 恢复预览 / 恢复拒绝覆盖 / 保留策略。"""
+
+    def test_verify_backup_ok_and_corrupt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            data = root / "data"
+            data.mkdir()
+            _make_data(data)
+            backup_root = root / "backups"
+            result = backup_character_data(data, backup_root)
+            backup_dir = Path(result["backup_dir"])
+            report = verify_backup(backup_dir)
+            self.assertTrue(report["ok"], report["errors"])
+            self.assertGreaterEqual(report["count"], 3)
+            # 破坏一个 JSON 文件后应被检出
+            (backup_dir / "affect.json").write_text("{not json", encoding="utf-8")
+            broken = verify_backup(backup_dir)
+            self.assertFalse(broken["ok"])
+            self.assertTrue(any("affect.json" in e for e in broken["errors"]))
+
+    def test_restore_preview_lists_without_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            data = root / "data"
+            data.mkdir()
+            _make_data(data)
+            result = backup_character_data(data, root / "backups")
+            target = root / "restored"
+            preview = restore_preview(result["backup_dir"], target)
+            self.assertEqual(preview["target_root"], str(target.resolve()))
+            self.assertGreaterEqual(len(preview["entries"]), 3)
+            self.assertFalse(target.exists())
+
+    def test_restore_dry_run_writes_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            data = root / "data"
+            data.mkdir()
+            _make_data(data)
+            result = backup_character_data(data, root / "backups")
+            target = root / "restored"
+            outcome = restore_backup(result["backup_dir"], target, dry_run=True)
+            self.assertTrue(outcome["dry_run"])
+            self.assertEqual(outcome["restored"], [])
+            self.assertFalse(target.exists())
+
+    def test_restore_refuses_to_overwrite(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            data = root / "data"
+            data.mkdir()
+            _make_data(data)
+            result = backup_character_data(data, root / "backups")
+            target = root / "restored"
+            target.mkdir()
+            (target / "memory.json").write_text("existing", encoding="utf-8")
+            outcome = restore_backup(result["backup_dir"], target, dry_run=False)
+            self.assertIn("memory.json", outcome["conflicts"])
+            self.assertNotIn("memory.json", outcome["restored"])
+            self.assertEqual(
+                (target / "memory.json").read_text(encoding="utf-8"), "existing"
+            )
+            # 其余无冲突文件照常恢复
+            self.assertIn("affect.json", outcome["restored"])
+
+    def test_prune_keeps_latest_n(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            data = root / "data"
+            data.mkdir()
+            (data / "memory.json").write_text("{}", encoding="utf-8")
+            backup_root = root / "backups"
+            backup_character_data(data, backup_root)
+            backup_character_data(data, backup_root)
+            backup_character_data(data, backup_root)
+            outcome = prune_backups(backup_root, keep_last=2)
+            self.assertEqual(len(outcome["removed"]), 1)
+            self.assertEqual(len(outcome["kept"]), 2)
+            self.assertEqual(len(list(backup_root.iterdir())), 2)
 
 
 if __name__ == "__main__":
