@@ -845,6 +845,25 @@ class ApiHandler(BaseHTTPRequestHandler):
                 self.get_avatar_system().daily_brief(),
             )
             return
+        if path == "/v1/session/resume":
+            # T5：断点续接——手机端可恢复的会话上下文摘要
+            # （简报默认关：不自动推送，仅按需拉取；服务端不存对话 history，
+            #  客户端把最近 ≤20 条随 /v1/chat 传入即可无缝续接）
+            self._send_json(
+                HTTPStatus.OK,
+                {
+                    "resume_at": datetime.now(timezone.utc).isoformat(),
+                    "personas": self.get_avatar_system().persona_list(),
+                    "memories": self.character_store.list_memories()[-20:],
+                    "brief": {
+                        "available": True,
+                        "enabled": False,
+                        "hint": "每日简报默认关闭、不自动推送；需要时按需拉取 /v1/avatars/daily-brief",
+                    },
+                    "hint": "手机续接：携带本摘要 + 最近对话 history（≤20 条）调用 /v1/chat",
+                },
+            )
+            return
         if path.startswith("/v1/avatars/") and path.endswith("/short-memory"):
             avatar_id = path.split("/")[4]
             self._send_json(
