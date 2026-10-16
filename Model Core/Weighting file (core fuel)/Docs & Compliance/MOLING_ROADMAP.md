@@ -705,7 +705,7 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
 - **产品形态方向确认（用户 2026-10-16 明示）**：墨灵定位为**桌面软件**（Electron 已打包 `墨灵-Setup-0.1.0.exe`，主入口），手机 PWA / 网页仅作附加陪伴载体，**不做网站方向**；手机端做不到也不强求。
 
 **待办登记（按优先级）**：
-1. D 层专属测试补全：retrieval / visualize / scene / collaboration 各建 test_*.py（computer_use/browser 依赖真实系统与外部浏览器，做接口级/跳过合理项，不强行 mock）；utils 归入 A 层小工具测试。
+1. ~~D 层专属测试补全~~ **已完成（2026-10-16）**：7 个活跃模块各建专属测试——test_retrieval(25) / test_scene(17) / test_collaboration(25) / test_visualize(21) / test_utils(27) / test_computer_use(14) / test_browser(19)，共新增约 148 项；computer_use 用真实可执行命令（Windows 下 `py`，白名单内），browser 做接口级（域名白名单/权限门/数据结构，mock `_ensure_open` 不实跑 playwright），visualize 栅格化分支在 cairosvg 未装时按设计跳过。**测试同时发现并修复 1 个真实模块 bug**：visualize.py 的 `rasterize_svg` 抛 `ModuleUnavailableError` 但未导入该类（NameError），已补 import。**回归证据**：Python 全量 **557 → 704 passed / 7 skipped**（+147），Node 69 passed 不变。
 2. Git 写操作工具 `git_commit`（待用户拍板）。
 3. 10GB 大模型可选升级（待用户拍板）。
 4. E4 平台治理深化（远期唯一 pending 项，已登记于任务列表）。

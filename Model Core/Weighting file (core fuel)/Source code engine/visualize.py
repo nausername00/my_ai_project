@@ -21,7 +21,14 @@ import textwrap
 from typing import Any, Iterable, Mapping, Sequence
 import xml.sax.saxutils
 
-from utils import PermissionDenied, SingletonLock, safe_filename, truncate_text, utc_now_iso
+from utils import (
+    ModuleUnavailableError,
+    PermissionDenied,
+    SingletonLock,
+    safe_filename,
+    truncate_text,
+    utc_now_iso,
+)
 
 __all__ = [
     "Creator",
