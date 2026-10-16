@@ -1,6 +1,6 @@
 "use strict";
 
-// 墨灵移动端轻量陪伴页：本地局域网直连后端 /v1/chat。
+// 墨灵移动端轻量陪伴页：本地局域网直连后端 /v1/generate。
 // 页面本身无数据；调用需遵循后端认证（非本机访问需 MOLING_API_TOKEN）。
 // Service Worker 仅在 HTTPS 下注册（HTTP 局域网自动降级为无离线缓存）。
 
@@ -91,7 +91,7 @@ composer.addEventListener("submit", async (event) => {
   const reply = addBubble("…", "bot");
   sendBtn.disabled = true;
   try {
-    const { status, body } = await api("/chat", {
+    const { status, body } = await api("/generate", {
       prompt: text,
       history: history.slice(-10),
     });
