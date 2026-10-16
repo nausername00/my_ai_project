@@ -36,6 +36,7 @@ const recordButton = document.getElementById("record-button");
 const fileButton = document.getElementById("file-button");
 const observeButton = document.getElementById("observe-button");
 const imageButton = document.getElementById("image-button");
+const ocrButton = document.getElementById("ocr-button");
 const trioButton = document.getElementById("trio-button");
 const trioPanel = document.getElementById("trio-panel");
 const trioClose = document.getElementById("trio-close");
@@ -4490,6 +4491,59 @@ async function handleAnalyzeImage() {
   }
 }
 
+async function handleOcrImage() {
+  ocrButton.disabled = true;
+  try {
+    const result = await window.companion.ocrAnalyze();
+    if (result.canceled) return;
+    const analysis = result.analysis || {};
+    const message = addMessage(
+      `我在本机识别了你主动选择的图片「${result.name}」里的文字。图片不保存、不上传；OCR 可能有字符误差，请核对。`,
+      "assistant",
+    );
+    const preview = document.createElement("img");
+    preview.className = "image-analysis-preview";
+    preview.src = result.image_data_url;
+    preview.alt = `本次识别的图片：${result.name}`;
+    const section = document.createElement("section");
+    section.className = "ocr-analysis-result";
+    const fields = analysis.fields || {};
+    const fieldEntries = Object.entries(fields);
+    if (fieldEntries.length) {
+      const table = document.createElement("table");
+      table.className = "ocr-fields-table";
+      for (const [key, value] of fieldEntries) {
+        const row = document.createElement("tr");
+        const labelCell = document.createElement("td");
+        labelCell.textContent = key;
+        const valueCell = document.createElement("td");
+        valueCell.textContent = value;
+        row.append(labelCell, valueCell);
+        table.append(row);
+      }
+      section.append(table);
+    }
+    if (analysis.text) {
+      const textBlock = document.createElement("div");
+      textBlock.className = "ocr-text-block";
+      textBlock.textContent = analysis.text;
+      section.append(textBlock);
+    }
+    const metadata = document.createElement("small");
+    metadata.className = "ocr-meta";
+    metadata.textContent =
+      `引擎 ${analysis.engine || "?"} · 语言 ${(analysis.languages || []).join("+")} · ` +
+      `${analysis.chars ?? "?"} 字符 · 匹配字段 ${(analysis.matched || []).length}`;
+    section.append(metadata);
+    message.append(preview, section);
+    conversation.scrollTop = conversation.scrollHeight;
+  } catch (error) {
+    addMessage(`文字识别没有完成：${error.message || error}`, "assistant", "error-message");
+  } finally {
+    ocrButton.disabled = false;
+  }
+}
+
 let _avatarNameMap = null;
 async function avatarNameFor(avatarId) {
   try {
@@ -4862,6 +4916,7 @@ recordButton.addEventListener("click", toggleRecording);
 
 fileButton.addEventListener("click", handleDiscoverFile);
 imageButton.addEventListener("click", handleAnalyzeImage);
+ocrButton.addEventListener("click", handleOcrImage);
 
 async function handleDiscoverFile() {
   if (

@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld(
     generate: (prompt, history) =>
       ipcRenderer.invoke("companion:generate", prompt, history),
     analyzeImage: () => ipcRenderer.invoke("companion:analyze-image"),
+    ocrAnalyze: () => ipcRenderer.invoke("companion:ocr-analyze"),
     discoverFile: () => ipcRenderer.invoke("companion:discover-file"),
     discoverContext: () => ipcRenderer.invoke("companion:discover-context"),
     partnersStatus: () => ipcRenderer.invoke("companion:partners-status"),

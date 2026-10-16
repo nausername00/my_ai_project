@@ -7,7 +7,7 @@
   "scripts": {
     "start": "electron .",
     "check": "node --check main.cjs && node --check preload.cjs && node --check floating-preload.cjs && node --check renderer.js && node --check voice-playback.js && node --check avatar-display.js && node --check mini-game-policy.cjs && node --check mini-game-drafts.cjs && node --check ollama-setup.cjs && node --check voice-resources.cjs && node --check asset-inspector.cjs",
-    "test": "node --test ollama-setup.test.cjs voice-resources.test.cjs voice-playback.test.cjs avatar-display.test.cjs floating-avatar.test.cjs mini-game-policy.test.cjs mini-game-drafts.test.cjs notifications.test.cjs social.test.cjs asset-inspector.test.cjs layout.test.cjs trio.test.cjs",
+    "test": "node --test ollama-setup.test.cjs voice-resources.test.cjs voice-playback.test.cjs avatar-display.test.cjs floating-avatar.test.cjs mini-game-policy.test.cjs mini-game-drafts.test.cjs notifications.test.cjs social.test.cjs asset-inspector.test.cjs layout.test.cjs trio.test.cjs ocr.test.cjs",
     "test:e2e": "node e2e/e2e-smoke.cjs",
     "build:backend": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\build-backend.ps1",
     "dist:win": "npm run build:backend && electron-builder --win nsis"

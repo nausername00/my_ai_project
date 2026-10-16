@@ -642,12 +642,21 @@
 - 交互：面板打开自动聚焦问题框；Enter 运行 / Shift+Enter 换行 / Esc 关闭；运行中显示"三角角色依次发言中…"；裁决后「把结论带回聊天」一键回填主输入框并关闭面板。
 - 测试：trio.test.cjs 扩展至 6 项（新增结构化渲染 + Enter/Esc/回填断言），Node 全量 **64 passed**。踩坑：断言写 `class="…"` 前缀，实际代码用 `className = \`…\`` 模板，改后通过。
 - **真实模型验收**（`Testing & Evaluation\tests\trio_acceptance.py` 可复现，ollama qwen2.5:0.5b）：直调 `run_trio` 真实跑完——破局·火给出方案、守界·冰 JSON 校验 verdict=accept、调和·衡裁决 adopt（"冰校验通过，采纳火方案"），耗时 1535ms；HTTP 层 urllib POST `/v1/avatars/trio` 返回 200 + rounds_used=1 + action=adopt + final 结论。**全链路（前端按钮 → IPC → HTTP → 后端 → ollama 模型 → 火/冰/衡）真实可运行**。备注：Windows 下 curl.exe 对慢请求曾空回复（exit 52），urllib 正常——HTTP 客户端怪癖而非服务缺陷。
-- **证据**：Node 64 passed；直调与 HTTP 双通道真实模型 PASS。
+- 踩坑自纠：验收脚本首跑让 CharacterStore 在源码目录写出运行痕迹（affect.json / characters/default.json）被误提交，已删除并改 `trio_acceptance.py` 用 `tempfile.TemporaryDirectory` 只读复用真实角色卡，零污染源码目录。
+- **证据**：Node 64 passed；直调与 HTTP 双通道真实模型 PASS；提交 9f7639b（完善）+ 47d39ad（清理）。
+
+### T2 待办闭环：OCR 前端透出（2026-10-16）
+
+- 后端：`/v1/ocr/analyze` 端点（`Source code engine\api.py`），与图片分析同一安全链——`X-Moling-Vision-Consent` 一次性授权（HMAC-SHA256 nonce.timestamp）、content_type 白名单 png/jpeg/webp、10MB 上限、格式签名与 40MP 尺寸校验、J2 真实解码验证；图片写入 `tempfile.NamedTemporaryFile` → `ocr_text` + `extract_fields`，`finally` 即用即清（无残留）。
+- 前端：输入区新增「识文字」按钮（`#ocr-button`，title"选择一张图片，识别其中的文字"）→ `preload.cjs` 暴露 `companion.ocrAnalyze` → `main.cjs` 注册 `companion:ocr-analyze`（`chooseAndOcrImage`：选图 → 大小校验 → 本次允许确认框 → consent 构造 → POST `/v1/ocr/analyze`，明确"只在本机交给 Tesseract，不上传不保存"）→ `renderer.js` 结果卡片（图片预览 + 字段表 + 识别文本块 + meta），`style.css` 对应样式。
+- 测试：新增 `test_ocr_api.py`（8 项：无 consent 403 / 无效签名 403 / 不支持类型 400 / 畸形 base64 400 / 签名不符内容 400 / 成功路径 200 + 字段 / consent 单次使用 / 引擎缺失 400）。踩坑：首跑 5 项 403≠400——`_consent_header` nonce 固定 `"b"*32`，首个用例消耗后其余全被一次性机制拒绝；改 `secrets.token_hex(16)` 后 8 项全过。前端新增 `ocr.test.cjs`（5 项），Node 全量 **69 passed**（原 64 + 5）。
+- **真实引擎验收**（`Testing & Evaluation\tests\ocr_api_acceptance.py` 可复现）：PIL 合成中文采购单 → 自起服务（占位模型 + 全隔离临时目录）→ 一次性 consent → POST `/v1/ocr/analyze` → **200** + tesseract 真实识别 102 字符 + 四字段全命中（发票号/日期精确，供应商/金额按关键子串容忍）+ temp 图片残留 0。字符级误差（文他/半¥）为引擎质量，非代码缺陷。
+- **证据**：Python 534 passed / 6 skipped（原 526 + 8）；Node 69 passed；HTTP 真实验收 PASS。
 
 ### T 系列整体验收（2026-10-16）
 
 T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅ → T4 服务化认证 ✅ → T5 手机断点续接 ✅ → T6 插件+动态选型 ✅
-全部六项按依赖序完成：每项均有可运行成果（HTTP 端点）、回归证据（全量 Python 测试 526 passed / 6 skipped，Node 63 passed 基线）、文档登记（本表）与提交推送（7dfbad5 / bb240f3 / 6367565 / d27ebe4 / 3dcd94e / 1de388b）。遗留待办（不阻塞 T 线）：OCR 前端透出（后端与真实验收已闭环）、T4 开机自启/HTTPS 系统层落地、T5 手机客户端载体、T6 插件执行授权与多后端并行。
+全部六项按依赖序完成：每项均有可运行成果（HTTP 端点）、回归证据（全量 Python 测试 526 passed / 6 skipped，Node 63 passed 基线）、文档登记（本表）与提交推送（7dfbad5 / bb240f3 / 6367565 / d27ebe4 / 3dcd94e / 1de388b）。遗留待办（不阻塞 T 线）：OCR 前端透出（已完成，见 T2 待办闭环段，Python 534 / Node 69）、T4 开机自启/HTTPS 系统层落地、T5 手机客户端载体、T6 插件执行授权与多后端并行。
 
 
 

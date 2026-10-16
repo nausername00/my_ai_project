@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 import re
+import tempfile
 import threading
 from time import monotonic, perf_counter, time
 from typing import Any
@@ -26,6 +27,7 @@ from asset_check import check_assets, delivery_manifest, format_manifest
 from avatar_trio import list_trio_roles, run_trio
 from governance import CostLedger, task_status_timeline
 from plugins import PluginRegistry, choose_backend
+from ocr import detect_ocr_engine, extract_fields, ocr_text
 from discovery import discover_file, observe_context
 from explore import (
     propose_exploration,
@@ -1352,6 +1354,80 @@ class ApiHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             except ModelUnavailableError as error:
                 self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(error)})
+            return
+        if path == "/v1/ocr/analyze":
+            # OCR 前端透出：与图片分析同一授权与解码验证链（本次明确授权、
+            # 真实解码校验、10MB/40MP 上限），识别后做字段抽取，临时文件即用即清。
+            if not self._consume_vision_consent(
+                self.headers.get("X-Moling-Vision-Consent", "")
+            ):
+                self._send_json(
+                    HTTPStatus.FORBIDDEN,
+                    {"error": "图片识别必须经过桌面应用的本次明确授权"},
+                )
+                return
+            try:
+                payload = self._read_json(max_bytes=14_000_000)
+                encoded = payload.get("image_base64")
+                content_type = payload.get("content_type")
+                if not isinstance(encoded, str) or not encoded:
+                    raise ValueError("image_base64 must be a non-empty string")
+                if content_type not in {"image/png", "image/jpeg", "image/webp"}:
+                    raise ValueError("only PNG, JPEG, and WebP images are supported")
+                try:
+                    image = base64.b64decode(encoded, validate=True)
+                except (binascii.Error, ValueError) as error:
+                    raise ValueError("image_base64 is invalid") from error
+                if not image or len(image) > self.MAX_IMAGE_BYTES:
+                    raise ValueError("image must be between 1 byte and 10 MB")
+                if not self._has_supported_image_signature(image, content_type):
+                    raise ValueError("image contents do not match the declared format")
+                width, height = self._image_dimensions(image, content_type)
+                if (
+                    width < 1
+                    or height < 1
+                    or width > self.MAX_IMAGE_DIMENSION
+                    or height > self.MAX_IMAGE_DIMENSION
+                    or width * height > self.MAX_IMAGE_PIXELS
+                ):
+                    raise ValueError("image dimensions exceed the 40 megapixel analysis limit")
+                # 与 J2 相同：以解码器实际解析结果为准，拒绝畸形/截断文件
+                self._decode_and_verify_image(image, content_type)
+                engine = detect_ocr_engine()
+                if not engine["available"]:
+                    raise ValueError("未检测到本地 OCR 引擎（Tesseract），请先安装后重试")
+                suffix = (
+                    ".png" if content_type == "image/png"
+                    else ".jpg" if content_type == "image/jpeg"
+                    else ".webp"
+                )
+                with tempfile.NamedTemporaryFile(
+                    suffix=suffix, delete=False
+                ) as tmp:
+                    tmp.write(image)
+                    tmp_path = tmp.name
+                try:
+                    ocr_result = ocr_text(tmp_path)
+                    fields_result = extract_fields(ocr_result["text"])
+                finally:
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:  # 清理失败不影响识别结果
+                        pass
+                self._send_json(
+                    HTTPStatus.OK,
+                    {
+                        "engine": ocr_result["engine"],
+                        "languages": engine["languages"],
+                        "chars": ocr_result["chars"],
+                        "text": ocr_result["text"],
+                        "fields": fields_result["fields"],
+                        "matched": fields_result["matched"],
+                        "source_text_len": fields_result["source_text_len"],
+                    },
+                )
+            except (TypeError, ValueError, json.JSONDecodeError, VisionError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         if path == "/v1/social/collaborate":
             try:

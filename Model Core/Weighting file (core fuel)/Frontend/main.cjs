@@ -176,6 +176,77 @@ async function chooseAndAnalyzeImage() {
   };
 }
 
+// OCR 前端透出：与图片分析同链（选图 → 本次授权 → consent → 识别），
+// 但走 /v1/ocr/analyze（本地 tesseract，不调用模型，不保存图片）。
+async function chooseAndOcrImage() {
+  const picked = await dialog.showOpenDialog({
+    title: "选择一张要识别文字的图片",
+    buttonLabel: "选择图片",
+    properties: ["openFile"],
+    filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "webp"] }],
+  });
+  if (picked.canceled || !picked.filePaths.length) return { canceled: true };
+
+  const filePath = picked.filePaths[0];
+  const extension = path.extname(filePath).toLowerCase();
+  const contentTypeByExtension = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+  };
+  const contentType = contentTypeByExtension[extension];
+  const stats = await fs.stat(filePath);
+  if (!contentType || stats.size < 1 || stats.size > 10 * 1024 * 1024) {
+    throw new Error("请选择 10 MB 以内的 PNG、JPEG 或 WebP 图片。");
+  }
+
+  const approval = await dialog.showMessageBox(
+    BrowserWindow.getFocusedWindow() || mainWindow,
+    {
+      type: "question",
+      title: "确认单次图片文字识别",
+      message: "墨灵会在本机识别你刚选择的这张图片上的文字。",
+      detail:
+        `文件：${path.basename(filePath)}\n` +
+        `大小：${Math.ceil(stats.size / 1024)} KB\n\n` +
+        "图片只在本机交给 Tesseract OCR 提取文字并做字段抽取（如金额/日期/单号），不上传任何服务，也不保存图片本身。识别可能有字符误差，请自行核对。",
+      buttons: ["本次允许", "取消"],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    },
+  );
+  if (approval.response !== 0) return { canceled: true };
+
+  const bytes = await fs.readFile(filePath);
+  if (bytes.byteLength !== stats.size || bytes.byteLength > 10 * 1024 * 1024) {
+    throw new Error("图片在确认后发生变化或超过大小限制，请重新选择。");
+  }
+  const nonce = randomBytes(16).toString("hex");
+  const timestamp = String(Date.now());
+  const consentPayload = `${nonce}.${timestamp}`;
+  const consent = createHmac(
+    "sha256",
+    Buffer.from(visionConsentCapability, "hex"),
+  )
+    .update(consentPayload)
+    .digest("hex");
+  const result = await callApi("/v1/ocr/analyze", "POST", {
+    image_base64: bytes.toString("base64"),
+    content_type: contentType,
+  }, {
+    "X-Moling-Vision-Consent": `${consentPayload}.${consent}`,
+  });
+  return {
+    canceled: false,
+    name: path.basename(filePath),
+    content_type: contentType,
+    image_data_url: `data:${contentType};base64,${bytes.toString("base64")}`,
+    analysis: result,
+  };
+}
+
 function findFreePort() {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -810,6 +881,7 @@ function registerIpcHandlers() {
     callApi("/v1/generate", "POST", { prompt, max_tokens: 128, history }),
   );
   ipcMain.handle("companion:analyze-image", chooseAndAnalyzeImage);
+  ipcMain.handle("companion:ocr-analyze", chooseAndOcrImage);
   ipcMain.handle("companion:discover-file", async () => {
     const picked = await dialog.showOpenDialog({
       title: "分享一个文件给墨灵",
