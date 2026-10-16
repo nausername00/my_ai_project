@@ -690,3 +690,22 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
 - **真实 Ollama 集成测试首次跑通（2026-10-14）**：`RUN_OLLAMA_INTEGRATION=1 py -3 -m unittest test_ollama_integration` → **3 项通过（52.7s，真实 qwen2.5:3b 链路**：生成/翻译），临时目录全隔离，不污染 Character。
 - **E9 生成统计真实验收 PASS**：真实后端生成一次后 metrics.generations = {count:1, chars:30, total_ms:5000.5, avg_ms:5000.5}（从 0 递增）。
 - **README 一致性核对**：`Docs & Compliance\README.md` 的目录角色澄清 / 启动方式（双击 `启动墨灵.bat`）/ 外部 Ollama 模型说明与现状一致，无需修改。
+
+## 资产盘点与测试欠账（2026-10-16）
+
+针对"项目大小 / 是否缺功能 / 每个模块是否完善"的两次盘问，做了全维度实测盘点并登记待办：
+
+- **磁盘账目**：项目目录 2.4GB（Electron 打包 1.9GB + 角色素材 359MB + git 145MB + 代码数 MB）＋ Ollama 模型库 2.17GB（qwen2.5:3b=1.8GB + 0.5b=0.4GB，**在项目目录外**）≈ 4.6GB。"10GB 预期"来自本地大模型路线（7B/14B 量化权重），属**可选升级**（`ollama pull qwen2.5:7b` ≈4.7GB / 14b ≈9GB），非缺失功能。
+- **46 模块完善度分层**（依据：文件大小 + docstring + 测试覆盖实测）：
+  - A 层·深度实装+直接测试：api / character / memory / agent_tools / controller / avatars / planner / inference / speech / vision / explore / brain / agent / ocr / partners / plugins / audit / backup / discovery / governance / avatar_persona / avatar_trio / avatar_collab / avatar_evolution / avatar_tasks。
+  - B 层·轻量落地（功能真实、深度刻意从浅，代码自标注"最轻形态"）：governance / backup / plugins / avatar_media / asset_quality / portrait_prompts / avatar_advice / performance / metrics。
+  - C 层·开发者脚本/实验模板（工具性质，非运行路径）：train / finetune / generate / modeling_xxx / model / utils / app / social。
+  - **D 层·真实欠账（活跃模块但无专属测试）**：retrieval(RAG) / visualize / scene / collaboration / computer_use / browser / utils —— 目前靠 api 级测试间接覆盖。
+- **软件工程闭环核查**：理解仓库→计划→改文件→跑命令→跑测试→分析失败→自己修 **7/8 已拥有**（AgentTraceStore 状态机 proposed→planned→executing→observed→verified + brain 计划校验 + verify_tool_observation 结果验证 + 沙箱 shell/run_tests/文件读写工具，高风险默认审批）；**Git 写操作（commit/push）刻意未开放**（avatar_tasks 仅允许 status/log/rev-parse 只读）——符合"默认关、最小权限"。可选待办：`git_commit` 工具（仅工作区、固定命令、强制审批、禁 push），是否解锁由用户拍板。
+- **产品形态方向确认（用户 2026-10-16 明示）**：墨灵定位为**桌面软件**（Electron 已打包 `墨灵-Setup-0.1.0.exe`，主入口），手机 PWA / 网页仅作附加陪伴载体，**不做网站方向**；手机端做不到也不强求。
+
+**待办登记（按优先级）**：
+1. D 层专属测试补全：retrieval / visualize / scene / collaboration 各建 test_*.py（computer_use/browser 依赖真实系统与外部浏览器，做接口级/跳过合理项，不强行 mock）；utils 归入 A 层小工具测试。
+2. Git 写操作工具 `git_commit`（待用户拍板）。
+3. 10GB 大模型可选升级（待用户拍板）。
+4. E4 平台治理深化（远期唯一 pending 项，已登记于任务列表）。
