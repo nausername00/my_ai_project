@@ -24,6 +24,7 @@ from agent import route_cognition
 from avatars import AvatarSystem
 from asset_check import check_assets, delivery_manifest, format_manifest
 from avatar_trio import list_trio_roles, run_trio
+from governance import CostLedger, task_status_timeline
 from discovery import discover_file, observe_context
 from explore import (
     propose_exploration,
@@ -193,13 +194,17 @@ _METRICS_STARTED_ISO = datetime.now(timezone.utc).isoformat()
 _GENERATION_LOCK = threading.Lock()
 _GENERATION_STATS: dict[str, float] = {"count": 0.0, "chars": 0.0, "total_ms": 0.0}
 
+# T3：按后端分桶的成本账本（内存态，随进程存活）
+_COST_LEDGER = CostLedger()
 
-def record_generation(chars: int, elapsed_ms: float) -> None:
-    """累计一次模型生成的字符数与耗时（主对话成功生成后调用）。"""
+
+def record_generation(chars: int, elapsed_ms: float, *, backend: str = "unknown") -> None:
+    """累计一次模型生成的字符数与耗时（主对话成功生成后调用）；同时入成本账本。"""
     with _GENERATION_LOCK:
         _GENERATION_STATS["count"] += 1
         _GENERATION_STATS["chars"] += max(0, chars)
         _GENERATION_STATS["total_ms"] += max(0.0, elapsed_ms)
+    _COST_LEDGER.record(backend, chars, elapsed_ms)
 
 
 def _path_prefix(path: str) -> str:
@@ -572,6 +577,18 @@ class ApiHandler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/v1/status/metrics":
             self._send_json(HTTPStatus.OK, metrics_snapshot())
+            return
+        if path == "/v1/status/platform":
+            # T3：任务状态时间线 + 按后端成本统计（内存态，随进程存活）
+            tool_entries = self.get_avatar_system().tool_log_list(limit=200)
+            self._send_json(
+                HTTPStatus.OK,
+                {
+                    "tasks": task_status_timeline(tool_entries),
+                    "costs": _COST_LEDGER.snapshot(),
+                    "generations": metrics_snapshot().get("generations"),
+                },
+            )
             return
         if path == "/v1/agent/tools":
             self._send_json(
@@ -2154,7 +2171,11 @@ class ApiHandler(BaseHTTPRequestHandler):
             inference_started = perf_counter()
             text = self.engine.generate(request)
             inference_ms = round((perf_counter() - inference_started) * 1000, 1)
-            record_generation(len(text), inference_ms)
+            record_generation(
+                len(text),
+                inference_ms,
+                backend=self.engine.model_name,
+            )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
