@@ -636,6 +636,14 @@
 - 端到端冒烟：起后端 curl `/v1/avatars/trio-roles` 真实返回三角角色（破局·火 / 守界·冰 / 调和·衡，含 key/name/mode/focus/instruction）。
 - **证据**：Node 63 passed；HTTP 冒烟返回三角角色 JSON。
 
+### T1 待办完善：trio 面板体验 + 真实模型验收（2026-10-16）
+
+- 结果区从 JSON 纯文本升级为结构化渲染：逐轮卡片（破局·火红边 / 守界·冰蓝边，含 verdict 徽章 accept/revise/reject）+ 调和·衡裁决卡（action/reason/final）+ meta（轮数/模型/耗时/来源），details 可折叠。
+- 交互：面板打开自动聚焦问题框；Enter 运行 / Shift+Enter 换行 / Esc 关闭；运行中显示"三角角色依次发言中…"；裁决后「把结论带回聊天」一键回填主输入框并关闭面板。
+- 测试：trio.test.cjs 扩展至 6 项（新增结构化渲染 + Enter/Esc/回填断言），Node 全量 **64 passed**。踩坑：断言写 `class="…"` 前缀，实际代码用 `className = \`…\`` 模板，改后通过。
+- **真实模型验收**（`Testing & Evaluation\tests\trio_acceptance.py` 可复现，ollama qwen2.5:0.5b）：直调 `run_trio` 真实跑完——破局·火给出方案、守界·冰 JSON 校验 verdict=accept、调和·衡裁决 adopt（"冰校验通过，采纳火方案"），耗时 1535ms；HTTP 层 urllib POST `/v1/avatars/trio` 返回 200 + rounds_used=1 + action=adopt + final 结论。**全链路（前端按钮 → IPC → HTTP → 后端 → ollama 模型 → 火/冰/衡）真实可运行**。备注：Windows 下 curl.exe 对慢请求曾空回复（exit 52），urllib 正常——HTTP 客户端怪癖而非服务缺陷。
+- **证据**：Node 64 passed；直调与 HTTP 双通道真实模型 PASS。
+
 ### T 系列整体验收（2026-10-16）
 
 T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅ → T4 服务化认证 ✅ → T5 手机断点续接 ✅ → T6 插件+动态选型 ✅

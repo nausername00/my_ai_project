@@ -30,6 +30,19 @@ test("trio renderer: 绑定面板开关、角色加载与运行，且运行前�
   assert.match(renderer, /trioRunBtn\.disabled = true/);
 });
 
+test("trio renderer 完善: 结构化渲染 + Enter/Esc + 回填聊天", () => {
+  assert.match(renderer, /function renderTrioResult\(result\)/);
+  assert.match(renderer, /function verdictLabel\(verdict\)/);
+  assert.match(renderer, /trioResult\.replaceChildren\(\)/);
+  assert.match(renderer, /card\.className = `trio-round trio-round-\$\{String\(round\.role \|\| ""\)\.toLowerCase\(\)\}`/);
+  assert.match(renderer, /badge\.className = `trio-verdict trio-verdict-\$\{String\(round\.verdict\)\.toLowerCase\(\)\}`/);
+  assert.match(renderer, /调和·衡 裁决/);
+  assert.match(renderer, /把结论带回聊天/);
+  assert.match(renderer, /input\.value = decision\.final/);
+  assert.match(renderer, /event\.key === "Enter" && !event\.shiftKey/);
+  assert.match(renderer, /event\.key === "Escape"\) toggleTrioPanel\(false\)/);
+});
+
 test("trio main.cjs: 注册 roles 与 run 两个 IPC 通道，run 校验 max_rounds 入参映射", () => {
   assert.match(
     main,
@@ -57,4 +70,10 @@ test("trio CSS: 面板与角色芯片样式存在", () => {
   assert.match(css, /\.trio-role-fire\s*\{/);
   assert.match(css, /\.trio-role-ice\s*\{/);
   assert.match(css, /\.trio-role-balance\s*\{/);
+  assert.match(css, /\.trio-round\s*\{/);
+  assert.match(css, /\.trio-round-fire\s*\{/);
+  assert.match(css, /\.trio-round-ice\s*\{/);
+  assert.match(css, /\.trio-round-balance\s*\{/);
+  assert.match(css, /\.trio-verdict-accept\s*\{/);
+  assert.match(css, /\.trio-fill\s*\{/);
 });

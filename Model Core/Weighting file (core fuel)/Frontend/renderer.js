@@ -4590,6 +4590,88 @@ function toggleTrioPanel(open) {
   if (!trioPanel.hidden) {
     trioResult.hidden = true;
     void loadTrioRoles();
+    if (trioMessage) trioMessage.focus();
+  }
+}
+
+function verdictLabel(verdict) {
+  const map = { accept: "✅ 可采纳", revise: "🔁 需修正", reject: "⛔ 打回重做" };
+  return map[verdict] || (verdict || "—");
+}
+
+function renderTrioResult(result) {
+  trioResult.hidden = false;
+  trioResult.replaceChildren();
+  if (typeof result === "string") {
+    trioResult.textContent = result;
+    return;
+  }
+  const data = result?.decision ? result : null;
+  if (!data) {
+    trioResult.textContent = JSON.stringify(result, null, 2);
+    return;
+  }
+  const meta = document.createElement("div");
+  meta.className = "trio-meta";
+  meta.textContent = `轮数 ${data.rounds_used || 1} · ${data.model || ""} · ${data.duration_ms || 0}ms · ${data.source || ""}`;
+  trioResult.append(meta);
+
+  for (const round of data.rounds || []) {
+    const card = document.createElement("details");
+    card.className = `trio-round trio-round-${String(round.role || "").toLowerCase()}`;
+    card.open = true;
+    const summary = document.createElement("summary");
+    const name = document.createElement("span");
+    name.className = "trio-round-name";
+    name.textContent = round.name || round.role;
+    summary.append(name);
+    if (round.verdict) {
+      const badge = document.createElement("span");
+      badge.className = `trio-verdict trio-verdict-${String(round.verdict).toLowerCase()}`;
+      badge.textContent = verdictLabel(round.verdict);
+      summary.append(badge);
+    }
+    card.append(summary);
+    const body = document.createElement("div");
+    body.className = "trio-round-body";
+    body.textContent = round.response || "";
+    card.append(body);
+    trioResult.append(card);
+  }
+
+  const decision = data.decision || {};
+  const verdictCard = document.createElement("details");
+  verdictCard.className = "trio-round trio-round-balance";
+  verdictCard.open = true;
+  const summary = document.createElement("summary");
+  const name = document.createElement("span");
+  name.className = "trio-round-name";
+  name.textContent = `调和·衡 裁决（${decision.action || ""}）`;
+  summary.append(name);
+  verdictCard.append(summary);
+  const body = document.createElement("div");
+  body.className = "trio-round-body";
+  const reason = document.createElement("p");
+  reason.textContent = `理由：${decision.reason || ""}`;
+  body.append(reason);
+  const final = document.createElement("p");
+  final.className = "trio-final";
+  final.textContent = `结论：${decision.final || ""}`;
+  body.append(final);
+  verdictCard.append(body);
+  trioResult.append(verdictCard);
+
+  if (decision.final && input) {
+    const fill = document.createElement("button");
+    fill.className = "send-button trio-fill";
+    fill.type = "button";
+    fill.textContent = "把结论带回聊天";
+    fill.addEventListener("click", () => {
+      input.value = decision.final;
+      input.focus();
+      toggleTrioPanel(false);
+    });
+    trioResult.append(fill);
   }
 }
 
@@ -4598,6 +4680,15 @@ if (trioButton) {
 }
 if (trioClose) {
   trioClose.addEventListener("click", () => toggleTrioPanel(false));
+}
+if (trioMessage) {
+  trioMessage.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      if (!trioRunBtn?.disabled) trioRunBtn.click();
+    }
+    if (event.key === "Escape") toggleTrioPanel(false);
+  });
 }
 if (trioRunBtn) {
   trioRunBtn.addEventListener("click", async () => {
@@ -4609,12 +4700,12 @@ if (trioRunBtn) {
     trioRunBtn.disabled = true;
     const prev = trioRunBtn.textContent;
     trioRunBtn.textContent = "三角运转中…";
+    trioResult.hidden = false;
+    trioResult.textContent = "三角角色依次发言中（本机模型，可能需要一点时间）…";
     try {
       const rounds = Number(trioRounds?.value || 2);
       const result = await window.companion.trioRun(message, rounds);
-      trioResult.hidden = false;
-      trioResult.textContent =
-        typeof result === "string" ? result : JSON.stringify(result, null, 2);
+      renderTrioResult(result);
     } catch (error) {
       trioResult.hidden = false;
       trioResult.textContent = `三角协作失败：${error.message}`;
