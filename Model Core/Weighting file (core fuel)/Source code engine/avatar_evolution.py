@@ -93,6 +93,15 @@ DEFAULT_SKILL_CARDS: list[dict[str, Any]] = [
         "source": "S2",
         "status": "available",
     },
+    {
+        "id": "blender_render",
+        "name": "Blender 程序化建模渲染",
+        "description": "三路结合管线：分身评审方案 → AI 生成贴图 → BPY 参数化建模渲染 → 快照回传对比（M0–M2，m_studio）",
+        "capability": "blender_stage",
+        "invoke": None,
+        "source": "M2",
+        "status": "available",
+    },
 ]
 
 _REQUIRED_SKILL_FIELDS = ("id", "name", "description", "capability")
