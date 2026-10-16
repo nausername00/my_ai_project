@@ -26,7 +26,7 @@ from avatars import AvatarSystem
 from asset_check import check_assets, delivery_manifest, format_manifest
 from avatar_trio import list_trio_roles, run_trio
 from governance import CostLedger, task_status_timeline
-from plugins import PluginRegistry, choose_backend
+from plugins import PluginApprovals, PluginRegistry, choose_backend
 from ocr import detect_ocr_engine, extract_fields, ocr_text
 from discovery import discover_file, observe_context
 from explore import (
@@ -455,6 +455,15 @@ class ApiHandler(BaseHTTPRequestHandler):
                 str(Path(__file__).resolve().parent / "plugins.json"),
             )
         )
+
+    def _plugin_approvals_path(self) -> Path:
+        """T6：插件授权存储路径（默认随引擎仓库，可经环境变量注入便于测试）。"""
+        return Path(
+            os.environ.get(
+                "PLUGIN_APPROVALS_PATH",
+                str(Path(__file__).resolve().parent / "plugin_approvals.json"),
+            )
+        )
     workspace_root = Path.cwd()
     tool_capability = ""
     vision_capability = ""
@@ -676,6 +685,46 @@ class ApiHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    _MOBILE_ROOT = Path(__file__).resolve().parent.parent / "Frontend" / "mobile"
+    _MOBILE_MIME = {
+        ".html": "text/html; charset=utf-8",
+        ".js": "text/javascript; charset=utf-8",
+        ".css": "text/css; charset=utf-8",
+        ".json": "application/json; charset=utf-8",
+        ".svg": "image/svg+xml",
+        ".png": "image/png",
+        ".ico": "image/x-icon",
+        ".webmanifest": "application/manifest+json",
+    }
+
+    def _serve_mobile_asset(self, relative: str) -> None:
+        """T5 手机客户端载体：只读 serve PWA 静态文件。
+
+        白名单扩展名 + 防目录穿越（``..`` 直接拒绝）；未匹配返回 404。
+        页面无数据、公开可读；真正调用 API 仍需后端认证（token）。
+        """
+        if not relative:
+            relative = "index.html"
+        if relative.startswith(("/", "\\")) or ".." in relative.split("/"):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid path"})
+            return
+        suffix = Path(relative).suffix.lower()
+        if suffix not in self._MOBILE_MIME:
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+            return
+        target = (self._MOBILE_ROOT / relative).resolve()
+        if self._MOBILE_ROOT.resolve() not in target.parents and target != self._MOBILE_ROOT.resolve():
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+            return
+        if not target.is_file():
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+            return
+        self._send_bytes(
+            HTTPStatus.OK,
+            self._MOBILE_MIME[suffix],
+            target.read_bytes(),
+        )
 
     def do_GET(self) -> None:
         path = urlsplit(self.path).path
@@ -901,6 +950,28 @@ class ApiHandler(BaseHTTPRequestHandler):
             # T6：插件清单（manifest 只读列表）
             registry = PluginRegistry(self._plugin_registry_path())
             self._send_json(HTTPStatus.OK, {"plugins": registry.list()})
+            return
+        if path.startswith("/v1/plugins/") and path.endswith("/status"):
+            # T6：插件授权状态（manifest + 已批准权限；默认全部拒绝）
+            name = path[len("/v1/plugins/") : -len("/status")]
+            registry = PluginRegistry(self._plugin_registry_path())
+            approvals = PluginApprovals(self._plugin_approvals_path())
+            manifest = registry.get(name)
+            if manifest is None:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": f"插件 {name!r} 未注册"})
+                return
+            self._send_json(
+                HTTPStatus.OK,
+                {"manifest": manifest, "approvals": approvals.status(name)},
+            )
+            return
+        if path.startswith("/v1/mobile/"):
+            # T5 手机客户端载体：serve PWA 静态文件（只读白名单，防目录穿越）
+            self._serve_mobile_asset(path[len("/v1/mobile/") :])
+            return
+        if path == "/v1/model/backends":
+            # T6 多后端并行：已注册后端一览（default + 额外）
+            self._send_json(HTTPStatus.OK, {"backends": self.engine.list_backends()})
             return
         if path == "/v1/model/choose":
             # T6：按成本账本动态选型（GET ?task=&prefer=；speed/quality/balance）
@@ -1274,6 +1345,45 @@ class ApiHandler(BaseHTTPRequestHandler):
                 )
             except (TypeError, ValueError, json.JSONDecodeError) as error:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        approvals_prefix = "/v1/plugins/"
+        if path.startswith(approvals_prefix) and path.endswith("/approve"):
+            # T6：插件执行授权——用户显式批准指定权限（默认全部拒绝）
+            name = path[len(approvals_prefix) : -len("/approve")]
+            if "/" in name:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+                return
+            try:
+                payload = self._read_json()
+                permissions = payload.get("permissions")
+                registry = PluginRegistry(self._plugin_registry_path())
+                if registry.get(name) is None:
+                    self._send_json(HTTPStatus.NOT_FOUND, {"error": f"插件 {name!r} 未注册"})
+                    return
+                approvals = PluginApprovals(self._plugin_approvals_path())
+                result = approvals.authorize(name, permissions)
+                self._send_json(HTTPStatus.OK, {"approvals": result})
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/model/backends/register":
+            # T6 多后端并行：注册一个额外后端（不切换默认；id 自定）
+            try:
+                payload = self._read_json()
+                bid = str(payload.get("id", "")).strip().lower()
+                backend = str(payload.get("backend", "")).strip().lower()
+                if backend not in {"placeholder", "ollama", "transformers", "cloud"}:
+                    raise ValueError(f"backend 必须是 placeholder/ollama/transformers/cloud，收到 {backend!r}")
+                overrides = payload.get("overrides") or {}
+                if not isinstance(overrides, dict):
+                    raise ValueError("overrides 必须是对象")
+                instance = self.engine._build_backend(backend, overrides)
+                summary = self.engine.register_backend(bid, instance)
+                self._send_json(HTTPStatus.OK, {"registered": summary, "backends": self.engine.list_backends()})
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            except ModelUnavailableError as error:
+                self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(error)})
             return
         if "/short-memory" in path and path.startswith("/v1/avatars/"):
             parts = path.split("/")
@@ -2420,12 +2530,21 @@ class ApiHandler(BaseHTTPRequestHandler):
                 history=tuple(validated_history),
             )
             inference_started = perf_counter()
-            text = self.engine.generate(request)
+            # T6 多后端并行：payload 可带 backend 字段路由到指定已注册后端（默认 default）
+            requested_backend = (
+                payload.get("backend") if isinstance(payload.get("backend"), str) else None
+            )
+            if requested_backend:
+                text = self.engine.generate(request, backend_id=requested_backend)
+                used_backend = self.engine.resolve_backend(requested_backend).model_name
+            else:
+                text = self.engine.generate(request)
+                used_backend = self.engine.model_name
             inference_ms = round((perf_counter() - inference_started) * 1000, 1)
             record_generation(
                 len(text),
                 inference_ms,
-                backend=self.engine.model_name,
+                backend=used_backend,
             )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
@@ -2622,6 +2741,16 @@ class ApiHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.NOT_FOUND, {"error": str(error)})
                 return
             self._send_json(HTTPStatus.OK, {"deleted": goal_id})
+            return
+        approvals_prefix = "/v1/plugins/"
+        if path.startswith(approvals_prefix) and path.endswith("/approvals"):
+            name = path[len(approvals_prefix) : -len("/approvals")]
+            if "/" in name:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+                return
+            # T6：撤销插件全部授权（回到默认拒绝）
+            approvals = PluginApprovals(self._plugin_approvals_path())
+            self._send_json(HTTPStatus.OK, approvals.revoke(name))
             return
         prefix = "/v1/memory/"
         if not path.startswith(prefix) or not path[len(prefix) :]:

@@ -355,9 +355,56 @@ class InferenceEngine:
     def __init__(self, backend: InferenceBackend | None = None) -> None:
         self.backend = backend or PlaceholderBackend()
         self.model_name = self.backend.model_name
+        # T6 多后端并行：注册的额外后端（id -> backend），不切换默认。
+        self._extra_backends: dict[str, InferenceBackend] = {}
         # E12 生成互斥锁：同一时刻只允许一次模型推理（本地单机并发会
         # 内存翻倍/抢占/超时）。锁只包 backend 调用，排队由线程等待完成。
         self._generation_lock = threading.Lock()
+
+    def register_backend(self, backend_id: str, backend: InferenceBackend) -> dict[str, Any]:
+        """注册一个额外的后端实例（默认后端保持不变），供多后端并行/动态选型。
+
+        同一 id 覆盖更新；返回注册摘要。id 只允许小写字母、数字、下划线（1–40 字符）。
+        """
+        bid = (backend_id or "").strip().lower()
+        if not bid or len(bid) > 40 or not all(c.isalnum() or c == "_" for c in bid):
+            raise ValueError("backend_id 必须是 1–40 个字符的小写字母/数字/下划线")
+        self._extra_backends[bid] = backend
+        return {
+            "id": bid,
+            "model_name": backend.model_name,
+            "kind": type(backend).__name__,
+        }
+
+    def list_backends(self) -> list[dict[str, Any]]:
+        """已注册后端一览：默认（default）+ 额外后端。"""
+        result: list[dict[str, Any]] = [
+            {
+                "id": "default",
+                "model_name": self.model_name,
+                "kind": type(self.backend).__name__,
+            }
+        ]
+        for bid, backend in sorted(self._extra_backends.items()):
+            result.append(
+                {
+                    "id": bid,
+                    "model_name": backend.model_name,
+                    "kind": type(backend).__name__,
+                }
+            )
+        return result
+
+    def resolve_backend(self, backend_id: str | None) -> InferenceBackend:
+        """把 backend_id 解析为实际后端：None/'default' → 默认；否则查额外注册表。"""
+        if backend_id is None or backend_id.strip().lower() in {"", "default"}:
+            return self.backend
+        backend = self._extra_backends.get(backend_id.strip().lower())
+        if backend is None:
+            raise ModelUnavailableError(
+                f"后端 {backend_id!r} 未注册；可用：default, {', '.join(sorted(self._extra_backends)) or '无'}"
+            )
+        return backend
 
     @classmethod
     def from_environment(cls) -> "InferenceEngine":
@@ -428,6 +475,29 @@ class InferenceEngine:
         })
         return backends
 
+    def _build_backend(
+        self, backend_id: str, overrides: Mapping[str, Any]
+    ) -> InferenceBackend:
+        """按 backend_id 创建后端实例（不切换、不注册）。供 switch/注册复用。"""
+        bid = (backend_id or "").strip().lower()
+        if bid == "placeholder":
+            return PlaceholderBackend()
+        if bid == "ollama":
+            model = overrides.get("model") or os.getenv("OLLAMA_MODEL", "").strip()
+            url = overrides.get("base_url") or os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").strip()
+            return OllamaBackend(str(model), str(url))
+        if bid == "transformers":
+            mp = overrides.get("model_path") or os.getenv("MODEL_PATH", "").strip()
+            if not mp:
+                raise ModelUnavailableError("MODEL_PATH 未设置，无法切换到 transformers 后端。")
+            return TransformersBackend(str(mp))
+        if bid == "cloud":
+            model = overrides.get("model") or os.getenv("CLOUD_API_MODEL", "").strip()
+            base = overrides.get("base_url") or os.getenv("CLOUD_API_BASE_URL", "").strip()
+            key = overrides.get("api_key")  # None → keep env; "" → explicitly empty → error
+            return CloudAPIHTTPSBackend(model, base_url=base, api_key=key)
+        raise ValueError(f"未知 backend_id: {backend_id!r}，可选 placeholder/ollama/transformers/cloud。")
+
     def switch_backend(self, backend_id: str, *, overrides: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """Switch the engine's backend in-place.
 
@@ -437,30 +507,11 @@ class InferenceEngine:
         loaded with the current environment.
         """
         overrides = dict(overrides or {})
-        bid = (backend_id or "").strip().lower()
-        if bid == "placeholder":
-            self.backend = PlaceholderBackend()
-        elif bid == "ollama":
-            model = overrides.get("model") or os.getenv("OLLAMA_MODEL", "").strip()
-            url = overrides.get("base_url") or os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").strip()
-            self.backend = OllamaBackend(str(model), str(url))
-        elif bid == "transformers":
-            mp = overrides.get("model_path") or os.getenv("MODEL_PATH", "").strip()
-            if not mp:
-                raise ModelUnavailableError("MODEL_PATH 未设置，无法切换到 transformers 后端。")
-            self.backend = TransformersBackend(str(mp))
-        elif bid == "cloud":
-            model = overrides.get("model") or os.getenv("CLOUD_API_MODEL", "").strip()
-            base = overrides.get("base_url") or os.getenv("CLOUD_API_BASE_URL", "").strip()
-            key = overrides.get("api_key")  # None → keep env; "" → explicitly empty → error
-            # Note: callers that want to pass a transient key may do so.
-            self.backend = CloudAPIHTTPSBackend(model, base_url=base, api_key=key)
-        else:
-            raise ValueError(f"未知 backend_id: {backend_id!r}，可选 placeholder/ollama/transformers/cloud。")
+        self.backend = self._build_backend(backend_id, overrides)
         self.model_name = self.backend.model_name
         return {
             "switched": True,
-            "backend_id": bid,
+            "backend_id": (backend_id or "").strip().lower(),
             "model_name": self.model_name,
             "kind": type(self.backend).__name__,
         }
@@ -470,6 +521,7 @@ class InferenceEngine:
         request: GenerationRequest,
         *,
         image: bytes | None = None,
+        backend_id: str | None = None,
     ) -> str:
         prompt = request.prompt.strip()
         if not prompt:
@@ -486,8 +538,9 @@ class InferenceEngine:
             json_mode=request.json_mode,
             temperature=request.temperature,
         )
+        backend = self.resolve_backend(backend_id)
         if image is None:
             with self._generation_lock:
-                return self.backend.generate(normalized_request)
+                return backend.generate(normalized_request)
         with self._generation_lock:
-            return self.backend.generate(normalized_request, image=image)
+            return backend.generate(normalized_request, image=image)

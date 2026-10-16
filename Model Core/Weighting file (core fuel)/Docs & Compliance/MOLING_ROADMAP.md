@@ -656,7 +656,7 @@
 ### T 系列整体验收（2026-10-16）
 
 T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅ → T4 服务化认证 ✅ → T5 手机断点续接 ✅ → T6 插件+动态选型 ✅
-全部六项按依赖序完成：每项均有可运行成果（HTTP 端点）、回归证据（全量 Python 测试 526 passed / 6 skipped，Node 63 passed 基线）、文档登记（本表）与提交推送（7dfbad5 / bb240f3 / 6367565 / d27ebe4 / 3dcd94e / 1de388b）。遗留待办（不阻塞 T 线）：OCR 前端透出（已完成，见 T2 待办闭环段，Python 534 / Node 69）、T4 开机自启/HTTPS 系统层落地、T5 手机客户端载体、T6 插件执行授权与多后端并行。
+全部六项按依赖序完成：每项均有可运行成果（HTTP 端点）、回归证据（全量 Python 测试 526 passed / 6 skipped，Node 63 passed 基线）、文档登记（本表）与提交推送（7dfbad5 / bb240f3 / 6367565 / d27ebe4 / 3dcd94e / 1de388b）。遗留待办（不阻塞 T 线）均已闭环：OCR 前端透出（T2 待办闭环段，Python 534 / Node 69）、T4 开机自启/HTTPS 系统层落地（见下节）、T5 手机客户端载体与 T6 插件执行授权、多后端并行（见「T5/T6 遗留收尾」段，Python 556 / Node 69）。
 
 ### T4 系统层落地：HTTPS 自签名 + 开机自启（2026-10-16）
 
@@ -668,6 +668,15 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
 - **前端适配**：`main.cjs` 在 `app.whenReady` 后把全局 `fetch` 替换为 Electron `net.fetch`（Chromium 网络栈走 Windows 系统信任链；Node/undici 不信任自签 CA）；渲染进程本就走 IPC 无直接 fetch，无需改动。
 - **开机自启（默认关原则，显式安装）**：新增 `scripts/install_autostart.ps1`——`-Install` 写 `HKCU\…\CurrentVersion\Run` 的 `MOLING Companion`（登录时隐藏窗口启动 Electron，前端自动拉起后端）、`-Remove` 取消、`-Status` 查询；计划任务路线因非交互会话 `Register-ScheduledTask` 权限拒绝（0x80070005）弃用，注册表 Run 键无需管理员。**本次已按用户推进系统层的意愿安装自启**，不想要时一条 `-Remove` 即撤销。
 - **测试与验收**：新增 `tests/test_t4_system_layer.py`（+7：wrap_tls 默认关返回原 server / 文件缺失 FileNotFoundError / 配置后 socket 变 SSLSocket / tls 字段随配置变化 / auto_start 两态）与 `tests/t4_https_acceptance.py`（端到端：https /health 走系统信任链 200、admin self-host tls=True·auto_start=True·token=True、无 token 401、明文 http 被拒 ConnectionResetError）。**证据**：Python 全量 **541 passed / 6 skipped**，Node **69 passed**；T4 端到端验收四项全过。产物不入仓库：证书/私钥在 `%LOCALAPPDATA%\MOLING\certs\`（仅用户目录），启动器 `start_hidden.ps1` 由自启脚本生成。
+
+### T5/T6 遗留收尾：手机载体 + 插件授权 + 多后端并行（2026-10-16）
+
+用户「一起」收掉 T 线最后三项遗留待办，沿用四件套闭环：
+
+- **T6 插件执行授权（默认全拒）**：`plugins.py` 重构——`PluginRegistry.register` 新增可选 `permissions` 字段（≤10 项、正则 `^[a-z][a-z0-9:_-]*$`、缺省合法保持向后兼容）；新增 `PluginApprovals` 类（JSON 存储；`authorize` 全量覆盖 / `revoke` 回默认拒绝 / `is_authorized` / `status`；默认全部拒绝；文件损坏按无授权处理，绝不静默放行）。API：`GET /v1/plugins/<name>/status`（manifest+授权状态，未注册 404）、`POST /v1/plugins/<name>/approve`（`{permissions:[]}`；未注册 404、非法权限 400）、`DELETE /v1/plugins/<name>/approvals`（撤销回默认拒绝）。
+- **T6 多后端并行（注册不切换）**：`inference.py` 增加 `_extra_backends` 表 + `register_backend(id, backend)`（id 仅小写字母/数字/下划线 ≤40）/ `list_backends()`（default 排首位）/ `resolve_backend(id)`（未知抛 `ModelUnavailableError`）；原 `switch_backend` 分支抽成 `_build_backend` 工厂复用；`generate(backend_id=)` 支持路由到指定后端，默认仍走主后端且**不改变默认**。API：`GET /v1/model/backends`、`POST /v1/model/backends/register`（backend 非白名单 400、实例化失败 503）、`/v1/chat` 可选 `backend` 字段路由（默认路径不触碰新 API，兼容单参桩）。
+- **T5 手机客户端载体（页面无数据）**：新增 PWA 静态站点 `Frontend/mobile/`（index.html / style.css / app.js / manifest.json / icon.svg / sw.js）——暗色移动聊天页调 `/v1/chat`、保留最近 10 条 history、30s 状态轮询；SW 仅 HTTPS 注册离线缓存（HTTP 局域网自动降级）。API `GET /v1/mobile/<asset>` 静态服务：扩展名 MIME 白名单、防目录穿越（`..` 拒绝 + resolve 后根目录校验）、空路径默认 index.html；**页面无数据，真实调用仍需后端认证**。
+- **测试与验收**：新增 `tests/test_t6_extension.py`（15 项：PluginApprovalsTest×7、MultiBackendTest×5、T6ExtensionHttpSmokeTest×3）单独全绿；修复链——(a) API 注册校验误把自定义 id 当 backend 类型校验 → 修正；(b) `/v1/mobile/` 返回 HTML 被测试强套 JSON → 改读原文断言；(c) `/v1/generate` 默认路径传 `backend_id` 破坏单参桩 → 改为仅指定后端才传 kwarg。**证据**：Python 全量 **556 passed / 6 skipped**（+15），Node **69 passed**；T6 三块 HTTP 冒烟（批准→撤销流程、多后端注册、mobile 静态+目录穿越）全过。
 
 
 
