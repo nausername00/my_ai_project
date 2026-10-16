@@ -197,6 +197,56 @@ _GENERATION_STATS: dict[str, float] = {"count": 0.0, "chars": 0.0, "total_ms": 0
 # T3：按后端分桶的成本账本（内存态，随进程存活）
 _COST_LEDGER = CostLedger()
 
+# T4 服务化：可选认证 token + self-host 状态（默认关，仅本机）。
+# 配置 MOLING_API_TOKEN 后：非本机访问与所有 /v1/admin/* 端点必须携带
+# `Authorization: Bearer <token>`，否则 401。默认不修改任何系统配置。
+_AUTH_TOKEN = os.environ.get("MOLING_API_TOKEN", "").strip()
+_SELF_HOST_ENABLED = False
+_PUBLIC_PATHS = ("/health", "/favicon.ico")
+_STATUS_PREFIX = "/v1/status/"
+
+
+def _bearer_token(headers: Any) -> str:
+    """从请求头解析 Bearer token；无则返回空串。"""
+    raw = headers.get("Authorization", "") if headers is not None else ""
+    if raw.casefold().startswith("bearer "):
+        return raw[7:].strip()
+    return ""
+
+
+def _auth_allowed(path: str, is_loopback: bool, provided: str) -> bool:
+    """T4 认证判定：公开/状态端点放行；管理端点必须带有效 token；
+    其余端点 loopback 放行，非 loopback 必须带有效 token。"""
+    if path in _PUBLIC_PATHS or path.startswith(_STATUS_PREFIX):
+        return True
+    if path.startswith("/v1/admin/"):
+        return bool(_AUTH_TOKEN) and hmac.compare_digest(provided, _AUTH_TOKEN)
+    if is_loopback:
+        return True
+    return bool(_AUTH_TOKEN) and hmac.compare_digest(provided, _AUTH_TOKEN)
+
+
+def _self_host_status() -> dict[str, Any]:
+    """self-host 只读状态：默认关；token 是否配置；监听/TLS/自启如实标注。"""
+    return {
+        "enabled": _SELF_HOST_ENABLED,
+        "token_configured": bool(_AUTH_TOKEN),
+        "listen_host": os.environ.get("MOLING_LISTEN_HOST", "127.0.0.1"),
+        "tls": False,
+        "auto_start": False,
+        "hint": "开启对外服务前必须先配置 MOLING_API_TOKEN；监听地址 / TLS / 开机自启"
+        " 需在启动脚本与系统层完成，本端点只记录状态、不修改系统配置。",
+    }
+
+
+def _set_self_host(enabled: bool) -> dict[str, Any]:
+    """切换 self-host 开关：无 token 时禁止开启（默认关的硬边界）。"""
+    global _SELF_HOST_ENABLED
+    if enabled and not _AUTH_TOKEN:
+        return {"error": "必须先配置 MOLING_API_TOKEN 才能开启对外服务"}
+    _SELF_HOST_ENABLED = bool(enabled)
+    return _self_host_status()
+
 
 def record_generation(chars: int, elapsed_ms: float, *, backend: str = "unknown") -> None:
     """累计一次模型生成的字符数与耗时（主对话成功生成后调用）；同时入成本账本。"""
@@ -244,6 +294,27 @@ def _tracked(method: Any):
         start = perf_counter()
         failed = False
         try:
+            # T4：认证闸门（管理端点与非本机访问需有效 token）。
+            # 真实 HTTP 请求必有 client_address；无该属性（测试桩直接调用
+            # do_GET/do_POST）按本机放行，不影响真实网络判定。
+            client_addr = getattr(self, "client_address", None)
+            is_loopback = client_addr is None or (
+                client_addr[0] in ("127.0.0.1", "::1")
+            )
+            if not _auth_allowed(
+                self.path,
+                is_loopback,
+                _bearer_token(getattr(self, "headers", None)),
+            ):
+                failed = True
+                self._send_json(
+                    HTTPStatus.UNAUTHORIZED,
+                    {
+                        "error": "未授权：管理端点或非本机访问需要有效的 API token"
+                        "（Authorization: Bearer <MOLING_API_TOKEN>）"
+                    },
+                )
+                return
             return method(self)
         except Exception:
             failed = True
@@ -589,6 +660,10 @@ class ApiHandler(BaseHTTPRequestHandler):
                     "generations": metrics_snapshot().get("generations"),
                 },
             )
+            return
+        if path == "/v1/admin/self-host":
+            # T4：self-host 状态（需 token；默认关）
+            self._send_json(HTTPStatus.OK, _self_host_status())
             return
         if path == "/v1/agent/tools":
             self._send_json(
@@ -1095,6 +1170,23 @@ class ApiHandler(BaseHTTPRequestHandler):
                     max_rounds=max_rounds,
                 )
                 self._send_json(HTTPStatus.OK, result)
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/admin/self-host":
+            # T4：切换 self-host（需 token；默认关，无 token 时禁止开启）
+            try:
+                payload = self._read_json()
+                if set(payload) - {"enabled"}:
+                    raise ValueError("self-host 请求仅支持 enabled 字段")
+                enabled = payload.get("enabled")
+                if not isinstance(enabled, bool):
+                    raise ValueError("enabled 必须是布尔值")
+                result = _set_self_host(enabled)
+                if "error" in result:
+                    self._send_json(HTTPStatus.BAD_REQUEST, result)
+                else:
+                    self._send_json(HTTPStatus.OK, result)
             except (TypeError, ValueError, json.JSONDecodeError) as error:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
