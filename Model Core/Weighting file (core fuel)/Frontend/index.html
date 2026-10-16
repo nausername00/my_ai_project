@@ -353,6 +353,7 @@
               <button class="icon-button" id="file-button" type="button" title="发文件给墨灵">发文件</button>
               <button class="icon-button" id="image-button" type="button" title="选择一张图片，单次分析">选图片</button>
               <button class="icon-button" id="observe-button" type="button" title="让墨灵看看当前窗口">看窗口</button>
+              <button class="icon-button" id="trio-button" type="button" title="三角协作：火破局 · 冰守界 · 衡裁决">三角</button>
               <button class="icon-button" id="record-button" type="button">开始录音</button>
               <button class="send-button" id="send-button" type="submit" aria-label="发送">
                 <span>发送</span>
@@ -364,6 +365,30 @@
         </form>
         <div class="notice" id="chat-notice">本地运行 · 当前对话上下文仅保留在本次窗口中，不保存为聊天历史</div>
       </section>
+
+      <div class="trio-panel" id="trio-panel" hidden aria-label="三角协作">
+        <div class="settings-header">
+          <div>
+            <span class="eyebrow">TRIO</span>
+            <h2>三角协作</h2>
+          </div>
+          <button class="icon-button" id="trio-close" type="button" aria-label="关闭三角">×</button>
+        </div>
+        <p class="trio-sub">火破局 → 冰守界 → 衡裁决，三个视角轮转审同一个问题，只产出建议不执行操作。</p>
+        <div class="trio-roles" id="trio-roles"><span class="trio-roles-loading">正在读取三角角色…</span></div>
+        <label class="sr-only" for="trio-message">三角要讨论的问题</label>
+        <textarea id="trio-message" rows="3" maxlength="8000" placeholder="抛一个问题给三角伙伴…"></textarea>
+        <div class="trio-controls">
+          <label class="trio-rounds-label" for="trio-rounds">轮数</label>
+          <select id="trio-rounds" title="三角轮转次数">
+            <option value="1">1</option>
+            <option value="2" selected>2</option>
+            <option value="3">3</option>
+          </select>
+          <button class="send-button" id="trio-run" type="button">启动三角</button>
+        </div>
+        <pre class="trio-result" id="trio-result" hidden></pre>
+      </div>
 
       <aside class="settings-panel" id="settings-panel" aria-label="角色设置" hidden>
         <div class="settings-header">

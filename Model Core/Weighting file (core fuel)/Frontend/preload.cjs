@@ -133,6 +133,9 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke("companion:avatar-assess", message),
     avatarAwaken: (avatarIds, confirmed, reason) =>
       ipcRenderer.invoke("companion:avatar-awaken", avatarIds, confirmed, reason),
+    trioRoles: () => ipcRenderer.invoke("companion:trio-roles"),
+    trioRun: (message, maxRounds) =>
+      ipcRenderer.invoke("companion:trio-run", message, maxRounds),
     setAvatarDisplayMode: (mode) =>
       ipcRenderer.invoke("companion:set-avatar-display-mode", mode),
     exportMemories: () => ipcRenderer.invoke("companion:export-memories"),

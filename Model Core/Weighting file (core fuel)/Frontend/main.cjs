@@ -1202,6 +1202,10 @@ function registerIpcHandlers() {
   );
   ipcMain.handle("companion:get-proposals", () => callApi("/v1/proposals"));
   ipcMain.handle("companion:avatar-status", () => callApi("/v1/avatars"));
+  ipcMain.handle("companion:trio-roles", () => callApi("/v1/avatars/trio-roles"));
+  ipcMain.handle("companion:trio-run", (_event, message, maxRounds) =>
+    callApi("/v1/avatars/trio", "POST", { message, max_rounds: maxRounds }),
+  );
   ipcMain.handle("companion:avatar-assess", (_event, message) =>
     callApi("/v1/avatars/assess", "POST", { message }),
   );

@@ -3679,3 +3679,109 @@ dialog.character-editor-dialog {
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* 三角协作面板（T1 前端入口）                                          */
+/* ------------------------------------------------------------------ */
+.trio-panel {
+  position: fixed;
+  right: 24px;
+  bottom: 96px;
+  width: min(440px, calc(100vw - 48px));
+  max-height: 70vh;
+  overflow: auto;
+  background: var(--panel-bg, #1c2130);
+  border: 1px solid var(--border, #333a4d);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  padding: 16px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.trio-panel[hidden] {
+  display: none;
+}
+.trio-sub {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  opacity: 0.8;
+}
+.trio-roles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+.trio-role-chip {
+  border: 1px solid var(--border, #333a4d);
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.trio-role-name {
+  font-weight: 700;
+}
+.trio-role-mode {
+  font-size: 12px;
+  opacity: 0.75;
+  margin-left: 4px;
+}
+.trio-role-focus {
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+.trio-role-fire { border-color: #e05a47; }
+.trio-role-ice { border-color: #4a90d9; }
+.trio-role-balance { border-color: #8b6fd6; }
+.trio-roles-loading {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  opacity: 0.7;
+}
+.trio-panel textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 14px;
+  background: var(--input-bg, #141824);
+  border: 1px solid var(--border, #333a4d);
+  color: inherit;
+}
+.trio-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.trio-rounds-label {
+  font-size: 13px;
+  opacity: 0.8;
+}
+#trio-rounds {
+  background: var(--input-bg, #141824);
+  border: 1px solid var(--border, #333a4d);
+  color: inherit;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+#trio-run {
+  margin-left: auto;
+}
+.trio-result {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12.5px;
+  line-height: 1.6;
+  background: var(--input-bg, #141824);
+  border: 1px solid var(--border, #333a4d);
+  border-radius: 10px;
+  padding: 10px;
+  max-height: 40vh;
+  overflow: auto;
+}

@@ -628,10 +628,18 @@
 - 如实标注：字符级误差（「文创」→「文他」、「¥」→「半」）来自 tesseract 引擎识别质量，非代码缺陷；链路（探测→识别→抽取→核对）验证可运行。测试侧将"无引擎"用例改为 patch `ocr._find_tesseract`（语义更准，避免被常见路径兜底误伤）。
 - **证据**：验收脚本 PASS；全量回归 526 passed / 6 skipped 恢复。
 
+### T1 待办闭环：trio 前端唤醒 UI（2026-10-16）
+
+- 后端端点（trio-roles / trio）已通；本次补上前端界面入口，三角从 API 变成可点击的伙伴入口。
+- 改动：`index.html` 输入区新增「三角」按钮 + `#trio-panel` 面板（角色区/问题输入/轮数 1–3/结果区，关闭按钮）；`preload.cjs` 暴露 `companion.trioRoles/trioRun`；`main.cjs` 注册 `companion:trio-roles`（GET）与 `companion:trio-run`（POST，映射 `{message, max_rounds}`）；`renderer.js` 加载三角角色芯片（火/冰/衡着色）、运行前非空校验、运行中禁用按钮防重复；`style.css` 面板与角色芯片样式（暗色面板，火/冰/衡三色边框）。
+- 测试：新增 `trio.test.cjs`（5 项：HTML 元素 / renderer 逻辑 / main IPC / preload API / CSS 样式），Node 全量 **63 passed**（原 58 + 5）。踩坑：preload 中 `trioRun` 跨两行，正则需 `=>\s+` 允许换行缩进。
+- 端到端冒烟：起后端 curl `/v1/avatars/trio-roles` 真实返回三角角色（破局·火 / 守界·冰 / 调和·衡，含 key/name/mode/focus/instruction）。
+- **证据**：Node 63 passed；HTTP 冒烟返回三角角色 JSON。
+
 ### T 系列整体验收（2026-10-16）
 
 T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅ → T4 服务化认证 ✅ → T5 手机断点续接 ✅ → T6 插件+动态选型 ✅
-全部六项按依赖序完成：每项均有可运行成果（HTTP 端点）、回归证据（全量 Python 测试 526 passed / 6 skipped，Node 58 passed 基线）、文档登记（本表）与提交推送（7dfbad5 / bb240f3 / 6367565 / d27ebe4 / 3dcd94e / 1de388b）。遗留待办（不阻塞 T 线）：trio 前端唤醒 UI、OCR 前端透出（后端与真实验收已闭环）、T4 开机自启/HTTPS 系统层落地、T5 手机客户端载体、T6 插件执行授权与多后端并行。
+全部六项按依赖序完成：每项均有可运行成果（HTTP 端点）、回归证据（全量 Python 测试 526 passed / 6 skipped，Node 63 passed 基线）、文档登记（本表）与提交推送（7dfbad5 / bb240f3 / 6367565 / d27ebe4 / 3dcd94e / 1de388b）。遗留待办（不阻塞 T 线）：OCR 前端透出（后端与真实验收已闭环）、T4 开机自启/HTTPS 系统层落地、T5 手机客户端载体、T6 插件执行授权与多后端并行。
 
 
 

@@ -36,6 +36,14 @@ const recordButton = document.getElementById("record-button");
 const fileButton = document.getElementById("file-button");
 const observeButton = document.getElementById("observe-button");
 const imageButton = document.getElementById("image-button");
+const trioButton = document.getElementById("trio-button");
+const trioPanel = document.getElementById("trio-panel");
+const trioClose = document.getElementById("trio-close");
+const trioRolesEl = document.getElementById("trio-roles");
+const trioMessage = document.getElementById("trio-message");
+const trioRounds = document.getElementById("trio-rounds");
+const trioRunBtn = document.getElementById("trio-run");
+const trioResult = document.getElementById("trio-result");
 const voiceStatus = document.getElementById("voice-status");
 const modelStatus = document.getElementById("model-status");
 const modelSetup = document.getElementById("model-setup");
@@ -4543,6 +4551,78 @@ async function renderAvatarAskCard(prompt, assessResult) {
     void sendMessage(prompt);
   });
   return card;
+}
+
+// ---------------------------------------------------------------------------
+// 三角协作：火破局 → 冰守界 → 衡裁决（T1 后端端点的前端入口）
+// ---------------------------------------------------------------------------
+let _trioRolesLoaded = false;
+
+async function loadTrioRoles() {
+  if (_trioRolesLoaded || !trioRolesEl) return;
+  try {
+    const payload = await window.companion.trioRoles();
+    const roles = payload?.roles || [];
+    if (!roles.length) {
+      trioRolesEl.textContent = "三角角色暂不可用（后端未开启）。";
+      return;
+    }
+    trioRolesEl.replaceChildren();
+    for (const role of roles) {
+      const chip = document.createElement("div");
+      chip.className = `trio-role-chip trio-role-${String(role.key || "").toLowerCase()}`;
+      const modeText = role.mode || "";
+      const focusText = role.focus || "";
+      chip.innerHTML = `<span class="trio-role-name">${role.name || role.key}</span>` +
+        (modeText ? ` <span class="trio-role-mode">${modeText}</span>` : "") +
+        (focusText ? `<div class="trio-role-focus">${focusText}</div>` : "");
+      trioRolesEl.append(chip);
+    }
+    _trioRolesLoaded = true;
+  } catch (error) {
+    trioRolesEl.textContent = `读取三角角色失败：${error.message}`;
+  }
+}
+
+function toggleTrioPanel(open) {
+  if (!trioPanel) return;
+  trioPanel.hidden = open === false ? true : trioPanel.hidden === false;
+  if (!trioPanel.hidden) {
+    trioResult.hidden = true;
+    void loadTrioRoles();
+  }
+}
+
+if (trioButton) {
+  trioButton.addEventListener("click", () => toggleTrioPanel());
+}
+if (trioClose) {
+  trioClose.addEventListener("click", () => toggleTrioPanel(false));
+}
+if (trioRunBtn) {
+  trioRunBtn.addEventListener("click", async () => {
+    const message = (trioMessage?.value || "").trim();
+    if (!message) {
+      if (trioMessage) trioMessage.focus();
+      return;
+    }
+    trioRunBtn.disabled = true;
+    const prev = trioRunBtn.textContent;
+    trioRunBtn.textContent = "三角运转中…";
+    try {
+      const rounds = Number(trioRounds?.value || 2);
+      const result = await window.companion.trioRun(message, rounds);
+      trioResult.hidden = false;
+      trioResult.textContent =
+        typeof result === "string" ? result : JSON.stringify(result, null, 2);
+    } catch (error) {
+      trioResult.hidden = false;
+      trioResult.textContent = `三角协作失败：${error.message}`;
+    } finally {
+      trioRunBtn.disabled = false;
+      trioRunBtn.textContent = prev;
+    }
+  });
 }
 
 function settleToNeutral() {
