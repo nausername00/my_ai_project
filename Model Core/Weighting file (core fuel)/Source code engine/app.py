@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import ssl
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
@@ -55,6 +56,26 @@ def create_server(host: str = "127.0.0.1", port: int = 8000) -> ThreadingHTTPSer
     return ThreadingHTTPServer((host, port), ApiHandler)
 
 
+def wrap_tls(server: ThreadingHTTPServer) -> ThreadingHTTPServer:
+    """T4 系统层：TLS 挂载（默认关，零配置即明文 HTTP）。
+
+    仅当同时配置 MOLING_TLS_CERT 与 MOLING_TLS_KEY（PEM 路径）时启用，
+    证书生成见 scripts/setup_https.ps1（自签名 + 本机信任库）。
+    """
+    cert = os.environ.get("MOLING_TLS_CERT", "").strip()
+    key = os.environ.get("MOLING_TLS_KEY", "").strip()
+    if not cert or not key:
+        return server
+    if not (Path(cert).is_file() and Path(key).is_file()):
+        raise FileNotFoundError(
+            f"TLS 证书/私钥不存在：{cert!r} / {key!r}（可运行 scripts\\setup_https.ps1 生成）"
+        )
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(certfile=cert, keyfile=key)
+    server.socket = context.wrap_socket(server.socket, server_side=True)
+    return server
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the local AI service")
     parser.add_argument("--host", default="127.0.0.1")
@@ -68,8 +89,12 @@ def main() -> None:
             " 建议仅在受信网络内使用，并自行加装认证/防火墙。",
             flush=True,
         )
-    server = create_server(args.host, args.port)
-    print(f"AI service listening on http://{args.host}:{args.port}")
+    server = wrap_tls(create_server(args.host, args.port))
+    tls = os.environ.get("MOLING_TLS_CERT", "").strip() and os.environ.get(
+        "MOLING_TLS_KEY", ""
+    ).strip()
+    scheme = "https" if tls else "http"
+    print(f"AI service listening on {scheme}://{args.host}:{args.port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

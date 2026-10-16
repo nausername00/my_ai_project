@@ -229,16 +229,37 @@ def _auth_allowed(path: str, is_loopback: bool, provided: str) -> bool:
     return bool(_AUTH_TOKEN) and hmac.compare_digest(provided, _AUTH_TOKEN)
 
 
+def _auto_start_installed() -> bool:
+    """开机自启状态：读用户注册表 Run 键（Windows）；其他平台恒为 False。"""
+    if os.name != "nt":
+        return False
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+        ) as key:
+            winreg.QueryValueEx(key, "MOLING Companion")
+        return True
+    except Exception:
+        return False
+
+
 def _self_host_status() -> dict[str, Any]:
     """self-host 只读状态：默认关；token 是否配置；监听/TLS/自启如实标注。"""
+    tls_configured = bool(
+        os.environ.get("MOLING_TLS_CERT", "").strip()
+        and os.environ.get("MOLING_TLS_KEY", "").strip()
+    )
     return {
         "enabled": _SELF_HOST_ENABLED,
         "token_configured": bool(_AUTH_TOKEN),
         "listen_host": os.environ.get("MOLING_LISTEN_HOST", "127.0.0.1"),
-        "tls": False,
-        "auto_start": False,
-        "hint": "开启对外服务前必须先配置 MOLING_API_TOKEN；监听地址 / TLS / 开机自启"
-        " 需在启动脚本与系统层完成，本端点只记录状态、不修改系统配置。",
+        "tls": tls_configured,
+        "auto_start": _auto_start_installed(),
+        "hint": "开启对外服务前必须先配置 MOLING_API_TOKEN；TLS 证书由 scripts\\setup_https.ps1"
+        " 生成（MOLING_TLS_CERT/MOLING_TLS_KEY 启用），开机自启由 scripts\\install_autostart.ps1 安装/取消。",
     }
 
 

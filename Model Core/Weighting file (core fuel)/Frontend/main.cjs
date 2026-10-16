@@ -1671,6 +1671,12 @@ async function syncBackendNotifications() {
 app.whenReady().then(async () => {
   try {
     initializeDataPaths();
+    // T4 系统层：HTTP(S) 请求统一走 Electron net（Chromium 网络栈）。
+    // 后端启用 HTTPS 时，自签名证书已装入 Windows 当前用户受信任根，
+    // 由系统信任链完成验证（Node/undici 默认不信任自签 CA，不能用它）。
+    // app ready 前 net 不可用，故在此替换全局 fetch。
+    const { net: electronNet } = require("electron");
+    globalThis.fetch = (...args) => electronNet.fetch(...args);
     registerMolingProtocolHandler();
     session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
       const allowed =

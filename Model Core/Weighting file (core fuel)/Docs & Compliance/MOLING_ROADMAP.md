@@ -658,6 +658,17 @@
 T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅ → T4 服务化认证 ✅ → T5 手机断点续接 ✅ → T6 插件+动态选型 ✅
 全部六项按依赖序完成：每项均有可运行成果（HTTP 端点）、回归证据（全量 Python 测试 526 passed / 6 skipped，Node 63 passed 基线）、文档登记（本表）与提交推送（7dfbad5 / bb240f3 / 6367565 / d27ebe4 / 3dcd94e / 1de388b）。遗留待办（不阻塞 T 线）：OCR 前端透出（已完成，见 T2 待办闭环段，Python 534 / Node 69）、T4 开机自启/HTTPS 系统层落地、T5 手机客户端载体、T6 插件执行授权与多后端并行。
 
+### T4 系统层落地：HTTPS 自签名 + 开机自启（2026-10-16）
+
+用户选方案 A（自签名证书 + 本机信任，明确"没打算对外开放"），完成"手动开 bat + 明文 HTTP"升级为"HTTPS 加密 + 系统信任 + 开机自启"：
+
+- **证书生成（OpenSSL 兼容，多轮踩坑后定稿）**：PowerShell `New-SelfSignedCertificate` 产物无法被 Python `ssl.load_cert_chain` 加载（`[SSL] PEM lib`，CRLF 规范化仍失败）→ 弃用；改 `pip install cryptography`（50.0.2），新增 `scripts/gen_cert.py`——RSA-2048 自签、SAN `dns=localhost + ip=127.0.0.1 + ::1`、5 年、BasicConstraints CA=true、私钥 TraditionalOpenSSL（`BEGIN RSA PRIVATE KEY`）；**幂等**：PEM 可被 ssl 加载即复用（不换指纹），首跑打印 `GENERATED <SHA256>`、复用打印 `REUSED <SHA256>`。
+- **信任库导入**：非交互会话下 `Import-Certificate` / `X509Store.Add` / `Remove-Item Cert:\CurrentUser\Root\*` 均失败或挂起（"UI is not allowed"）→ 唯一可行通道 `certutil -user -addstore Root <cer>`（导入）与 `certutil -user -delstore Root <Thumbprint>`（删除）；新证书 SHA256 `1DD031AC…`（SHA1 `37752C79…`）已装入 `Cert:\CurrentUser\Root` 且为唯一 MOLING 证书（旧 PowerShell 证书 `0B8827…` 已清理）。
+- **后端 TLS 挂载（默认关）**：`app.py` 新增 `wrap_tls()`——仅当 `MOLING_TLS_CERT` 与 `MOLING_TLS_KEY` 同时配置且文件存在才 `context.wrap_socket(server_side=True)`；文件缺失抛 `FileNotFoundError` 并提示 `setup_https.ps1`；`main()` 按配置打印 `https://` / `http://`。`api.py` 的 `_self_host_status()`：`tls` 读环境变量如实上报；`auto_start` 改读用户注册表 Run 键（`winreg`，`MOLING Companion` 值存在即 true，非 Windows 恒 false）。
+- **前端适配**：`main.cjs` 在 `app.whenReady` 后把全局 `fetch` 替换为 Electron `net.fetch`（Chromium 网络栈走 Windows 系统信任链；Node/undici 不信任自签 CA）；渲染进程本就走 IPC 无直接 fetch，无需改动。
+- **开机自启（默认关原则，显式安装）**：新增 `scripts/install_autostart.ps1`——`-Install` 写 `HKCU\…\CurrentVersion\Run` 的 `MOLING Companion`（登录时隐藏窗口启动 Electron，前端自动拉起后端）、`-Remove` 取消、`-Status` 查询；计划任务路线因非交互会话 `Register-ScheduledTask` 权限拒绝（0x80070005）弃用，注册表 Run 键无需管理员。**本次已按用户推进系统层的意愿安装自启**，不想要时一条 `-Remove` 即撤销。
+- **测试与验收**：新增 `tests/test_t4_system_layer.py`（+7：wrap_tls 默认关返回原 server / 文件缺失 FileNotFoundError / 配置后 socket 变 SSLSocket / tls 字段随配置变化 / auto_start 两态）与 `tests/t4_https_acceptance.py`（端到端：https /health 走系统信任链 200、admin self-host tls=True·auto_start=True·token=True、无 token 401、明文 http 被拒 ConnectionResetError）。**证据**：Python 全量 **541 passed / 6 skipped**，Node **69 passed**；T4 端到端验收四项全过。产物不入仓库：证书/私钥在 `%LOCALAPPDATA%\MOLING\certs\`（仅用户目录），启动器 `start_hidden.ps1` 由自启脚本生成。
+
 
 
 ## 当前核心完善验证（2026-10-14）
