@@ -615,6 +615,7 @@
 （每完成一项在此追加：日期 / 提交 / 证据）
 
 - **T1 三角唤醒入口（2026-10-16）**：`avatar_trio` 接入 HTTP——`GET /v1/avatars/trio-roles`（三角角色只读清单）+ `POST /v1/avatars/trio`（message + max_rounds 1–3 校验，走 `build_system_prompt` 上下文，仅本机引擎，只产出建议不执行操作，非法字段 / 空消息 / 越界轮数拒绝）；三个思维角色经 trio-roles 可见、`persona_speak` 可说话（回落静态模板）。测试 +5（test_trio.py HTTP 冒烟：清单 / 协作返回裁决 / 空消息 400 / max_rounds 400 / 未知字段 400）。**证据**：test_trio 19 项全绿；全量回归 476 passed / 6 skipped。待办：对话层 / 前端按需唤醒入口（T1 后端已通，前端 UI 另行排期）。
+- **T2 OCR 与结构化抽取（2026-10-16）**：新增 `ocr.py`——`detect_ocr_engine`（探测 tesseract，无则如实报告 + 安装提示，不依赖网络）；`ocr_text`（subprocess 参数化调用 shell=False、120s 超时、8MB 图片上限、未装引擎明确 ValueError 不静默）；`extract_fields`（纯规则键值抽取：金额 / 日期 / 供应商 / 单号 / 币种，中英标签 + 全文本兜底，无匹配不编造）。接入分身任务：`ocr_text` / `extract_fields`（learning 域，local_read / local_reversible，自动授权）。测试 +11（test_ocr.py：引擎探测结构 / 未装提示 / 标签行四字段 / 金额日期兜底 / 无匹配不编造 / 英文标签 / 缺文件拒绝 / 无引擎明确报错 / 任务分发 ok / 无引擎任务 failed）。**证据**：test_ocr 11 项全绿；全量回归 487 passed / 6 skipped。待办：前端 / API 端点透出（对话层可直接调分身任务）；安装 tesseract 后真实图片验收。
 
 
 

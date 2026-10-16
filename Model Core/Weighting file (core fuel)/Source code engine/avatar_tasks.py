@@ -20,6 +20,8 @@ from time import time
 from typing import Any
 from uuid import uuid4
 
+from ocr import detect_ocr_engine, extract_fields, ocr_text
+
 # ── 领域任务实现（本地规则 / 模板，确定性输出）────────────────────
 
 MOOD_WORDS: dict[str, tuple[str, ...]] = {
@@ -282,6 +284,16 @@ TASK_DECLARATIONS: dict[str, dict[str, Any]] = {
         "risk": "local_read",
         "requires_approval": False,
     },
+    "ocr_text": {
+        "avatar_domain": "learning",
+        "risk": "local_read",
+        "requires_approval": False,
+    },
+    "extract_fields": {
+        "avatar_domain": "learning",
+        "risk": "local_reversible",
+        "requires_approval": False,
+    },
     "safe_exec": {
         "avatar_domain": "tech",
         "risk": "requires_permission",
@@ -301,6 +313,8 @@ _TASK_IMPLS: dict[str, Any] = {
     "mix_audio": mix_audio,
     "check_halo": check_halo,
     "safe_exec": safe_exec,
+    "ocr_text": ocr_text,
+    "extract_fields": extract_fields,
 }
 
 # 外部 / 高权限操作（未批准一律拒绝）：这类任务只登记、不提供自动执行。
@@ -493,6 +507,10 @@ def run_avatar_task(
             )
         elif task == "check_halo":
             result = impl(str(payload.get("image", "")))
+        elif task == "ocr_text":
+            result = impl(str(payload.get("image", "")))
+        elif task == "extract_fields":
+            result = impl(str(payload.get("text", "")))
         elif task == "safe_exec":
             result = impl(
                 str(payload.get("command", "")),
