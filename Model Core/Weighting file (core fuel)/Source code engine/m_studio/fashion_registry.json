@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "outfits": [
+    {
+      "id": "celadon_cloud",
+      "name": "青花云纹",
+      "texture": "m1_texture_organic.jpg",
+      "target": "body_ring",
+      "desc": "青花瓷蓝白金有机云纹（M1 评审共识首作）"
+    },
+    {
+      "id": "phoenix_crimson",
+      "name": "绯红金凤",
+      "texture": "m3_texture_outfit.jpg",
+      "target": "body_ring",
+      "desc": "绯红底色金凤凰羽纹缠枝（M3 时装接驳演示）"
+    }
+  ],
+  "tones": {
+    "ivory": [0.95, 0.90, 0.82],
+    "light": [0.92, 0.94, 0.97],
+    "royal": [0.22, 0.28, 0.42]
+  },
+  "state_path": "fashion_state.json"
+}
