@@ -272,7 +272,11 @@ function resolvePython() {
 
 async function startBackend() {
   const port = await findFreePort();
-  apiBaseUrl = `http://127.0.0.1:${port}`;
+  // T4 系统层：后端启用 TLS 时（MOLING_TLS_CERT/KEY 同时配置），前端同步切 https。
+  const tlsEnabled = Boolean(
+    process.env.MOLING_TLS_CERT && process.env.MOLING_TLS_KEY,
+  );
+  apiBaseUrl = `${tlsEnabled ? "https" : "http"}://127.0.0.1:${port}`;
   const backendExecutable = app.isPackaged
     ? path.join(process.resourcesPath, "backend", "MolingBackend.exe")
     : resolvePython();
