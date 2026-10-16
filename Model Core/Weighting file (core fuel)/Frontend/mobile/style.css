@@ -33,6 +33,49 @@ html, body {
 .dot { width: 9px; height: 9px; border-radius: 50%; background: #6b7280; }
 .dot.on { background: #34d399; box-shadow: 0 0 8px #34d39988; }
 .model { font-size: 12px; color: var(--muted); }
+.top-actions { display: flex; align-items: center; gap: 10px; }
+.gear {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 10px;
+}
+.gear:active { background: rgba(255, 255, 255, 0.08); }
+
+.settings {
+  background: var(--panel);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings label { font-size: 12px; color: var(--muted); }
+.token-row { display: flex; gap: 8px; }
+.token-row input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 14px;
+  min-height: 40px;
+}
+.token-row button {
+  border: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #0b0e16;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0 14px;
+  min-height: 40px;
+}
 
 .chat {
   flex: 1;

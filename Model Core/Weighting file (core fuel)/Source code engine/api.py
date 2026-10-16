@@ -207,6 +207,8 @@ _AUTH_TOKEN = os.environ.get("MOLING_API_TOKEN", "").strip()
 _SELF_HOST_ENABLED = False
 _PUBLIC_PATHS = ("/health", "/favicon.ico")
 _STATUS_PREFIX = "/v1/status/"
+# T5 手机客户端载体：PWA 静态壳公开可读（无任何数据），真实 API 仍需认证。
+_MOBILE_PREFIX = "/v1/mobile/"
 
 
 def _bearer_token(headers: Any) -> str:
@@ -218,9 +220,9 @@ def _bearer_token(headers: Any) -> str:
 
 
 def _auth_allowed(path: str, is_loopback: bool, provided: str) -> bool:
-    """T4 认证判定：公开/状态端点放行；管理端点必须带有效 token；
+    """T4 认证判定：公开/状态端点与 mobile 静态壳放行；管理端点必须带有效 token；
     其余端点 loopback 放行，非 loopback 必须带有效 token。"""
-    if path in _PUBLIC_PATHS or path.startswith(_STATUS_PREFIX):
+    if path in _PUBLIC_PATHS or path.startswith(_STATUS_PREFIX) or path.startswith(_MOBILE_PREFIX):
         return True
     if path.startswith("/v1/admin/"):
         return bool(_AUTH_TOKEN) and hmac.compare_digest(provided, _AUTH_TOKEN)

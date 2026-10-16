@@ -10,9 +10,40 @@ const input = document.getElementById("input");
 const sendBtn = document.getElementById("sendBtn");
 const statusDot = document.getElementById("statusDot");
 const modelLabel = document.getElementById("modelLabel");
+const settingsBtn = document.getElementById("settingsBtn");
+const settingsPanel = document.getElementById("settingsPanel");
+const tokenInput = document.getElementById("tokenInput");
+const tokenSave = document.getElementById("tokenSave");
 
 const API = `${location.origin}/v1`;
 let history = [];
+
+// 非本机访问必须携带 MOLING_API_TOKEN（Authorization: Bearer <token>）。
+let apiToken = "";
+try {
+  apiToken = localStorage.getItem("moling_mobile_token") || "";
+} catch { /* 隐私模式等场景降级为每次输入 */ }
+
+function authHeaders(extra = {}) {
+  const headers = { ...extra };
+  if (apiToken) headers.Authorization = `Bearer ${apiToken}`;
+  return headers;
+}
+
+settingsBtn.addEventListener("click", () => {
+  settingsPanel.hidden = !settingsPanel.hidden;
+  if (!settingsPanel.hidden) tokenInput.focus();
+});
+
+tokenSave.addEventListener("click", () => {
+  apiToken = tokenInput.value.trim();
+  try {
+    if (apiToken) localStorage.setItem("moling_mobile_token", apiToken);
+    else localStorage.removeItem("moling_mobile_token");
+  } catch { /* 忽略存储失败 */ }
+  settingsPanel.hidden = true;
+  refreshStatus();
+});
 
 function addBubble(text, who) {
   const el = document.createElement("div");
@@ -31,7 +62,7 @@ function setStatus(ok, label) {
 async function api(path, payload) {
   const res = await fetch(`${API}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
   });
   return { status: res.status, body: await res.json().catch(() => ({})) };
@@ -39,7 +70,9 @@ async function api(path, payload) {
 
 async function refreshStatus() {
   try {
-    const res = await fetch(`${API}/status/metrics`);
+    const res = await fetch(`${API}/status/metrics`, {
+      headers: authHeaders(),
+    });
     const body = await res.json();
     const model = body.model || body.engine?.model || "未知模型";
     setStatus(true, String(model));
@@ -67,6 +100,10 @@ composer.addEventListener("submit", async (event) => {
       history.push(["user", text], ["assistant", body.text]);
       if (history.length > 40) history = history.slice(-40);
       setStatus(true, body.model || modelLabel.textContent);
+    } else if (status === 401) {
+      reply.textContent = "未授权：点击右上角 ⚙ 填入 API Token 后重试。";
+      settingsPanel.hidden = false;
+      tokenInput.focus();
     } else {
       reply.textContent = body.error || `请求失败（HTTP ${status}）`;
     }
@@ -89,6 +126,7 @@ if ("serviceWorker" in navigator && location.protocol === "https:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 
+tokenInput.value = apiToken;
 refreshStatus();
 setInterval(refreshStatus, 30000);
 input.focus();

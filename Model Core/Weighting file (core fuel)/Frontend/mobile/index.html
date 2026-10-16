@@ -14,8 +14,19 @@
       <span class="dot" id="statusDot"></span>
       <strong id="companionName">墨灵</strong>
     </div>
-    <span class="model" id="modelLabel">…</span>
+    <div class="top-actions">
+      <span class="model" id="modelLabel">…</span>
+      <button type="button" class="gear" id="settingsBtn" aria-label="设置">⚙</button>
+    </div>
   </header>
+
+  <div class="settings" id="settingsPanel" hidden>
+    <label for="tokenInput">API Token（非本机访问必需；仅存本机浏览器）</label>
+    <div class="token-row">
+      <input type="password" id="tokenInput" placeholder="MOLING_API_TOKEN" autocomplete="off" />
+      <button type="button" id="tokenSave">保存</button>
+    </div>
+  </div>
 
   <main class="chat" id="chatLog" aria-live="polite">
     <div class="bubble bot" id="welcome">嗨～我是墨灵，想聊点什么？</div>

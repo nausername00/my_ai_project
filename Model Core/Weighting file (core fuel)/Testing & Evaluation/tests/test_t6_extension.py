@@ -238,6 +238,25 @@ class T6ExtensionHttpSmokeTest(unittest.TestCase):
         status, _ = self._request("GET", "/v1/mobile/secret.txt")
         self.assertEqual(status, 404)
 
+    def test_mobile_prefix_public_but_chat_needs_token(self) -> None:
+        """非本机（手机）访问：mobile 静态壳放行；/v1/chat 仍需有效 token。"""
+        import api as api_module
+
+        original_token = api_module._AUTH_TOKEN
+        try:
+            # 静态壳：即使未配置 token 也放行（无数据）
+            api_module._AUTH_TOKEN = ""
+            self.assertTrue(api_module._auth_allowed("/v1/mobile/index.html", is_loopback=False, provided=""))
+            self.assertTrue(api_module._auth_allowed("/v1/mobile/", is_loopback=False, provided=""))
+            # 数据 API：非本机、无 token → 拒绝
+            self.assertFalse(api_module._auth_allowed("/v1/chat", is_loopback=False, provided=""))
+            # 配置 token 后：匹配才放行，错误 token 拒绝
+            api_module._AUTH_TOKEN = "secret"
+            self.assertTrue(api_module._auth_allowed("/v1/chat", is_loopback=False, provided="secret"))
+            self.assertFalse(api_module._auth_allowed("/v1/chat", is_loopback=False, provided="wrong"))
+        finally:
+            api_module._AUTH_TOKEN = original_token
+
 
 if __name__ == "__main__":
     unittest.main()
