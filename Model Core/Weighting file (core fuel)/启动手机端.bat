@@ -1,54 +1,53 @@
 @echo off
 setlocal EnableDelayedExpansion
-chcp 65001 >nul
 
 set "PROJECT_ROOT=%~dp0"
 set "ENGINE_DIR=%PROJECT_ROOT%Source code engine"
 set "TOKEN_FILE=%PROJECT_ROOT%mobile_token.txt"
 
 echo.
-echo   å¢¨çµ - æ‰‹æœºç«¯è®¿é—®å¯åŠ¨å™¨
+echo   Ä«Áé - ÊÖ»ú¶Ë·ÃÎÊÆô¶¯Æ÷
 echo   -------------------------
-echo   [è¯´æ˜] ä»¥å±€åŸŸç½‘ç›‘å¬å¯åŠ¨åç«¯ï¼Œæ‰‹æœºæµè§ˆå™¨è¾“å…¥
-echo          http://ç”µè„‘IP:8000/v1/mobile/ å³å¯æ‰“å¼€å¢¨çµç§»åŠ¨é¡µã€‚
+echo   [ËµÃ÷] ÒÔ¾ÖÓòÍø¼àÌıÆô¶¯ºó¶Ë£¬ÊÖ»úä¯ÀÀÆ÷ÊäÈë
+echo          http://µçÄÔIP:8000/v1/mobile/ ¼´¿É´ò¿ªÄ«ÁéÒÆ¶¯Ò³¡£
 echo.
 
-rem ---- ä¾èµ–æ£€æŸ¥ ----
+rem ---- ÒÀÀµ¼ì²é ----
 where.exe py.exe >nul 2>&1
 if errorlevel 1 (
-    echo [ç¼ºå°‘ä¾èµ–] æœªæ‰¾åˆ° Python Launcherï¼ˆpy.exeï¼‰ã€‚
+    echo [È±ÉÙÒÀÀµ] Î´ÕÒµ½ Python Launcher£¨py.exe£©¡£
     pause
     exit /b 1
 )
 
-rem ---- Token å¤„ç†ï¼šéæœ¬æœºè®¿é—®å¿…é¡»å¸¦ token ----
+rem ---- Token ´¦Àí£º·Ç±¾»ú·ÃÎÊ±ØĞë´ø token ----
 set "MOLING_API_TOKEN="
 if exist "%TOKEN_FILE%" (
     set /p MOLING_API_TOKEN=<"%TOKEN_FILE%"
 )
 if not defined MOLING_API_TOKEN (
-    echo   é¦–æ¬¡ä½¿ç”¨ï¼šæ­£åœ¨ç”Ÿæˆè®¿é—® Token...
+    echo   Ê×´ÎÊ¹ÓÃ£ºÕıÔÚÉú³É·ÃÎÊ Token...
     for /f %%i in ('powershell -NoProfile -Command "$h=[guid]::NewGuid().ToString('N'); Write-Output $h"') do set "MOLING_API_TOKEN=%%i"
     > "%TOKEN_FILE%" echo %MOLING_API_TOKEN%
-    echo   å·²ç”Ÿæˆå¹¶ä¿å­˜åˆ° mobile_token.txt
+    echo   ÒÑÉú³É²¢±£´æµ½ mobile_token.txt
 ) else (
-    echo   å¤ç”¨å·²æœ‰ Tokenï¼ˆè§ mobile_token.txtï¼‰
+    echo   ¸´ÓÃÒÑÓĞ Token£¨¼û mobile_token.txt£©
 )
-echo   ä½ çš„ Token: %MOLING_API_TOKEN%
-echo   ^(åœ¨æ‰‹æœºé¡µå³ä¸Šè§’é½¿è½®å›¾æ ‡é‡Œå¡«å…¥åä¿å­˜ï¼›ä»…å­˜æ‰‹æœºæµè§ˆå™¨^)
+echo   ÄãµÄ Token: %MOLING_API_TOKEN%
+echo   ^(ÔÚÊÖ»úÒ³ÓÒÉÏ½Ç³İÂÖÍ¼±êÀïÌîÈëºó±£´æ£»½ö´æÊÖ»úä¯ÀÀÆ÷^)
 echo.
 
-rem ---- æ¨¡å‹åç«¯æ²¿ç”¨é»˜è®¤é…ç½® ----
+rem ---- Ä£ĞÍºó¶ËÑØÓÃÄ¬ÈÏÅäÖÃ ----
 if not defined MODEL_BACKEND set "MODEL_BACKEND=ollama"
 if not defined OLLAMA_MODEL set "OLLAMA_MODEL=qwen2.5:3b"
 if not defined OLLAMA_URL set "OLLAMA_URL=http://127.0.0.1:11434"
 
-echo   æ­£åœ¨ä»¥å±€åŸŸç½‘ç›‘å¬å¯åŠ¨åç«¯ï¼ˆ0.0.0.0:8000ï¼‰â€¦â€¦
-echo   æ‰‹æœºè®¿é—®åœ°å€ï¼šhttp://<ç”µè„‘IP>:8000/v1/mobile/
-echo   ç”µè„‘ IP è¯·ç”¨ ipconfig æŸ¥çœ‹ï¼Œæˆ–å‚è€ƒä¸‹é¢åˆ—å‡ºçš„åœ°å€ï¼š
+echo   ÕıÔÚÒÔ¾ÖÓòÍø¼àÌıÆô¶¯ºó¶Ë£¨0.0.0.0:8000£©¡­¡­
+echo   ÊÖ»ú·ÃÎÊµØÖ·£ºhttp://<µçÄÔIP>:8000/v1/mobile/
+echo   µçÄÔ IP ÇëÓÃ ipconfig ²é¿´£¬»ò²Î¿¼ÏÂÃæÁĞ³öµÄµØÖ·£º
 powershell -NoProfile -Command "Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } | ForEach-Object { Write-Output ('   http://' + $_.IPAddress + ':8000/v1/mobile/') }"
 echo.
-echo   [æç¤º] å…³é—­æœ¬çª—å£å³åœæ­¢æœåŠ¡ã€‚æŒ‰ Ctrl+C å¯é€€å‡ºã€‚
+echo   [ÌáÊ¾] ¹Ø±Õ±¾´°¿Ú¼´Í£Ö¹·şÎñ¡£°´ Ctrl+C ¿ÉÍË³ö¡£
 echo.
 
 cd /d "%ENGINE_DIR%"
@@ -56,6 +55,6 @@ set "MOLING_API_TOKEN=%MOLING_API_TOKEN%"
 py -3 app.py --host 0.0.0.0 --port 8000
 
 echo.
-echo   æœåŠ¡å·²åœæ­¢ã€‚
+echo   ·şÎñÒÑÍ£Ö¹¡£
 pause
 endlocal
