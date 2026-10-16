@@ -1,9 +1,16 @@
-"""S6 三角协作（冰/火/平衡）：思维角色、审校解析、确定性裁决、回路编排。"""
+"""S6 三角协作（冰/火/平衡）：思维角色、审校解析、确定性裁决、回路编排。
+T1 三角唤醒入口：HTTP 端点冒烟（trio-roles / trio）。"""
 
+import json
+import os
 import tempfile
 import unittest
+from http.client import HTTPConnection
 from pathlib import Path
+from threading import Thread
+from unittest.mock import patch
 
+from app import create_server
 from avatar_persona import PersonaRegistry
 from avatar_trio import (
     _decide,
@@ -167,6 +174,94 @@ class RunTrioTest(unittest.TestCase):
         )()
         with self.assertRaises(ValueError):
             run_trio(remote, "你是墨灵。", "任务")  # type: ignore[arg-type]
+
+
+class TrioHttpSmokeTest(unittest.TestCase):
+    """T1 HTTP 端点冒烟：trio-roles 清单与 trio 协作（placeholder 后端）。"""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.environment = patch.dict(
+            os.environ,
+            {
+                "MODEL_BACKEND": "placeholder",
+                "CHARACTER_CARD_PATH": os.path.join(self.temp_dir.name, "character.json"),
+                "CHARACTER_MEMORY_PATH": os.path.join(self.temp_dir.name, "memory.json"),
+                "CHARACTER_ASSET_DIR": self.temp_dir.name,
+                "CHARACTER_PRIVACY_PATH": os.path.join(self.temp_dir.name, "privacy.json"),
+                "CHARACTER_AFFECT_PATH": os.path.join(self.temp_dir.name, "affect.json"),
+                "AVATAR_REGISTRY_PATH": os.path.join(self.temp_dir.name, "avatars.json"),
+                "AVATAR_AWAKEN_LOG_PATH": os.path.join(
+                    self.temp_dir.name, "awaken_log.json"
+                ),
+                "AVATAR_TOOL_LOG_PATH": os.path.join(self.temp_dir.name, "tool_log.json"),
+            },
+        )
+        self.environment.start()
+        self.server = create_server()
+        self.thread = Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.connection = HTTPConnection("127.0.0.1", self.server.server_port)
+
+    def tearDown(self) -> None:
+        self.connection.close()
+        self.server.shutdown()
+        self.server.server_close()
+        self.environment.stop()
+        self.temp_dir.cleanup()
+
+    def _get(self, path: str) -> tuple[int, dict]:
+        self.connection.request("GET", path)
+        response = self.connection.getresponse()
+        return response.status, json.loads(response.read())
+
+    def _post(self, path: str, payload: dict) -> tuple[int, dict]:
+        self.connection.request(
+            "POST",
+            path,
+            json.dumps(payload),
+            {"Content-Type": "application/json"},
+        )
+        response = self.connection.getresponse()
+        return response.status, json.loads(response.read())
+
+    def test_trio_roles_list(self) -> None:
+        status, body = self._get("/v1/avatars/trio-roles")
+        self.assertEqual(status, 200)
+        roles = body["roles"]
+        self.assertEqual(len(roles), 3)
+        self.assertEqual({role["mode"] for role in roles}, {"fire", "ice", "balance"})
+
+    def test_trio_run_returns_decision(self) -> None:
+        status, body = self._post(
+            "/v1/avatars/trio",
+            {"message": "给周日安排一个放松计划"},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["lead"], "moling")
+        self.assertIn(body["decision"]["action"], ("adopt", "patch", "rework", "defer"))
+        self.assertTrue(body["rounds"])
+
+    def test_trio_rejects_empty_message(self) -> None:
+        status, body = self._post("/v1/avatars/trio", {"message": "  "})
+        self.assertEqual(status, 400)
+        self.assertIn("message", body["error"])
+
+    def test_trio_rejects_bad_max_rounds(self) -> None:
+        status, body = self._post(
+            "/v1/avatars/trio",
+            {"message": "任务", "max_rounds": 5},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("max_rounds", body["error"])
+
+    def test_trio_rejects_unknown_field(self) -> None:
+        status, body = self._post(
+            "/v1/avatars/trio",
+            {"message": "任务", "magic": True},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("不支持的字段", body["error"])
 
 
 if __name__ == "__main__":

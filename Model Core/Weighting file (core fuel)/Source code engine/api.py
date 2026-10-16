@@ -23,6 +23,7 @@ from uuid import uuid4
 from agent import route_cognition
 from avatars import AvatarSystem
 from asset_check import check_assets, delivery_manifest, format_manifest
+from avatar_trio import list_trio_roles, run_trio
 from discovery import discover_file, observe_context
 from explore import (
     propose_exploration,
@@ -736,6 +737,10 @@ class ApiHandler(BaseHTTPRequestHandler):
                 {"personas": self.get_avatar_system().persona_list()},
             )
             return
+        if path == "/v1/avatars/trio-roles":
+            # T1：三角思维角色清单（破局·火 / 守界·冰 / 调和·衡），只读定义
+            self._send_json(HTTPStatus.OK, {"roles": list_trio_roles()})
+            return
         if path == "/v1/avatars/suggestions":
             self._send_json(
                 HTTPStatus.OK,
@@ -1050,6 +1055,30 @@ class ApiHandler(BaseHTTPRequestHandler):
                 persona = self.get_avatar_system().upsert_persona(payload)
                 self._send_json(HTTPStatus.OK, {"persona": persona})
             except ValueError as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/avatars/trio":
+            # T1：三角唤醒——火出方案 → 冰校验 → 衡裁决（只产出建议，不执行操作）
+            try:
+                payload = self._read_json()
+                if set(payload) - {"message", "max_rounds"}:
+                    raise ValueError("三角协作请求包含不支持的字段")
+                message = str(payload.get("message", "")).strip()
+                if not message:
+                    raise ValueError("message 不能为空")
+                max_rounds = payload.get("max_rounds", 2)
+                if not isinstance(max_rounds, int) or not 1 <= max_rounds <= 3:
+                    raise ValueError("max_rounds 必须是 1–3 的整数")
+                result = run_trio(
+                    self.engine,
+                    self.character_store.build_system_prompt(
+                        context_text=message[:8000]
+                    ),
+                    message,
+                    max_rounds=max_rounds,
+                )
+                self._send_json(HTTPStatus.OK, result)
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         if "/short-memory" in path and path.startswith("/v1/avatars/"):
