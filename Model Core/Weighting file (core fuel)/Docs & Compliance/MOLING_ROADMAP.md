@@ -620,10 +620,18 @@
 - **T4 服务化：认证 + self-host（2026-10-16）**：可选 token 认证——配置 `MOLING_API_TOKEN` 后，`/v1/admin/*` 端点（任何来源）与非本机访问必须携带 `Authorization: Bearer <token>`（hmac.compare_digest 恒时比较），否则 401；`/health` 与 `/v1/status/*` 保持公开；未配置 token 时本机访问不受影响（默认仅本机）。`GET /v1/admin/self-host` 返回状态（enabled 默认 false / token_configured / listen_host / tls=false / auto_start=false + 说明）；`POST /v1/admin/self-host {enabled}` 切换开关，**无 token 时禁止开启**（默认关硬边界），仅记录状态不修改系统配置（监听/TLS/自启由启动脚本与系统层完成，文档另行登记）。认证闸门放在 `_tracked` 包装（真实 HTTP 必有 client_address；测试桩直接调用按本机放行，不影响真实判定）。测试 +13（test_admin.py：公开/状态放行 / admin 需 token / loopback 免 token / 非 loopback 需 token / 无 token 禁止开启 / 开关切换 / 状态结构 / HTTP 冒烟：401、200、错 token 401、toggle、非布尔 400）。**证据**：test_admin 13 项全绿；全量回归 507 passed / 6 skipped。待办：开机自启与 HTTPS 的系统层落地（启动脚本 + 说明文档，需用户显式开启）。
 - **T6 插件 manifest + 动态选型（2026-10-16）**：新增 `plugins.py`——`PluginRegistry`（本地插件清单 JSON：name 1–40 字符 / version x.y.z / capabilities 非空 ≤20 项每项 ≤30 字符，未知字段拒绝，同名覆盖更新，只登记元数据不加载任意代码）；`choose_backend`（消费 T3 CostLedger 快照：speed→avg_ms 最低、quality→count 最多、balance→默认后端，规则确定可复算）。端点：`GET /v1/plugins`（清单）、`POST /v1/plugins/register`（{manifest} 校验后写入）、`GET /v1/model/choose?task=&prefer=`（动态选型，非法 prefer 回落 balance）。测试 +16（test_plugins.py：注册/列表 / 同名覆盖 / 版本校验 / 空能力拒绝 / 未知字段拒绝 / 缺文件空清单 / 选型 speed·quality·balance / 空账本回落 / 非法 prefer 归一 / HTTP 冒烟：空清单、注册、非法注册 400、选型端点、非法 prefer 回落）。**证据**：test_plugins 16 项全绿；**全量回归 526 passed / 6 skipped——T 系列六目标全部闭环**。待办：插件执行授权体系（当前仅登记元数据）与真实多后端并行（当前单后端记账）。
 
+### T2 待办闭环：OCR 真实验收（2026-10-16）
+
+- 环境：Tesseract 5.4.0 经 winget（UB-Mannheim）安装；中文语言包 chi_sim 下载至用户级 `%LOCALAPPDATA%\TesseractOCR\tessdata`（Program Files 需管理员写权限，故走用户目录 + `--tessdata-dir`，无需提权）。
+- 代码增强：`ocr.py` 新增 `_find_tesseract()`（PATH + 常见安装路径兜底，装完即用无需重开终端）；`detect_ocr_engine` 返回 `languages`（eng / chi_sim，中英双语识别）与 `tessdata_dir`；`ocr_text` 自动拼 `--tessdata-dir` 与 `-l eng+chi_sim`。
+- 验收（`Testing & Evaluation\tests\ocr_acceptance.py` 可复现）：PIL 生成中文采购单样张（供应商/发票号/日期/金额）→ 真实 tesseract 识别（102 字符）→ 字段抽取四字段全部命中（发票号、日期精确匹配；供应商、金额按关键子串容忍匹配）。**RESULT: PASS**。
+- 如实标注：字符级误差（「文创」→「文他」、「¥」→「半」）来自 tesseract 引擎识别质量，非代码缺陷；链路（探测→识别→抽取→核对）验证可运行。测试侧将"无引擎"用例改为 patch `ocr._find_tesseract`（语义更准，避免被常见路径兜底误伤）。
+- **证据**：验收脚本 PASS；全量回归 526 passed / 6 skipped 恢复。
+
 ### T 系列整体验收（2026-10-16）
 
 T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅ → T4 服务化认证 ✅ → T5 手机断点续接 ✅ → T6 插件+动态选型 ✅
-全部六项按依赖序完成：每项均有可运行成果（HTTP 端点）、回归证据（全量 Python 测试 526 passed / 6 skipped，Node 58 passed 基线）、文档登记（本表）与提交推送（7dfbad5 / bb240f3 / 6367565 / d27ebe4 / 3dcd94e / 本轮）。遗留待办（不阻塞 T 线）：trio 前端唤醒 UI、OCR 前端透出 + tesseract 安装后真实图片验收、T4 开机自启/HTTPS 系统层落地、T5 手机客户端载体、T6 插件执行授权与多后端并行。
+全部六项按依赖序完成：每项均有可运行成果（HTTP 端点）、回归证据（全量 Python 测试 526 passed / 6 skipped，Node 58 passed 基线）、文档登记（本表）与提交推送（7dfbad5 / bb240f3 / 6367565 / d27ebe4 / 3dcd94e / 1de388b）。遗留待办（不阻塞 T 线）：trio 前端唤醒 UI、OCR 前端透出（后端与真实验收已闭环）、T4 开机自启/HTTPS 系统层落地、T5 手机客户端载体、T6 插件执行授权与多后端并行。
 
 
 

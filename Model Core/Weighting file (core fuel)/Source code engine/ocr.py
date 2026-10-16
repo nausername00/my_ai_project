@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -43,15 +44,45 @@ _DATE_RE = re.compile(
 )
 _LINE_LABEL_RE = re.compile(r"^([^:：\n]{1,20})[：:]\s*(.+)$")
 
+# 用户级语言数据目录（无需管理员权限即可放入 chi_sim 等语言包）
+_USER_TESSDATA = Path(
+    os.environ.get("MOLING_TESSDATA_DIR")
+    or (Path(os.environ.get("LOCALAPPDATA", "~")) / "TesseractOCR" / "tessdata")
+).expanduser()
 
-def detect_ocr_engine() -> dict[str, Any]:
-    """探测本地 OCR 引擎：当前仅 tesseract；无则如实报告不可用与安装提示。"""
+
+def _find_tesseract() -> str | None:
+    """查找 tesseract：先 PATH，再常见安装位置（装完即用，无需重开终端）。"""
     exe = shutil.which("tesseract")
     if exe:
+        return exe
+    for candidate in (
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        "/usr/bin/tesseract",
+        "/usr/local/bin/tesseract",
+    ):
+        if Path(candidate).is_file():
+            return candidate
+    return None
+
+
+def detect_ocr_engine() -> dict[str, Any]:
+    """探测本地 OCR 引擎：当前仅 tesseract；无则如实报告不可用与安装提示。
+
+    同时探测用户级语言数据目录（含 chi_sim 中文包时为双语识别）。
+    """
+    exe = _find_tesseract()
+    if exe:
+        languages = ["eng"]
+        if (_USER_TESSDATA / "chi_sim.traineddata").is_file():
+            languages.append("chi_sim")
         return {
             "available": True,
             "engine": "tesseract",
             "path": exe,
+            "languages": languages,
+            "tessdata_dir": str(_USER_TESSDATA) if _USER_TESSDATA.is_dir() else "",
             "hint": "",
         }
     return {
@@ -67,6 +98,8 @@ def ocr_text(image_path: str, *, max_chars: int = 4000) -> dict[str, Any]:
     """对本地图片做 OCR 提取文字。
 
     未安装 tesseract 时抛 ValueError（明确报错，不静默）；
+    自动使用用户级语言数据目录（MOLING_TESSDATA_DIR 或
+    %LOCALAPPDATA%\\TesseractOCR\\tessdata），含 chi_sim 时中英双语识别；
     返回 {engine, text, chars, source}。
     """
     path = Path(image_path).expanduser()
@@ -79,9 +112,16 @@ def ocr_text(image_path: str, *, max_chars: int = 4000) -> dict[str, Any]:
     if not engine["available"]:
         raise ValueError(engine["hint"])
 
+    command = [engine["path"], str(path), "stdout"]
+    if engine.get("languages"):
+        command = [engine["path"], "-l", "+".join(engine["languages"])]
+        command += [str(path), "stdout"]
+    if engine.get("tessdata_dir"):
+        command[1:1] = ["--tessdata-dir", engine["tessdata_dir"]]
+
     try:
         proc = subprocess.run(
-            [engine["path"], str(path), "stdout"],
+            command,
             capture_output=True,
             timeout=OCR_TIMEOUT_SECONDS,
             check=False,

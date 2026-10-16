@@ -17,7 +17,7 @@ class DetectEngineTest(unittest.TestCase):
         self.assertIsInstance(result["available"], bool)
 
     def test_unavailable_has_install_hint(self) -> None:
-        with patch("ocr.shutil.which", return_value=None):
+        with patch("ocr._find_tesseract", return_value=None):
             result = detect_ocr_engine()
             self.assertFalse(result["available"])
             self.assertIn("Tesseract", result["hint"])
@@ -70,7 +70,7 @@ class OcrTextTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             image = Path(directory) / "sample.png"
             image.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 64)
-            with patch("ocr.shutil.which", return_value=None):
+            with patch("ocr._find_tesseract", return_value=None):
                 with self.assertRaises(ValueError) as ctx:
                     ocr_text(str(image))
                 message = str(ctx.exception)
@@ -113,7 +113,7 @@ class AvatarTaskOcrTest(unittest.TestCase):
     def test_ocr_text_task_fails_clearly_without_engine(self) -> None:
         image = Path(self.temp_dir.name) / "sample.png"
         image.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 64)
-        with patch("ocr.shutil.which", return_value=None):
+        with patch("ocr._find_tesseract", return_value=None):
             result = self._run("ocr_text", {"image": str(image)})
         self.assertEqual(result["status"], "failed")
         self.assertIn("OCR 引擎", result["reason"])
