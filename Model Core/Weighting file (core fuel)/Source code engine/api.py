@@ -25,6 +25,7 @@ from avatars import AvatarSystem
 from asset_check import check_assets, delivery_manifest, format_manifest
 from avatar_trio import list_trio_roles, run_trio
 from governance import CostLedger, task_status_timeline
+from plugins import PluginRegistry, choose_backend
 from discovery import discover_file, observe_context
 from explore import (
     propose_exploration,
@@ -422,6 +423,15 @@ class ApiHandler(BaseHTTPRequestHandler):
                 getattr(cls, "character_store", None),
             )
         return cls._avatar_system
+
+    def _plugin_registry_path(self) -> Path:
+        """T6：插件清单路径（延迟读环境变量，便于测试注入；默认随引擎仓库）。"""
+        return Path(
+            os.environ.get(
+                "PLUGIN_REGISTRY_PATH",
+                str(Path(__file__).resolve().parent / "plugins.json"),
+            )
+        )
     workspace_root = Path.cwd()
     tool_capability = ""
     vision_capability = ""
@@ -864,6 +874,24 @@ class ApiHandler(BaseHTTPRequestHandler):
                 },
             )
             return
+        if path == "/v1/plugins":
+            # T6：插件清单（manifest 只读列表）
+            registry = PluginRegistry(self._plugin_registry_path())
+            self._send_json(HTTPStatus.OK, {"plugins": registry.list()})
+            return
+        if path == "/v1/model/choose":
+            # T6：按成本账本动态选型（GET ?task=&prefer=；speed/quality/balance）
+            query = parse_qs(urlsplit(self.path).query)
+            task = (query.get("task", ["chat"])[0] or "chat").strip()[:30]
+            prefer = (query.get("prefer", ["balance"])[0] or "balance").strip()
+            result = choose_backend(
+                _COST_LEDGER.snapshot(),
+                task=task,
+                prefer=prefer,
+                default=self.engine.model_name,
+            )
+            self._send_json(HTTPStatus.OK, result)
+            return
         if path.startswith("/v1/avatars/") and path.endswith("/short-memory"):
             avatar_id = path.split("/")[4]
             self._send_json(
@@ -1206,6 +1234,21 @@ class ApiHandler(BaseHTTPRequestHandler):
                     self._send_json(HTTPStatus.BAD_REQUEST, result)
                 else:
                     self._send_json(HTTPStatus.OK, result)
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/plugins/register":
+            # T6：插件 manifest 注册（本地清单覆盖更新；只登记元数据，不加载代码）
+            try:
+                payload = self._read_json()
+                manifest = payload.get("manifest")
+                if not isinstance(manifest, dict):
+                    raise ValueError("manifest 必须是对象")
+                registry = PluginRegistry(self._plugin_registry_path())
+                entry = registry.register(manifest)
+                self._send_json(
+                    HTTPStatus.OK, {"registered": entry, "plugins": registry.list()}
+                )
             except (TypeError, ValueError, json.JSONDecodeError) as error:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
