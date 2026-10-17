@@ -37,5 +37,44 @@
       "note": "自评：这一套的主题气质达成——暖金渐变贴图配晨光金底色",
       "verdict": "入库"
     }
+  },
+  {
+    "theme_id": "bloom",
+    "name": "繁花",
+    "status": "applied",
+    "created_at": "2026-10-17T03:38:33+00:00",
+    "decision_chain": [
+      "墨灵设定偏清雅，但缺一套生机感的春日色——繁花主题扩展'活泼'气质。",
+      "设计方向：无缝有机纹理贴图，粉紫花瓣与浅绿叶脉交织流动，春日繁花，细腻柔和，适合3D物体表面贴图，无文字无logo……",
+      "色调定义：花雾粉（像花瓣落在晨雾里）",
+      "预期观感：粉紫花海贴图配花雾粉底色，春日清新感。"
+    ],
+    "idea": "春天该有的样子——花和叶缠在一起，配花雾粉的底，整个人都变得轻盈。",
+    "texture_prompt": "无缝有机纹理贴图，粉紫花瓣与浅绿叶脉交织流动，春日繁花，细腻柔和，适合3D物体表面贴图，无文字无logo",
+    "tone": {
+      "name": "bloom",
+      "label": "花雾粉",
+      "rgb": [
+        0.86,
+        0.78,
+        0.82
+      ],
+      "meaning": "像花瓣落在晨雾里"
+    },
+    "outfit_id": "bloom_silk",
+    "outfit_name": "繁花",
+    "used_before": false,
+    "render": {
+      "rc": 0,
+      "cache_hit": false,
+      "render_ms": 16567,
+      "cost": "重",
+      "out": "D:\\Coding\\code program\\test\\This is mine\\my_ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\design_bloom_silk.png"
+    },
+    "review": {
+      "match": "贴图纹理与底色同源，观感符合预期",
+      "note": "自评：这一套的主题气质达成——粉紫花海贴图配花雾粉底色",
+      "verdict": "入库"
+    }
   }
 ]

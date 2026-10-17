@@ -35,6 +35,13 @@
       "texture": "m7_texture_dawn.jpg",
       "target": "body_ring",
       "desc": "晨光主题（M5 墨灵现场自主设计）"
+    },
+    {
+      "id": "bloom_silk",
+      "name": "繁花",
+      "texture": "m8_texture_bloom.jpg",
+      "target": "body_ring",
+      "desc": "繁花主题（M5 墨灵现场自主设计）"
     }
   ],
   "tones": {
@@ -67,6 +74,11 @@
       0.92,
       0.82,
       0.6
+    ],
+    "bloom": [
+      0.86,
+      0.78,
+      0.82
     ]
   },
   "state_path": "fashion_state.json"
