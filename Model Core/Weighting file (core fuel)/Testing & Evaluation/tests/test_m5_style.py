@@ -111,3 +111,60 @@ def test_style_proposal_look_cue_needs_subject() -> None:
     # 有"看看"但无形象主题 → 不触发（有边界）
     assert suggest_style_proposal("给我看看这个文件")["proposed"] is False
     assert suggest_style_proposal("今天天气不错")["proposed"] is False
+
+
+# ------------------------------------------------------------------ M5c 换装指令识别（detect_fashion_command）
+def test_detect_fashion_known_aliases() -> None:
+    from fashion_service import detect_fashion_command
+
+    # 既有长词
+    assert detect_fashion_command("今天穿青花云纹吧")["outfit_id"] == "celadon_cloud"
+    assert detect_fashion_command("换上绯红金凤")["outfit_id"] == "phoenix_crimson"
+
+
+def test_detect_fashion_new_aliases() -> None:
+    from fashion_service import detect_fashion_command
+
+    # 星澜 / 翡翠（M5 时装库扩展）
+    assert detect_fashion_command("换上星澜蓝银")["outfit_id"] == "starlight_silk"
+    assert detect_fashion_command("穿星澜的")["outfit_id"] == "starlight_silk"
+    assert detect_fashion_command("穿上翡翠流光")["outfit_id"] == "emerald_flow"
+    # 晨光 / 繁花（墨灵现场自主设计）
+    assert detect_fashion_command("换装晨光")["outfit_id"] == "dawn_silk"
+    assert detect_fashion_command("换上繁花")["outfit_id"] == "bloom_silk"
+
+
+def test_detect_fashion_single_char_fallback() -> None:
+    from fashion_service import detect_fashion_command
+
+    # 单字兜底：长词未命中才落到这里
+    assert detect_fashion_command("换身蓝的")["outfit_id"] == "starlight_silk"
+    assert detect_fashion_command("穿件绿的")["outfit_id"] == "emerald_flow"
+
+
+def test_detect_fashion_tone_aliases() -> None:
+    from fashion_service import detect_fashion_command
+
+    assert detect_fashion_command("穿星夜蓝的青花云纹")["tone_id"] == "midnight"
+    assert detect_fashion_command("穿翡翠绿")["tone_id"] == "emerald"
+    assert detect_fashion_command("换上晨光金")["tone_id"] == "dawn"
+    assert detect_fashion_command("穿花雾粉")["tone_id"] == "bloom"
+
+
+def test_detect_fashion_long_first() -> None:
+    from fashion_service import detect_fashion_command
+
+    # 长词优先：星澜蓝银命中时装而不是单字"蓝"兜底；翡翠流光命中而不是"绿"兜底
+    assert detect_fashion_command("换上星澜蓝银")["outfit_id"] == "starlight_silk"
+    assert detect_fashion_command("穿上翡翠流光")["outfit_id"] == "emerald_flow"
+
+
+def test_detect_fashion_not_triggered() -> None:
+    from fashion_service import detect_fashion_command
+
+    # 无命令 cue / 普通聊天不触发（简单任务直做）
+    assert detect_fashion_command("青花云纹真好看") is None
+    assert detect_fashion_command("今天天气不错") is None
+    assert detect_fashion_command("星澜是蓝色系吗") is None
+    assert detect_fashion_command(12345) is None
+

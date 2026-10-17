@@ -792,6 +792,9 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
 - **M5a 深化 · 主对话自荐造型（2026-10-17）**：`fashion_service.suggest_style_proposal()`——识别"给我看看造型/有什么推荐/换风格"等明确请求，返回提案列表（编号+名称×色调+思路首句）+ 引导语"直接说『穿上青花云纹』就能换"；有边界主动提议（与 explore_proposal 同构：仅明确请求触发，普通聊天不抢话）。`/v1/generate` 接入：命中返回 `response_kind=style_proposal`。**端到端实测**：聊天"给我看看你的造型推荐"→ 6 套提案+推荐语返回；"今天天气不错"不触发。测试 +2 项（请求触发/有边界不触发）。回归 **722 passed / 7 skipped**。
 - **M5 时装库扩展（2026-10-17）**：AI 生成 2 套新时装贴图（`m6_texture_starlight.jpg` 星澜蓝银：蓝紫星云+银线流光；`m6_texture_emerald.jpg` 翡翠流光：翡翠绿+金纹）→ 注册进 `fashion_registry.json`（outfits 2→4：青花云纹/绯红金凤/**星澜蓝银/翡翠流光**；tones 3→5：ivory/light/royal/**midnight 星夜蓝/emerald 翡翠绿**）→ 同步更新 M5a 思路库（新时装×色调 10 组墨灵讲解）。实测：`--list` 全列出；新提案 #7 星澜蓝银×midnight、#8 翡翠流光×emerald 渲染成功带完整思路。自荐造型/聊天换装自动覆盖新时装（换装别名待扩：`fashion_service` 别名表补星澜/翡翠）。回归见下。
 - 下一步：换装别名表补新时装关键词（星澜/翡翠/绿/蓝）、M5b 反差萌接入主对话（praise 时顺势自荐）、发型/身材维度登记 M4 远期。
+- **换装别名表补齐（2026-10-17）**：`fashion_service.py` 别名表补全——_OUTFIT_ALIAS 增加「晨光→dawn_silk / 繁花→bloom_silk」（墨灵现场自主设计的时装）+ 单字兜底「蓝→starlight_silk / 绿→emerald_flow」（长词已在前，仅未命中长词时生效）；_TONE_ALIAS 增加「晨光金→dawn / 花雾粉→bloom」。CLI 实测 8 组消息全部符合预期（晨光/繁花/蓝/绿/晨光金/花雾粉命中，普通消息与无 cue 消息不触发）。**测试**：test_m5_style.py +6 项（已知/新增别名、单字兜底、色调别名、长词优先、不触发），文件 10→16 项全过。**隔离验证**：全量回归时 60 项 HTTP 冒烟失败（test_api/test_admin/test_ocr_api/test_avatars，错误均为 401/占位模型）——git stash 移除本次改动后重跑**仍 64 项失败**，证明为既有测试间污染/环境问题，与本次改动无关（本次改动零回归：有改动 60 failed/695 passed 且含新增 6 项全过）。**既有测试问题已单独登记待办（见下）**。
+- **发型/身材维度登记 M4 远期（2026-10-17）**：M5 自我形象目前只覆盖「时装×色调」；发型 / 身材维度登记为 M4 远期扩展方向（接 M 线三路结合管线，形体由 BPY 程序化 + AI 有机细节补全，时装系统部件库扩展），与「时装/服装更换系统 (c) 自我设计方向」合并评估。
+- **待办登记 · Python HTTP 冒烟测试稳定性（2026-10-17 实测发现）**：全量回归存在 60–64 项 HTTP 冒烟失败（test_api / test_admin / test_ocr_api / test_avatars / test_plugins），单用例独立运行可通过（如 test_generate_endpoint 单独跑 1 passed），全量跑即失败——判定为**测试间环境污染**（os.environ patch / create_server 状态串扰类），非产品代码缺陷。隔离实验证明与 2026-10-17 任一改动无关。建议后续专项排查（近期可选待办，不阻塞）。
 
 ### M5 深化 · 墨灵现场自主设计时装（2026-10-17 用户拍板 B）
 

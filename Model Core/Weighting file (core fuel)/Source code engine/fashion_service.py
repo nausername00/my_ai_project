@@ -33,6 +33,11 @@ _OUTFIT_ALIAS = (
     ("蓝银", "starlight_silk"),
     ("翡翠流光", "emerald_flow"),
     ("翡翠", "emerald_flow"),
+    ("晨光", "dawn_silk"),
+    ("繁花", "bloom_silk"),
+    # 单字兜底（长词已在前，只有未命中长词时才会到这里）
+    ("蓝", "starlight_silk"),
+    ("绿", "emerald_flow"),
 )
 _TONE_ALIAS = (
     ("深蓝灰", "royal"),
@@ -46,6 +51,8 @@ _TONE_ALIAS = (
     ("星夜蓝", "midnight"),
     ("星夜", "midnight"),
     ("翡翠绿", "emerald"),
+    ("晨光金", "dawn"),
+    ("花雾粉", "bloom"),
 )
 _COMMAND_CUES = ("穿", "换装", "换上", "换身", "造型")
 
