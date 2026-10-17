@@ -4874,6 +4874,15 @@ async function sendMessage(text) {
   }
 }
 
+// M5 摸头前端点击版：点击角色形象区域 = 摸摸头（复用完整消息链路，后端 hook 命中三拍演出）
+const characterDisplayForHeadpat = document.getElementById("character-display");
+if (characterDisplayForHeadpat) {
+  characterDisplayForHeadpat.addEventListener("click", () => {
+    if (sendButton.disabled) return; // 正在生成时忽略连点
+    sendMessage("摸摸头");
+  });
+}
+
 async function reflectOnConversation(characterId, history) {
   const status = document.getElementById("agent-reflection-status");
   const reflectButton = document.getElementById("agent-reflect-now");

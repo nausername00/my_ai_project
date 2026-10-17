@@ -3426,6 +3426,7 @@ body {
   background: radial-gradient(120px 90px at 50% 30%, rgba(155, 140, 255, 0.22), transparent 70%), var(--surface-1);
   box-shadow: var(--shadow-md);
   transition: transform 200ms ease, box-shadow 240ms ease;
+  cursor: pointer;
 }
 .character-display:hover {
   transform: translateY(-3px);
