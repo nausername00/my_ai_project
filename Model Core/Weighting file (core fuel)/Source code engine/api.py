@@ -699,7 +699,12 @@ class ApiHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    _MOBILE_ROOT = Path(__file__).resolve().parent.parent / "Frontend" / "mobile"
+    # 手机端 PWA 静态根：默认项目根 Frontend/mobile（开发/源码运行）；
+    # 安装版由 Electron 主进程注入 MOLING_MOBILE_ROOT（打包进 resources/mobile）。
+    _MOBILE_ROOT = Path(
+        os.environ.get("MOLING_MOBILE_ROOT")
+        or (Path(__file__).resolve().parent.parent / "Frontend" / "mobile")
+    )
     _MOBILE_MIME = {
         ".html": "text/html; charset=utf-8",
         ".js": "text/javascript; charset=utf-8",

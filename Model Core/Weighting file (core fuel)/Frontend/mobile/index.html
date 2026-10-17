@@ -21,19 +21,28 @@
   </header>
 
   <div class="settings" id="settingsPanel" hidden>
-    <label for="tokenInput">API Token（非本机访问必需；仅存本机浏览器）</label>
-    <div class="token-row">
-      <input type="password" id="tokenInput" placeholder="MOLING_API_TOKEN" autocomplete="off" />
-      <button type="button" id="tokenSave">保存</button>
+    <div class="setting-row">
+      <label for="tokenInput">API Token（非本机访问必需；仅存本机浏览器）</label>
+      <div class="token-row">
+        <input type="password" id="tokenInput" placeholder="MOLING_API_TOKEN" autocomplete="off" />
+        <button type="button" id="tokenSave">保存</button>
+      </div>
+    </div>
+    <div class="setting-row row-inline">
+      <label for="notifyToggle">新回复系统通知（需 HTTPS/本机；HTTP 局域网不可用）</label>
+      <button type="button" class="toggle" id="notifyToggle" role="switch" aria-checked="false">关</button>
+    </div>
+    <div class="setting-row row-inline">
+      <label for="clearBtn">清空本机聊天记录（不影响电脑端记忆）</label>
+      <button type="button" class="danger" id="clearBtn">清空</button>
     </div>
   </div>
 
-  <main class="chat" id="chatLog" aria-live="polite">
-    <div class="bubble bot" id="welcome">嗨～我是墨灵，想聊点什么？</div>
-  </main>
+  <main class="chat" id="chatLog" aria-live="polite"></main>
 
   <form class="composer" id="composer">
     <textarea id="input" rows="1" placeholder="输入消息…" autocomplete="off"></textarea>
+    <button type="button" class="mic" id="micBtn" aria-label="语音输入" title="语音输入">🎤</button>
     <button type="submit" id="sendBtn" aria-label="发送">发送</button>
   </form>
 

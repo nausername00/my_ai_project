@@ -306,6 +306,10 @@ async function startBackend() {
     MOLING_TOOL_CAPABILITY: agentWorkspaceRoot ? toolApprovalCapability : "",
     MOLING_VISION_CAPABILITY: visionConsentCapability,
     WORKSPACE_ROOT: agentWorkspaceRoot || app.getPath("userData"),
+    // 手机端 PWA 静态根：打包版读 resources/mobile，开发版读 Frontend/mobile。
+    MOLING_MOBILE_ROOT: app.isPackaged
+      ? path.join(process.resourcesPath, "mobile")
+      : path.join(app.getAppPath(), "mobile"),
   };
   if (app.isPackaged) {
     const characterRoot = path.join(app.getPath("userData"), "Character");

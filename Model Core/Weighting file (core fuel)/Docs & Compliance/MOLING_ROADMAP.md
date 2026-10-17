@@ -690,6 +690,15 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
 
 **手机端可用化（后续补丁，提交 80196e8 / 15b55cd）**：真实可达性冒烟发现两个缺口并修复——(a) `/v1/mobile/` 静态壳不在公开路径，非本机访问会被 401 拦截 → `_auth_allowed` 将 `_MOBILE_PREFIX` 放行（页面无数据，`/v1/generate` 等数据 API 仍需 token）；(b) PWA 调用的 `/v1/chat` 不存在（后端端点为 `/v1/generate`）→ 修正 `app.js`。PWA 新增右上角 ⚙ token 输入（localStorage 持久化 + `Authorization: Bearer` 头，401 时自动弹出提示）；新增 `启动手机端.bat` 一键局域网监听（`--host 0.0.0.0`，自动生成/复用 `mobile_token.txt`，打印各网卡访问地址）。**端到端冒烟（模拟手机来源 192.168.x.x）**：mobile 页无 token 200、generate 无 token 401、带 token 200。Python 全量 **557 passed / 6 skipped**（+1 认证放行测试）。
 
+**手机页功能打磨：语音 / 通知 / 续聊（2026-10-17）**：用户拍板"先做手机页功能打磨（语音/通知/续聊）"，纯前端 + 打包缺口修复，无后端 API 改动：
+
+- **语音输入**：输入区新增 🎤 按钮，Web Speech API（`SpeechRecognition` / `webkitSpeechRecognition`，`zh-CN`）识别结果填入输入框；识别中按钮脉冲高亮；能力/权限降级——非安全上下文（HTTP 局域网）点击提示"语音输入需要 HTTPS 或本机访问"、权限被拒提示"麦克风权限被拒绝"，不崩溃。
+- **通知**：设置面板新增"新回复系统通知"开关（默认关，localStorage 持久化）；后台收到回复（`document.hidden`）弹系统通知（摘要前 60 字，6s 自动关闭）；断线/重连状态变化也通知；`Notification` 仅安全上下文可用（HTTP 局域网开关置灰并说明）。
+- **续聊**：history 持久化到 `localStorage.moling_mobile_history`（最近 40 条），刷新/重开自动恢复聊天记录继续聊（恢复时不重复欢迎语）；新增"清空本机聊天记录"按钮（不影响电脑端记忆）。发送仍只带最近 10 条上下文给 `/v1/generate`。
+- **修复既有 bug**：`.settings[hidden]` 被 `.settings{display:flex}` 覆盖导致设置面板默认展开（旧版遗留），加 `.settings[hidden]{display:none}` 修复。
+- **修复安装版手机页 404 缺口**：PyInstaller 打包的后端没有 `Frontend/mobile`，安装版 `/v1/mobile/` 会 404——`api.py` 的 `_MOBILE_ROOT` 支持 `MOLING_MOBILE_ROOT` 环境变量覆盖；`main.cjs` spawn 后端时注入（打包版 `resources/mobile`，开发版 `Frontend/mobile`）；`package.json` extraResources 增加 `mobile → mobile`。
+- **验证**：浏览器实机验证（本地静态服务器）——设置面板默认收起、面板三控件正常、麦克风降级提示、发送失败降级提示（HTTP 501）、清空会话重置；`sw.js` 缓存版本 bump v1→v2；新增 `mobile.test.cjs`（9 项，含安装版 mobile 路径回归保护），前端全量 **82/82 全绿**。语音/通知的"真实识别/真实通知"需用户本地 HTTPS 环境实测（云端无麦克风/无 HTTPS）。
+
 
 
 ## 当前核心完善验证（2026-10-14）

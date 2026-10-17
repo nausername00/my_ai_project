@@ -1,7 +1,8 @@
 "use strict";
 
 // 墨灵移动端离线缓存（仅 HTTPS 下生效；HTTP 局域网自动跳过）。
-const CACHE = "moling-mobile-v1";
+// v2（2026-10-17）：语音 / 通知 / 续聊打磨后刷新缓存。
+const CACHE = "moling-mobile-v2";
 const ASSETS = ["index.html", "style.css", "app.js", "manifest.json", "icon.svg"];
 
 self.addEventListener("install", (event) => {
