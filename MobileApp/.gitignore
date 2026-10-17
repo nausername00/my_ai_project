@@ -1,0 +1,21 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Android 构建产物（可随时由 gradle 重建）
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/capacitor-cordova-android-plugins/build/
+
+# IDE
+*.iml
+.idea/
+.vscode/
+
+# 本地配置
+local.properties
+
+# 构建缓存
+capacitor-cordova-android-plugins/

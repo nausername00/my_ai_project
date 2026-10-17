@@ -833,3 +833,17 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
 - 展开态交互深化（Live2D 点触互动、情绪巡演入口等）。
 - 悬浮窗与主窗口联动体验（消息气泡、提示音的轻量反馈）。
 
+### B 路径 · 手机端真 App（原生壳，2026-10-17 用户拍板 B，C 后续补）
+
+用户重估手机端定位：不再满足"网页遥控器"，拍板走 **B（原生壳 App）**，C（完整独立移动 App：手机内轻量模型 + 记忆同步，电脑关机可继续陪伴）后续补。
+
+**现状结论（重估）**：此前的"不需要安卓原生工具"结论随目标失效——真 App 需要 Android 构建链（JDK 21 + Android SDK + Gradle），已全部搭建。
+
+**落地（MobileApp/ 新目录，Capacitor 8.5.3）**：
+- **壳技术**：Capacitor（WebView 壳，复用现有 `Frontend/mobile` 页面，前端零改动；npm 生态与现有 Electron 栈一致）。
+- **环境搭建**：Temurin JDK 21 LTS（`D:\tools\jdk21`，AGP 要求 Java 21 而非 17，首次构建踩坑已修）；Android SDK 补装 `cmdline-tools` + `platforms;android-36`（compileSdk 36）；Gradle 依赖随构建自动下载。
+- **工程**：`MobileApp/capacitor.config.json`（appId `com.moling.mobile`、appName `墨灵`、webDir 指向 `Model Core/Weighting file (core fuel)/Frontend/mobile`——注意 Frontend 在 core fuel 目录下，初始路径写错导致 sync 失败已修正）；`npx cap add android` 生成原生工程；`cap sync` 将手机页全套资源（index.html/app.js/style.css/sw.js/manifest.json/icon.svg）拷入 `android/app/src/main/assets/public`。
+- **打包**：`gradlew assembleDebug` **BUILD SUCCESSFUL**（93 tasks，3m09s）→ `app-debug.apk` **3.93MB**（package `com.moling.mobile`，versionName 1.0，minSdk 24 / targetSdk 36，应用名"墨灵"），`aapt dump badging` 验证通过。
+- **真机验证指引（未做，需用户手机）**：① 手机与电脑同一局域网；② 电脑跑 `启动手机端.bat`（后端监听 0.0.0.0 + mobile_token）；③ 手机安装 APK（侧载，需允许未知来源）→ 打开 App 输入电脑局域网 IP:8000 + token → 对话。语音/通知在 App 内 WebView 为安全上下文，比 HTTP 网页更接近可用（Web Speech 是否可用以实机为准）。
+- **待办登记**：① App 图标/启动屏替换（当前 Capacitor 默认图标，后续用墨灵形象）；② 真机实测反馈（后端连接/语音/通知）；③ **C 路径**（远期，完整独立移动 App：轻量模型 + 同步协议——"电脑关机手机继续陪伴"愿景）；④ 常驻唤醒（已有登记，原生壳比 PWA 更可行，仍按后续优化处理）。
+
