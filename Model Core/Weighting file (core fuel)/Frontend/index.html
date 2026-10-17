@@ -489,6 +489,41 @@
           </div>
           <p class="form-status" id="performance-status" role="status"></p>
           <button class="save-button" id="performance-save" type="button">保存演出规则</button>
+          <div class="performance-block">
+            <h3>演出视频导出（K6）</h3>
+            <p class="character-card-help">用时间线渲染成演出视频：实时进度 + 预览帧，可随时取消。默认载入一段演示时间线，也可粘贴自己的时间线 JSON。</p>
+            <label>时间线 JSON
+              <textarea id="k6-timeline-input" rows="9" class="performance-textarea"></textarea>
+            </label>
+            <div class="memory-actions">
+              <button class="icon-button" id="k6-load-demo" type="button">载入演示时间线</button>
+            </div>
+            <label>背景
+              <select id="k6-background">
+                <option value="#111318">深色 #111318（合成 mp4）</option>
+                <option value="transparent">透明（保留 PNG 序列素材）</option>
+              </select>
+            </label>
+            <label>角色位置
+              <select id="k6-side">
+                <option value="right">右侧</option>
+                <option value="left">左侧</option>
+              </select>
+            </label>
+            <label>输出目录
+              <input id="k6-outdir" type="text" class="performance-input" />
+            </label>
+            <div class="memory-actions">
+              <button class="save-button" id="k6-export-start" type="button">开始导出</button>
+              <button class="icon-button" id="k6-export-cancel" type="button" disabled>取消</button>
+            </div>
+            <div class="k6-export-progress" id="k6-export-progress" hidden>
+              <progress id="k6-export-bar" max="100" value="0"></progress>
+              <p class="form-status" id="k6-export-note" role="status"></p>
+              <img id="k6-export-preview" alt="渲染预览帧" hidden />
+            </div>
+            <p class="form-status" id="k6-export-status" role="status"></p>
+          </div>
         </section>
         <section id="status-panel" hidden>
           <p class="character-card-help">轻量运行时指标：请求计数、平均延迟与错误率（按接口分组，只统计本机运行）。</p>

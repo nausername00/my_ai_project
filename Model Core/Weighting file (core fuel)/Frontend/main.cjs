@@ -9,7 +9,7 @@ const {
   shell,
 } = require("electron");
 const { createHmac, randomBytes, randomUUID } = require("node:crypto");
-const { execFileSync, spawn } = require("node:child_process");
+const { execFileSync, spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs/promises");
 const net = require("node:net");
 const path = require("node:path");
@@ -40,6 +40,15 @@ const {
   workingPath: miniGameWorkingPath,
 } = require("./mini-game-drafts.cjs");
 const { pathToFileURL } = require("node:url");
+
+// K6 演出导出任务状态（模块级单任务句柄：start/cancel/status 共享）
+const K6_EXPORT = {
+  child: null,
+  outDir: null,
+  timelinePath: null,
+  expectedFrames: 0,
+};
+
 const {
   registerMolingScheme,
   registerMolingProtocol,
@@ -384,6 +393,21 @@ async function callApi(route, method = "GET", body, extraHeaders = {}) {
     "/v1/memory": ["GET", "POST"],
     "/v1/memory/export": ["GET"],
     "/v1/memory/import": ["POST"],
+    "/v1/memory/usage": ["GET"],
+    "/v1/status/metrics": ["GET"],
+    "/v1/performance/rules": ["GET", "PUT"],
+    "/v1/performance/cue": ["POST"],
+    "/v1/backup/create": ["POST"],
+    "/v1/assets/check": ["POST"],
+    "/v1/avatars/trio": ["POST"],
+    "/v1/avatars/trio-roles": ["GET"],
+    "/v1/discover/file": ["POST"],
+    "/v1/discover/context": ["POST"],
+    "/v1/goals": ["GET", "POST"],
+    "/v1/ocr/analyze": ["POST"],
+    "/v1/proposals": ["GET", "POST"],
+    "/v1/proposals/respond": ["POST"],
+    "/v1/proposals/settings": ["GET", "POST"],
     "/v1/privacy": ["GET", "POST"],
     "/v1/affect": ["GET", "POST"],
     "/v1/engine/list": ["GET"],
@@ -407,6 +431,9 @@ async function callApi(route, method = "GET", body, extraHeaders = {}) {
       : []) ||
     (/^\/v1\/characters\/[a-zA-Z0-9-]{1,64}$/i.test(routePath)
       ? ["DELETE"]
+      : []) ||
+    (/^\/v1\/goals\/[a-f0-9-]{8,64}$/i.test(routePath)
+      ? ["PUT", "DELETE"]
       : []) ||
     (/^\/v1\/agent\/traces\/[0-9a-f-]{8,64}\/cancel$/i.test(routePath)
       ? ["POST"]
@@ -1260,6 +1287,128 @@ function registerIpcHandlers() {
   ipcMain.handle("companion:classify-cue", (_event, text) =>
     callApi("/v1/performance/cue", "POST", { text }),
   );
+  // ---- K6 演出导出（预览/取消）----
+  ipcMain.handle("companion:k6-export-start", async (_event, payload) => {
+    if (K6_EXPORT.child && K6_EXPORT.child.exitCode === null) {
+      throw new Error("已有导出任务进行中，请先取消或等待完成");
+    }
+    const timeline = payload && payload.timeline;
+    const background = (payload && payload.background) || "#111318";
+    const side = (payload && payload.side) || "right";
+    const outDir =
+      (payload && payload.outDir && payload.outDir.trim()) ||
+      path.join(
+        projectRoot,
+        "Character",
+        "K6 Output",
+        "k6-ui-export",
+        background === "transparent" ? "transparent" : "with-bg",
+      );
+    if (!timeline || typeof timeline !== "object" || !Array.isArray(timeline.tracks)) {
+      throw new Error("timeline 必须是包含 tracks 数组的对象");
+    }
+    if (background !== "transparent" && !/^#[0-9a-fA-F]{6}$/.test(background)) {
+      throw new Error("background 只允许 transparent 或 #rrggbb");
+    }
+    if (!["left", "right", "center"].includes(side)) {
+      throw new Error("side 只允许 left / right / center");
+    }
+    const fps = Math.max(1, Math.min(30, Number(timeline.fps) || 10));
+    const totalDur =
+      timeline.tracks.reduce(
+        (m, t) => Math.max(m, Number(t.t) + (Number(t.dur) || 0)),
+        0,
+      ) || 1;
+    const expectedFrames = Math.max(1, Math.ceil(totalDur * fps));
+    const fsSync = require("node:fs");
+    fsSync.mkdirSync(outDir, { recursive: true });
+    const tlPath = path.join(outDir, "timeline.json");
+    fsSync.writeFileSync(tlPath, JSON.stringify({ ...timeline, fps }, null, 2));
+    const k6Script = path.join(__dirname, "k6-render.cjs");
+    const child = spawn(
+      process.execPath,
+      [
+        k6Script,
+        "--timeline",
+        tlPath,
+        "--out",
+        outDir,
+        "--bg",
+        background,
+        "--side",
+        side,
+      ],
+      { cwd: __dirname, windowsHide: true, stdio: "ignore" },
+    );
+    K6_EXPORT.child = child;
+    K6_EXPORT.outDir = outDir;
+    K6_EXPORT.timelinePath = tlPath;
+    K6_EXPORT.expectedFrames = expectedFrames;
+    return { ok: true, outDir, expectedFrames };
+  });
+  ipcMain.handle("companion:k6-export-cancel", () => {
+    const child = K6_EXPORT.child;
+    if (!child) return { ok: false, reason: "no-task" };
+    if (child.exitCode !== null) {
+      K6_EXPORT.child = null;
+      return { ok: true, already: true };
+    }
+    try {
+      spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+        windowsHide: true,
+        stdio: "ignore",
+      });
+    } catch {
+      try {
+        child.kill();
+      } catch {
+        // 进程已退出，忽略
+      }
+    }
+    K6_EXPORT.child = null;
+    return { ok: true };
+  });
+  ipcMain.handle("companion:k6-export-status", async () => {
+    const st = K6_EXPORT;
+    if (!st.child) return { state: "idle" };
+    const exited = st.child.exitCode !== null;
+    const fsSync = require("node:fs");
+    let frames = 0;
+    let preview = null;
+    const framesDir = path.join(st.outDir, "frames");
+    if (fsSync.existsSync(framesDir)) {
+      let names = [];
+      try {
+        names = fsSync
+          .readdirSync(framesDir)
+          .filter((n) => /^frame_\d{5}\.png$/.test(n));
+      } catch {
+        // 目录尚未就绪，保持 frames = 0
+      }
+      frames = names.length;
+      if (frames > 0) {
+        const last = path.join(framesDir, names.sort().pop());
+        try {
+          preview =
+            "data:image/png;base64," +
+            fsSync.readFileSync(last).toString("base64");
+        } catch {
+          // 预览帧读取失败不影响进度
+        }
+      }
+    }
+    const mp4 = path.join(st.outDir, "video.mp4");
+    const done = exited && fsSync.existsSync(mp4);
+    const state = exited ? (done ? "done" : "error") : "running";
+    if (exited) st.child = null;
+    return {
+      state,
+      frames,
+      expectedFrames: st.expectedFrames,
+      preview,
+      outputPath: exited ? st.outDir : null,
+    };
+  });
   ipcMain.handle("companion:backup-create", () =>
     callApi("/v1/backup/create", "POST", {}),
   );

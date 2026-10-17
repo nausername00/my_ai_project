@@ -116,6 +116,21 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke("companion:update-memory", memoryId, memory),
     deleteMemory: (memoryId) =>
       ipcRenderer.invoke("companion:delete-memory", memoryId),
+    memoryUsage: () => ipcRenderer.invoke("companion:memory-usage"),
+    statusMetrics: () => ipcRenderer.invoke("companion:status-metrics"),
+    getPerformanceRules: () =>
+      ipcRenderer.invoke("companion:get-performance-rules"),
+    savePerformanceRules: (rules) =>
+      ipcRenderer.invoke("companion:save-performance-rules", rules),
+    classifyCue: (text) =>
+      ipcRenderer.invoke("companion:classify-cue", text),
+    backupCreate: () => ipcRenderer.invoke("companion:backup-create"),
+    exportMemories: () => ipcRenderer.invoke("companion:export-memories"),
+    importMemories: () => ipcRenderer.invoke("companion:import-memories"),
+    k6ExportStart: (payload) =>
+      ipcRenderer.invoke("companion:k6-export-start", payload),
+    k6ExportCancel: () => ipcRenderer.invoke("companion:k6-export-cancel"),
+    k6ExportStatus: () => ipcRenderer.invoke("companion:k6-export-status"),
     getPrivacy: () => ipcRenderer.invoke("companion:get-privacy"),
     setPrivacy: (settings) => ipcRenderer.invoke("companion:set-privacy", settings),
     getProposals: () => ipcRenderer.invoke("companion:get-proposals"),

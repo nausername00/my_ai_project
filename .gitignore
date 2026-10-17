@@ -102,3 +102,7 @@ Model Core/Weighting file (core fuel)/Character/memory_usage_log.json
 
 # ----- E4 文件锁运行时残留（2026-10-17 补录：锁文件允许残留且无害，不入库）-----
 *.lock
+
+# ----- K6 演出导出运行产物（2026-10-17 补录：渲染日志与 UI 导出目录不入库）-----
+Model Core/Weighting file (core fuel)/Frontend/k6_render_out.txt
+Model Core/Weighting file (core fuel)/Character/K6 Output/k6-ui-export/

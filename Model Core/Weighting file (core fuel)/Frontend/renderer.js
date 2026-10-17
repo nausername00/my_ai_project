@@ -206,6 +206,18 @@ const performanceStatus = document.getElementById("performance-status");
 const performanceActionAdd = document.getElementById("performance-action-add");
 const performancePartAdd = document.getElementById("performance-part-add");
 const performanceSave = document.getElementById("performance-save");
+const k6TimelineInput = document.getElementById("k6-timeline-input");
+const k6LoadDemo = document.getElementById("k6-load-demo");
+const k6Background = document.getElementById("k6-background");
+const k6Side = document.getElementById("k6-side");
+const k6Outdir = document.getElementById("k6-outdir");
+const k6ExportStartBtn = document.getElementById("k6-export-start");
+const k6ExportCancelBtn = document.getElementById("k6-export-cancel");
+const k6ExportProgress = document.getElementById("k6-export-progress");
+const k6ExportBar = document.getElementById("k6-export-bar");
+const k6ExportNote = document.getElementById("k6-export-note");
+const k6ExportPreview = document.getElementById("k6-export-preview");
+const k6ExportStatusEl = document.getElementById("k6-export-status");
 const statusSummary = document.getElementById("status-summary");
 const statusList = document.getElementById("status-list");
 const statusNote = document.getElementById("status-note");
@@ -4096,6 +4108,144 @@ function setupPerformancePanel() {
     performanceParts.append(makePerformancePartRow()),
   );
   performanceSave.addEventListener("click", savePerformanceRules);
+  setupK6Export();
+}
+
+// ---- K6 演出导出（预览/取消）----
+const K6_DEMO_TIMELINE = {
+  fps: 10,
+  width: 1280,
+  height: 720,
+  tracks: [
+    { t: 0, dur: 2, text: "大家好，我是沐莹~", mouth: 0.3, speech: true },
+    {
+      t: 2,
+      dur: 2.5,
+      text: "你知道吗？每天摸摸头，可以让人放松下来。",
+      mouth: 0.3,
+      speech: true,
+      expression: "脸红",
+      param: { ParamAngleX: 12, ParamAngleZ: 8 },
+    },
+    {
+      t: 4.5,
+      dur: 2,
+      text: "嘿嘿，被你发现了~",
+      mouth: 0.3,
+      speech: true,
+      expression: "心心眼",
+      param: { ParamAngleX: -10 },
+    },
+    { t: 6.5, dur: 1.5, text: "好啦，今天的知识讲完啦！", mouth: 0.3, speech: true },
+  ],
+};
+
+let k6PollTimer = null;
+
+function setK6Exporting(active) {
+  k6ExportStartBtn.disabled = active;
+  k6ExportCancelBtn.disabled = !active;
+}
+
+function k6SetStatus(message, isError = false) {
+  k6ExportStatusEl.textContent = message;
+  k6ExportStatusEl.classList.toggle("error", isError);
+}
+
+async function k6PollExport() {
+  let status;
+  try {
+    status = await window.companion.k6ExportStatus();
+  } catch (error) {
+    setK6Exporting(false);
+    k6SetStatus(error.message, true);
+    return;
+  }
+  if (status.state === "idle") {
+    setK6Exporting(false);
+    return;
+  }
+  const percent = status.expectedFrames
+    ? Math.min(100, Math.round((status.frames / status.expectedFrames) * 100))
+    : 0;
+  k6ExportBar.value = percent;
+  if (status.preview) {
+    k6ExportPreview.src = status.preview;
+    k6ExportPreview.hidden = false;
+  }
+  if (status.state === "running") {
+    k6ExportNote.textContent = `渲染中 ${status.frames}/${status.expectedFrames} 帧（${percent}%）`;
+    k6PollTimer = setTimeout(k6PollExport, 1000);
+  } else if (status.state === "done") {
+    setK6Exporting(false);
+    k6ExportNote.textContent = `已完成 ${status.frames} 帧 → ${status.outputPath}`;
+    k6SetStatus("导出完成");
+  } else {
+    setK6Exporting(false);
+    k6ExportNote.textContent = `已渲染 ${status.frames} 帧但未产出视频（可能被取消或渲染出错）`;
+    k6SetStatus("导出未完成：请查看输出目录与渲染日志", true);
+  }
+}
+
+function stopK6Polling() {
+  if (k6PollTimer) {
+    clearTimeout(k6PollTimer);
+    k6PollTimer = null;
+  }
+}
+
+async function startK6Export() {
+  let timeline;
+  try {
+    timeline = JSON.parse(k6TimelineInput.value.trim());
+  } catch {
+    k6SetStatus("时间线 JSON 解析失败：请检查格式", true);
+    return;
+  }
+  if (!timeline || !Array.isArray(timeline.tracks) || timeline.tracks.length === 0) {
+    k6SetStatus("时间线必须包含非空的 tracks 数组", true);
+    return;
+  }
+  k6ExportProgress.hidden = false;
+  k6ExportBar.value = 0;
+  k6ExportPreview.hidden = true;
+  k6SetStatus("正在启动渲染…");
+  try {
+    const result = await window.companion.k6ExportStart({
+      timeline,
+      background: k6Background.value,
+      side: k6Side.value,
+      outDir: k6Outdir.value.trim(),
+    });
+    setK6Exporting(true);
+    k6ExportNote.textContent = `已启动：预计 ${result.expectedFrames} 帧 → ${result.outDir}`;
+    stopK6Polling();
+    k6PollTimer = setTimeout(k6PollExport, 1200);
+  } catch (error) {
+    k6SetStatus(error.message, true);
+  }
+}
+
+async function cancelK6Export() {
+  try {
+    await window.companion.k6ExportCancel();
+    stopK6Polling();
+    setK6Exporting(false);
+    k6SetStatus("已取消导出");
+  } catch (error) {
+    k6SetStatus(error.message, true);
+  }
+}
+
+function setupK6Export() {
+  if (!k6TimelineInput.value.trim()) {
+    k6TimelineInput.value = JSON.stringify(K6_DEMO_TIMELINE, null, 2);
+  }
+  k6LoadDemo.addEventListener("click", () => {
+    k6TimelineInput.value = JSON.stringify(K6_DEMO_TIMELINE, null, 2);
+  });
+  k6ExportStartBtn.addEventListener("click", startK6Export);
+  k6ExportCancelBtn.addEventListener("click", cancelK6Export);
 }
 
 async function loadStatusMetrics() {

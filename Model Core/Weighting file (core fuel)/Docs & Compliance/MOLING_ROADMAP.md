@@ -476,7 +476,17 @@
   - **修布局 scale 反推错误**：`model.width/height` 是含 scale 的显示 bounds，缩放须用 `getLocalBounds()` 原始尺寸，否则模型按原始 3637×4677 铺满画面。
   - 视频合成：`ffmpeg-static`（本地二进制，H.264/yuv420p）；透明版只保留 PNG 序列不合成。
   - **实机验证**：深色版 110 帧（1280×720, 10fps）+ `video.mp4`；透明版 110 帧（角落 alpha=0，角色区 alpha=255）；角色靠右、字幕入画、轨道表情/口型切换、结束回中性；水印为模型作者自带（本地个人使用，未移除）。
-  - 待办：背景音乐/配音混音（人声优先）、浅色背景白边自动检查、导出预览/取消、演出规则可配置 UI。
+  - 待办：背景音乐/配音混音（人声优先）**已完成（A 组混音技能卡）**、浅色背景白边自动检查**已完成（B 组白边检查）**、**导出预览/取消已完成（2026-10-17，见下段）**、演出规则可配置 UI **已完成（E5）**。
+
+### K6 导出预览/取消（近期目标闭环，2026-10-17）
+
+演出 tab 底部新增**「演出视频导出（K6）」区块**——用户无需命令行即可发起演出渲染，实时看到进度与预览帧，可随时取消：
+
+- **前端 UI**（`index.html` 演出 tab + `renderer.js` + `style.css`）：时间线 JSON 编辑区（默认预填一段演示时间线：沐莹讲解 4 句台词、脸红/心心眼表情、侧头参数、说话口型起伏，8s/10fps/80 帧）；背景（深色 #111318 合成 mp4 / 透明保留 PNG 序列）；角色位置（右/左）；输出目录（可留空，默认 `Character\K6 Output\k6-ui-export\{with-bg|transparent}`）；开始导出 / 取消按钮 + 进度条 + 最新帧预览图 + 状态文字。
+- **主进程**（`main.cjs` IPC `companion:k6-export-start/cancel/status`）：start 校验 timeline 结构 / background（transparent 或 #rrggbb）/ side（left/right/center），写 timeline.json（工程文件），`spawn(process.execPath, [k6-render.cjs, ...])` 独立渲染进程；status 轮询 frames 目录帧数 + 最新帧 dataURL 预览 + mp4 存在判定 done/error；cancel 用 `taskkill /T /F` 终止进程树。模块级单任务句柄（进行中拒绝重复启动）。
+- **端到端实测（CDP 真实点击 + 真实渲染）**：演出 tab 打开 → 演示时间线预填 → 点开始导出 → 进度 0→80/80（100%）→ **预览帧显示** → "导出完成"；磁盘产物三件套齐备：`video.mp4`（135KB）+ 80 帧 PNG 序列 + `timeline.json`（823B）；渲染日志 `[render-done] {frameCount:80,totalDur:8,fps:10}` → `[ffmpeg-ok]` → `[k6-done]` 干净结束。前端测试 +5 项（k6-export.test.cjs），**74/74 全绿**。
+- **顺带修复两个前端真实缺口（端到端发现）**：① `preload.cjs` 缺 8 个桥键（memoryUsage/statusMetrics/getPerformanceRules/savePerformanceRules/classifyCue/backupCreate/exportMemories/importMemories）——演出 tab / 状态指标 / 备份 / 记忆导入导出按钮此前点开即 TypeError，已补齐；② `main.cjs` callApi 路由白名单缺 `/v1/performance/rules`、`/v1/performance/cue`、`/v1/status/metrics`、`/v1/memory/usage`、`/v1/backup/create`、`/v1/assets/check`、`/v1/avatars/trio(-roles)`、`/v1/discover/*`、`/v1/goals(+动态 id)`、`/v1/ocr/analyze`、`/v1/proposals*`（"Unsupported API route"）——补齐后演出规则 5 行正常加载（实测 actionRowCount=5）。
+- **打包清单补全**（`package.json` build.files）：补 K6 渲染链与 Live2D 运行时文件（k6-render.cjs / k6-stage.html / k6-preload.cjs / live2d-protocol.cjs / live2d-avatar.js / live2d-runtime.js / vendor/live2dcubismcore.min.js）——否则安装版导出与主窗口 Live2D 失效。
 
 **依赖与建议顺序**：K0 → K1 → K2 → K3 → K4 / K5（并行）→ K6；K0 为前置底座，K6 为最终闭环。运行时渲染（`.moc3` 播放）与"专属搭档嵌入墨灵窗口"列为远期集成目标（延续 H2-可选），不在本系列硬依赖内。
 
@@ -793,3 +803,13 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
   - **端到端实测（CDP 双窗口真实点击）**：主窗口点角色区 → 菜单开（4 项）/再点关；选"摸摸头"→ 1.5s 三拍回复"嘿嘿~被摸头了……好舒服，可以再来一下吗？"；悬浮窗点头像 → 菜单开（6 项）；悬浮窗选"你好呀~"→ 1.5s 主窗口会话出现该消息并进入模型推理（转发链路贯通）。前端 `node --check` + npm test **69/69 全绿**（notifications.test 补 sendChat 键）。
 - **悬浮窗展开态"走出盒子"（2026-10-17）**：用户截图反馈角色"困在"228×228 紫色方框里——展开态角色区从正方形改**竖版展示台**：`#panel.expanded #avatar-wrap` 228×228 → **240×340**（圆角 22px），Live2D fixedSize 同步 228×228 → 240×340（竖版贴合角色比例，全身舒展）；紫色硬底换成**中央舞台光晕**（radial-gradient 中心亮、四周化开，角色站在光里而非盒子里）；悬浮窗展开尺寸 340×560 → **340×640**（角色区 + 底部信息区都有呼吸空间）；互动菜单展开态定位同步下移（top 360px）。**CDP 实截验证**：展开态角色完整站立于竖版光晕舞台，无裁剪、无硬色块。前端测试 69/69 保持全绿。
 - 后续：前端点击触发并入前端批次（已完成）；亲密度可累积解锁表现（远期，接 K 演出）。
+
+### 悬浮窗持续打磨（远期，2026-10-17 用户指示登记）
+
+用户反馈"悬浮窗方面好像不是很理想"，本次已闭环两项（互动工具菜单、展开态"走出盒子"）。其余优化方向**列入远期**（近期主线不占时间），按用户后续反馈逐项推进：
+- 折叠态信息密度与视觉（64px 圆形头像 + 昵称/状态/通知区的排布与质感）。
+- 通知区体验（卡片密度、时长、操作按钮布局）。
+- 更多互动工具入菜单（摸头之外的表达、表情、小游戏入口等，与互动菜单框架扩展合并评估）。
+- 展开态交互深化（Live2D 点触互动、情绪巡演入口等）。
+- 悬浮窗与主窗口联动体验（消息气泡、提示音的轻量反馈）。
+
