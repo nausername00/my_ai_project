@@ -14,12 +14,28 @@
       "texture": "m3_texture_outfit.jpg",
       "target": "body_ring",
       "desc": "绯红底色金凤凰羽纹缠枝（M3 时装接驳演示）"
+    },
+    {
+      "id": "starlight_silk",
+      "name": "星澜蓝银",
+      "texture": "m6_texture_starlight.jpg",
+      "target": "body_ring",
+      "desc": "星空蓝紫星云+银线流光（M5 时装库扩展首作）"
+    },
+    {
+      "id": "emerald_flow",
+      "name": "翡翠流光",
+      "texture": "m6_texture_emerald.jpg",
+      "target": "body_ring",
+      "desc": "翡翠绿宝石质感+金纹流光（M5 时装库扩展）"
     }
   ],
   "tones": {
     "ivory": [0.95, 0.90, 0.82],
     "light": [0.92, 0.94, 0.97],
-    "royal": [0.22, 0.28, 0.42]
+    "royal": [0.22, 0.28, 0.42],
+    "midnight": [0.10, 0.14, 0.26],
+    "emerald": [0.14, 0.38, 0.30]
   },
   "state_path": "fashion_state.json"
 }

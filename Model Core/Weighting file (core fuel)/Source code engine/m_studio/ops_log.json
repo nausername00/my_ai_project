@@ -385,5 +385,77 @@
     "cache_hit": true,
     "render_ms": 0,
     "cost": "轻"
+  },
+  {
+    "ts": "2026-10-17T02:49:17+00:00",
+    "outfit_id": "starlight_silk",
+    "tone_id": "midnight",
+    "target": "body_ring",
+    "cache_hit": false,
+    "render_ms": 17279,
+    "cost": "重"
+  },
+  {
+    "ts": "2026-10-17T02:49:32+00:00",
+    "outfit_id": "emerald_flow",
+    "tone_id": "emerald",
+    "target": "body_ring",
+    "cache_hit": false,
+    "render_ms": 15164,
+    "cost": "重"
+  },
+  {
+    "ts": "2026-10-17T02:50:55+00:00",
+    "outfit_id": "a",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": false,
+    "render_ms": 0,
+    "cost": "重"
+  },
+  {
+    "ts": "2026-10-17T02:50:55+00:00",
+    "outfit_id": "a",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": true,
+    "render_ms": 0,
+    "cost": "轻"
+  },
+  {
+    "ts": "2026-10-17T02:50:55+00:00",
+    "outfit_id": "a",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": false,
+    "render_ms": 0,
+    "cost": "重"
+  },
+  {
+    "ts": "2026-10-17T02:50:55+00:00",
+    "outfit_id": "a",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": false,
+    "render_ms": 0,
+    "cost": "重"
+  },
+  {
+    "ts": "2026-10-17T02:50:55+00:00",
+    "outfit_id": "a",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": false,
+    "render_ms": 1,
+    "cost": "重"
+  },
+  {
+    "ts": "2026-10-17T02:50:55+00:00",
+    "outfit_id": "a",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": true,
+    "render_ms": 0,
+    "cost": "轻"
   }
 ]

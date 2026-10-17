@@ -28,6 +28,11 @@ _OUTFIT_ALIAS = (
     ("绯红", "phoenix_crimson"),
     ("金凤", "phoenix_crimson"),
     ("凤凰", "phoenix_crimson"),
+    ("星澜蓝银", "starlight_silk"),
+    ("星澜", "starlight_silk"),
+    ("蓝银", "starlight_silk"),
+    ("翡翠流光", "emerald_flow"),
+    ("翡翠", "emerald_flow"),
 )
 _TONE_ALIAS = (
     ("深蓝灰", "royal"),
@@ -38,6 +43,9 @@ _TONE_ALIAS = (
     ("暖白", "ivory"),
     ("象牙", "ivory"),
     ("浅", "light"),
+    ("星夜蓝", "midnight"),
+    ("星夜", "midnight"),
+    ("翡翠绿", "emerald"),
 )
 _COMMAND_CUES = ("穿", "换装", "换上", "换身", "造型")
 

@@ -112,5 +112,43 @@
       "cost": "轻"
     },
     "status": "pending"
+  },
+  {
+    "id": 7,
+    "created_at": "2026-10-17T02:49:17+00:00",
+    "outfit_id": "starlight_silk",
+    "outfit_name": "星澜蓝银",
+    "tone_id": "midnight",
+    "tone_name": "midnight",
+    "res": "960,540",
+    "idea": "星澜是深空的呼吸，银线是划过夜色的流光。 星夜蓝像未眠的深海，神秘里藏着微光。 适合夜晚长谈——星夜配星夜，安静又深邃。",
+    "render": {
+      "rc": 0,
+      "cache_hit": false,
+      "render_ms": 17279,
+      "out": "D:\\Coding\\code program\\test\\This is mine\\my_ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\proposal_starlight_silk_midnight.png",
+      "log_tail": "roject\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\proposal_starlight_silk_midnight.png'\n[M2] target=body_ring base=(0.1, 0.14, 0.26) rendered -> D:\\Coding\\code program\\test\\This is mine\\my_ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\proposal_starlight_silk_midnight.png\nBlender 5.1.2 (hash ec6e62d40fa9 built 2026-05-19 01:37:34)\n\nBlender quit\nproject\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\m2_bpy_render.py:58: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0\n  mat.use_nodes = True\n",
+      "cost": "重"
+    },
+    "status": "pending"
+  },
+  {
+    "id": 8,
+    "created_at": "2026-10-17T02:49:32+00:00",
+    "outfit_id": "emerald_flow",
+    "outfit_name": "翡翠流光",
+    "tone_id": "emerald",
+    "tone_name": "emerald",
+    "res": "960,540",
+    "idea": "翡翠是沉淀的生机，金纹是跃动的脉搏。 翡翠绿像林间的晨露，清透里带着生命力。 适合讲述成长与生机——翡翠配翡翠，通体都是生命力。",
+    "render": {
+      "rc": 0,
+      "cache_hit": false,
+      "render_ms": 15164,
+      "out": "D:\\Coding\\code program\\test\\This is mine\\my_ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\proposal_emerald_flow_emerald.png",
+      "log_tail": "y_ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\proposal_emerald_flow_emerald.png'\n[M2] target=body_ring base=(0.14, 0.38, 0.3) rendered -> D:\\Coding\\code program\\test\\This is mine\\my_ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\proposal_emerald_flow_emerald.png\nBlender 5.1.2 (hash ec6e62d40fa9 built 2026-05-19 01:37:34)\n\nBlender quit\nproject\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\m2_bpy_render.py:58: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0\n  mat.use_nodes = True\n",
+      "cost": "重"
+    },
+    "status": "pending"
   }
 ]
