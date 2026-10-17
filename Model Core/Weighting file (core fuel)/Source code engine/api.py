@@ -83,6 +83,7 @@ from fashion_service import (
     suggest_style_proposal,
 )
 from m_studio.m5_headpat import headpat_response
+from m_studio.m5_praise_service import praise_response
 
 
 # ---------------------------------------------------------------------------
@@ -2556,6 +2557,23 @@ class ApiHandler(BaseHTTPRequestHandler):
                         "text": style_proposal["text"],
                         "style_proposal": style_proposal,
                         "response_kind": "style_proposal",
+                        "affect": simulated_affect,
+                        "explore_proposal": explore_hint,
+                    },
+                )
+                return
+            # M5b 反差萌：被夸奖时三拍演出（顺势注入当前造型+设计思路）
+            praise = praise_response(prompt)
+            if praise is not None:
+                self._send_json(
+                    HTTPStatus.OK,
+                    {
+                        "text": praise["text"],
+                        "beats": praise["beats"],
+                        "style": praise["style"],
+                        "idea": praise["idea"],
+                        "moods": praise["moods"],
+                        "response_kind": "praise",
                         "affect": simulated_affect,
                         "explore_proposal": explore_hint,
                     },
