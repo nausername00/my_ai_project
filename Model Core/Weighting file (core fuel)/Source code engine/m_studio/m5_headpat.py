@@ -15,6 +15,8 @@ import os
 import sys
 from typing import Any
 
+from m_studio.lock_utils import FileLock
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATE_PATH = os.path.join(HERE, "headpat_state.json")
 
@@ -78,7 +80,11 @@ class HeadpatScript:
         self._state_path = state_path or STATE_PATH
 
     def touch(self) -> dict[str, Any]:
-        """记录一次摸头，返回当前拍演出 + 好感状态。"""
+        """记录一次摸头，返回当前拍演出 + 好感状态（写操作加锁，防分身并发丢计数）。"""
+        with FileLock(self._state_path):
+            return self._touch_locked()
+
+    def _touch_locked(self) -> dict[str, Any]:
         state = self._load_state()
         state["count"] = int(state.get("count", 0)) + 1
         count = state["count"]

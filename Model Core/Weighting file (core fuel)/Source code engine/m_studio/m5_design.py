@@ -15,6 +15,7 @@ import sys
 from datetime import datetime, timezone
 
 from fashion_system import FashionSystem
+from m_studio.lock_utils import FileLock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DESIGN_LOG_PATH = os.path.join(HERE, "design_log.json")
@@ -89,8 +90,9 @@ class SelfDesigner:
         return data if isinstance(data, list) else []
 
     def _save_log(self) -> None:
-        with open(self._log_path, "w", encoding="utf-8") as f:
-            json.dump(self._log, f, ensure_ascii=False, indent=2)
+        with FileLock(self._log_path):
+            with open(self._log_path, "w", encoding="utf-8") as f:
+                json.dump(self._log, f, ensure_ascii=False, indent=2)
 
     def _used_themes(self) -> set[str]:
         return {entry["theme_id"] for entry in self._log if entry.get("status") in ("planned", "applied")}
@@ -140,19 +142,20 @@ class SelfDesigner:
 
         # 注册时装 + 色调（幂等：已存在则跳过）
         registry_path = self._registry_path
-        with open(registry_path, encoding="utf-8") as f:
-            registry = json.load(f)
-        if not any(o["id"] == outfit_id for o in registry["outfits"]):
-            registry["outfits"].append({
-                "id": outfit_id, "name": theme["name"],
-                "texture": os.path.basename(texture_local),
-                "target": "body_ring",
-                "desc": f"{theme['name']}主题（M5 墨灵现场自主设计）",
-            })
-        if tone_id not in registry["tones"]:
-            registry["tones"][tone_id] = theme["tone"]["rgb"]
-        with open(registry_path, "w", encoding="utf-8") as f:
-            json.dump(registry, f, ensure_ascii=False, indent=2)
+        with FileLock(registry_path):
+            with open(registry_path, encoding="utf-8") as f:
+                registry = json.load(f)
+            if not any(o["id"] == outfit_id for o in registry["outfits"]):
+                registry["outfits"].append({
+                    "id": outfit_id, "name": theme["name"],
+                    "texture": os.path.basename(texture_local),
+                    "target": "body_ring",
+                    "desc": f"{theme['name']}主题（M5 墨灵现场自主设计）",
+                })
+            if tone_id not in registry["tones"]:
+                registry["tones"][tone_id] = theme["tone"]["rgb"]
+            with open(registry_path, "w", encoding="utf-8") as f:
+                json.dump(registry, f, ensure_ascii=False, indent=2)
 
         # 注册写盘后刷新实例缓存，使新时装/色调对 compose 可见（注入的假实例不重建）
         if isinstance(self.fashion, FashionSystem):

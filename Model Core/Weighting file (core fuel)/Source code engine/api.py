@@ -85,6 +85,9 @@ from fashion_service import (
 from m_studio.m5_headpat import headpat_response
 from m_studio.m5_praise_service import praise_response
 
+# E4 最小版：状态类 hook（换装/摸头/自荐/夸奖）整体串行化的进程级锁
+_STATE_HOOK_LOCK = threading.Lock()
+
 
 # ---------------------------------------------------------------------------
 # 演出规则（K6/B 组成文配置）：读取与校验，供前端「演出规则」可配置 UI 使用
@@ -2508,77 +2511,79 @@ class ApiHandler(BaseHTTPRequestHandler):
                 else None
             )
             # M5c 聊天换装入口：命中"穿/换装+造型"直接换装返回，不进模型推理
-            fashion_command = detect_fashion_command(prompt)
-            if fashion_command is not None:
-                try:
-                    changed = change_outfit(
-                        fashion_command.get("outfit_id"),
-                        fashion_command.get("tone_id"),
+            # （E4 最小版：状态类 hook 整体串行化，防并发请求同时写状态文件）
+            with _STATE_HOOK_LOCK:
+                fashion_command = detect_fashion_command(prompt)
+                if fashion_command is not None:
+                    try:
+                        changed = change_outfit(
+                            fashion_command.get("outfit_id"),
+                            fashion_command.get("tone_id"),
+                        )
+                    except (TypeError, ValueError, OSError) as error:
+                        changed = {"error": str(error)}
+                    self._send_json(
+                        HTTPStatus.OK,
+                        {
+                            "text": (
+                                f"好呀，我换上{changed.get('outfit_name', '新造型')}了~"
+                                if "error" not in changed
+                                else "换装出了一点小状况，我们先继续聊吧。"
+                            ),
+                            "fashion": changed,
+                            "response_kind": "fashion",
+                            "affect": simulated_affect,
+                            "explore_proposal": explore_hint,
+                        },
                     )
-                except (TypeError, ValueError, OSError) as error:
-                    changed = {"error": str(error)}
-                self._send_json(
-                    HTTPStatus.OK,
-                    {
-                        "text": (
-                            f"好呀，我换上{changed.get('outfit_name', '新造型')}了~"
-                            if "error" not in changed
-                            else "换装出了一点小状况，我们先继续聊吧。"
-                        ),
-                        "fashion": changed,
-                        "response_kind": "fashion",
-                        "affect": simulated_affect,
-                        "explore_proposal": explore_hint,
-                    },
-                )
-                return
-            # M5 摸头奖励：显式动作触发（"摸摸头"），三拍回应 + 好感计数
-            headpat = headpat_response(prompt)
-            if headpat is not None:
-                self._send_json(
-                    HTTPStatus.OK,
-                    {
-                        "text": headpat["text"],
-                        "mood": headpat["mood"],
-                        "expression": headpat["expression"],
-                        "headpat": headpat["headpat"],
-                        "response_kind": "headpat",
-                        "affect": simulated_affect,
-                        "explore_proposal": explore_hint,
-                    },
-                )
-                return
-            # M5a 自荐造型：明确请求"看看造型/有什么推荐"时展示提案（有边界，不抢话）
-            style_proposal = suggest_style_proposal(prompt)
-            if style_proposal.get("proposed"):
-                self._send_json(
-                    HTTPStatus.OK,
-                    {
-                        "text": style_proposal["text"],
-                        "style_proposal": style_proposal,
-                        "response_kind": "style_proposal",
-                        "affect": simulated_affect,
-                        "explore_proposal": explore_hint,
-                    },
-                )
-                return
-            # M5b 反差萌：被夸奖时三拍演出（顺势注入当前造型+设计思路）
-            praise = praise_response(prompt)
-            if praise is not None:
-                self._send_json(
-                    HTTPStatus.OK,
-                    {
-                        "text": praise["text"],
-                        "beats": praise["beats"],
-                        "style": praise["style"],
-                        "idea": praise["idea"],
-                        "moods": praise["moods"],
-                        "response_kind": "praise",
-                        "affect": simulated_affect,
-                        "explore_proposal": explore_hint,
-                    },
-                )
-                return
+                    return
+                # M5 摸头奖励：显式动作触发（"摸摸头"），三拍回应 + 好感计数
+                headpat = headpat_response(prompt)
+                if headpat is not None:
+                    self._send_json(
+                        HTTPStatus.OK,
+                        {
+                            "text": headpat["text"],
+                            "mood": headpat["mood"],
+                            "expression": headpat["expression"],
+                            "headpat": headpat["headpat"],
+                            "response_kind": "headpat",
+                            "affect": simulated_affect,
+                            "explore_proposal": explore_hint,
+                        },
+                    )
+                    return
+                # M5a 自荐造型：明确请求"看看造型/有什么推荐"时展示提案（有边界，不抢话）
+                style_proposal = suggest_style_proposal(prompt)
+                if style_proposal.get("proposed"):
+                    self._send_json(
+                        HTTPStatus.OK,
+                        {
+                            "text": style_proposal["text"],
+                            "style_proposal": style_proposal,
+                            "response_kind": "style_proposal",
+                            "affect": simulated_affect,
+                            "explore_proposal": explore_hint,
+                        },
+                    )
+                    return
+                # M5b 反差萌：被夸奖时三拍演出（顺势注入当前造型+设计思路）
+                praise = praise_response(prompt)
+                if praise is not None:
+                    self._send_json(
+                        HTTPStatus.OK,
+                        {
+                            "text": praise["text"],
+                            "beats": praise["beats"],
+                            "style": praise["style"],
+                            "idea": praise["idea"],
+                            "moods": praise["moods"],
+                            "response_kind": "praise",
+                            "affect": simulated_affect,
+                            "explore_proposal": explore_hint,
+                        },
+                    )
+                    return
             if self._is_self_reflection_question(prompt):
                 card = self.character_store.load_card()
                 self._send_json(

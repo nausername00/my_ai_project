@@ -18,6 +18,8 @@ import sys
 import time
 from datetime import datetime, timezone
 
+from m_studio.lock_utils import FileLock
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 REGISTRY_PATH = os.path.join(HERE, "fashion_registry.json")
 BLENDER_EXE = r"C:\Program Files\Blender Foundation\Blender 5.1\blender.exe"
@@ -195,8 +197,9 @@ class FashionSystem:
             except (OSError, ValueError):
                 logs = []
         logs.append(entry)
-        with open(OPS_LOG_PATH, "w", encoding="utf-8") as f:
-            json.dump(logs[-200:], f, ensure_ascii=False, indent=2)
+        with FileLock(OPS_LOG_PATH):
+            with open(OPS_LOG_PATH, "w", encoding="utf-8") as f:
+                json.dump(logs[-200:], f, ensure_ascii=False, indent=2)
 
     def ops_log(self, limit: int = 20) -> list[dict]:
         if not os.path.isfile(OPS_LOG_PATH):
@@ -208,8 +211,10 @@ class FashionSystem:
     # ------------------------------------------------------------------ 状态
     def save_state(self, outfit_id: str, tone_id: str, res: str = "960,540") -> None:
         self._state = {"outfit_id": outfit_id, "tone_id": tone_id, "res": res}
-        with open(os.path.join(self._state_dir, self._data["state_path"]), "w", encoding="utf-8") as f:
-            json.dump(self._state, f, ensure_ascii=False, indent=2)
+        state_path = os.path.join(self._state_dir, self._data["state_path"])
+        with FileLock(state_path):
+            with open(state_path, "w", encoding="utf-8") as f:
+                json.dump(self._state, f, ensure_ascii=False, indent=2)
 
     def load_state(self) -> dict:
         path = os.path.join(self._state_dir, self._data["state_path"])

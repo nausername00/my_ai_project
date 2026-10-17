@@ -15,6 +15,7 @@ import sys
 from datetime import datetime, timezone
 
 from fashion_system import FashionSystem
+from m_studio.lock_utils import FileLock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROPOSALS_PATH = os.path.join(HERE, "style_proposals.json")
@@ -69,8 +70,9 @@ class SelfStyleProposal:
         return data if isinstance(data, list) else []
 
     def _save(self) -> None:
-        with open(self._path, "w", encoding="utf-8") as f:
-            json.dump(self._proposals, f, ensure_ascii=False, indent=2)
+        with FileLock(self._path):
+            with open(self._path, "w", encoding="utf-8") as f:
+                json.dump(self._proposals, f, ensure_ascii=False, indent=2)
 
     # ------------------------------------------------------------------ 提案
     def propose(self, outfit_id: str, tone_id: str, res: str = "960,540",
