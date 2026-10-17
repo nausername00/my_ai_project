@@ -1,0 +1,116 @@
+[
+  {
+    "id": 1,
+    "created_at": "2026-10-17T02:07:54+00:00",
+    "outfit_id": "celadon_cloud",
+    "outfit_name": "青花云纹",
+    "tone_id": "ivory",
+    "tone_name": "ivory",
+    "res": "960,540",
+    "idea": "青花是沉淀的墨色，云纹是流动的思绪。 暖白像晨光落在书页上，安静又有灵气。 适合陪你安静讲知识——从容、书卷气，不会抢话。",
+    "render": {
+      "rc": 0,
+      "cache_hit": true,
+      "render_ms": 0,
+      "out": "D:\\Coding\\code program\\test\\This is mine\\my_ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\.render_cache\\ac8a6ede4482190e.png",
+      "log_tail": "[cache hit]",
+      "cost": "轻"
+    },
+    "status": "pending"
+  },
+  {
+    "id": 2,
+    "created_at": "2026-10-17T02:08:17+00:00",
+    "outfit_id": "celadon_cloud",
+    "outfit_name": "青花云纹",
+    "tone_id": "light",
+    "tone_name": "light",
+    "res": "960,540",
+    "idea": "青花是沉淀的墨色，云纹是流动的思绪。 月白微光，轻盈明快，像风穿过清晨。 适合日常陪伴——清清爽爽，像一壶刚泡的茶。",
+    "render": {
+      "rc": 0,
+      "cache_hit": false,
+      "render_ms": 23055,
+      "out": "D:\\Coding\\code program\\test\\This is mine\\my_ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\proposal_celadon_cloud_light.png",
+      "log_tail": "my_ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\proposal_celadon_cloud_light.png'\n[M2] target=body_ring base=(0.92, 0.94, 0.97) rendered -> D:\\Coding\\code program\\test\\This is mine\\my_ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\proposal_celadon_cloud_light.png\nBlender 5.1.2 (hash ec6e62d40fa9 built 2026-05-19 01:37:34)\n\nBlender quit\nproject\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\m2_bpy_render.py:58: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0\n  mat.use_nodes = True\n",
+      "cost": "重"
+    },
+    "status": "pending"
+  },
+  {
+    "id": 3,
+    "created_at": "2026-10-17T02:08:38+00:00",
+    "outfit_id": "celadon_cloud",
+    "outfit_name": "青花云纹",
+    "tone_id": "royal",
+    "tone_name": "royal",
+    "res": "960,540",
+    "idea": "青花是沉淀的墨色，云纹是流动的思绪。 深蓝灰像夜空中点亮的焰火，沉稳里带着星芒。 适合严肃讨论——青花压进深蓝，稳重而有格调。",
+    "render": {
+      "rc": 0,
+      "cache_hit": false,
+      "render_ms": 20781,
+      "out": "D:\\Coding\\code program\\test\\This is mine\\my_ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\proposal_celadon_cloud_royal.png",
+      "log_tail": "my_ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\proposal_celadon_cloud_royal.png'\n[M2] target=body_ring base=(0.22, 0.28, 0.42) rendered -> D:\\Coding\\code program\\test\\This is mine\\my_ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\proposal_celadon_cloud_royal.png\nBlender 5.1.2 (hash ec6e62d40fa9 built 2026-05-19 01:37:34)\n\nBlender quit\nproject\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\m2_bpy_render.py:58: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0\n  mat.use_nodes = True\n",
+      "cost": "重"
+    },
+    "status": "pending"
+  },
+  {
+    "id": 4,
+    "created_at": "2026-10-17T02:08:56+00:00",
+    "outfit_id": "phoenix_crimson",
+    "outfit_name": "绯红金凤",
+    "tone_id": "ivory",
+    "tone_name": "ivory",
+    "res": "960,540",
+    "idea": "绯红是心跳，金凤是锋芒。 暖白像晨光落在书页上，安静又有灵气。 适合庆祝时刻——绯红衬暖白，热烈但不灼人。",
+    "render": {
+      "rc": 0,
+      "cache_hit": false,
+      "render_ms": 17931,
+      "out": "D:\\Coding\\code program\\test\\This is mine\\my_ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\proposal_phoenix_crimson_ivory.png",
+      "log_tail": "ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\proposal_phoenix_crimson_ivory.png'\n[M2] target=body_ring base=(0.95, 0.9, 0.82) rendered -> D:\\Coding\\code program\\test\\This is mine\\my_ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\proposal_phoenix_crimson_ivory.png\nBlender 5.1.2 (hash ec6e62d40fa9 built 2026-05-19 01:37:34)\n\nBlender quit\nproject\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\m2_bpy_render.py:58: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0\n  mat.use_nodes = True\n",
+      "cost": "重"
+    },
+    "status": "pending"
+  },
+  {
+    "id": 5,
+    "created_at": "2026-10-17T02:09:13+00:00",
+    "outfit_id": "phoenix_crimson",
+    "outfit_name": "绯红金凤",
+    "tone_id": "light",
+    "tone_name": "light",
+    "res": "960,540",
+    "idea": "绯红是心跳，金凤是锋芒。 月白微光，轻盈明快，像风穿过清晨。 适合惊喜亮相——金凤在月白上飞，明亮得让人眼前一亮。",
+    "render": {
+      "rc": 0,
+      "cache_hit": false,
+      "render_ms": 17172,
+      "out": "D:\\Coding\\code program\\test\\This is mine\\my_ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\proposal_phoenix_crimson_light.png",
+      "log_tail": "i_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\proposal_phoenix_crimson_light.png'\n[M2] target=body_ring base=(0.92, 0.94, 0.97) rendered -> D:\\Coding\\code program\\test\\This is mine\\my_ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\proposal_phoenix_crimson_light.png\nBlender 5.1.2 (hash ec6e62d40fa9 built 2026-05-19 01:37:34)\n\nBlender quit\nproject\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\m2_bpy_render.py:58: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0\n  mat.use_nodes = True\n",
+      "cost": "重"
+    },
+    "status": "pending"
+  },
+  {
+    "id": 6,
+    "created_at": "2026-10-17T02:09:13+00:00",
+    "outfit_id": "phoenix_crimson",
+    "outfit_name": "绯红金凤",
+    "tone_id": "royal",
+    "tone_name": "royal",
+    "res": "960,540",
+    "idea": "绯红是心跳，金凤是锋芒。 深蓝灰像夜空中点亮的焰火，沉稳里带着星芒。 适合压轴登场——绯红金凤点亮深蓝夜幕，就是我讲到兴奋处的样子。",
+    "render": {
+      "rc": 0,
+      "cache_hit": true,
+      "render_ms": 0,
+      "out": "D:\\Coding\\code program\\test\\This is mine\\my_ai_project\\Model Core\\Weighting file (core fuel)\\Source code engine\\m_studio\\.render_cache\\ff07dd4829b8a0d8.png",
+      "log_tail": "[cache hit]",
+      "cost": "轻"
+    },
+    "status": "pending"
+  }
+]

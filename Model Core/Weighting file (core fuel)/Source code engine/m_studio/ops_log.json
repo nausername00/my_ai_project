@@ -124,5 +124,212 @@
     "cache_hit": true,
     "render_ms": 0,
     "cost": "轻"
+  },
+  {
+    "ts": "2026-10-17T02:07:54+00:00",
+    "outfit_id": "celadon_cloud",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": true,
+    "render_ms": 0,
+    "cost": "轻"
+  },
+  {
+    "ts": "2026-10-17T02:08:17+00:00",
+    "outfit_id": "celadon_cloud",
+    "tone_id": "light",
+    "target": "body_ring",
+    "cache_hit": false,
+    "render_ms": 23055,
+    "cost": "重"
+  },
+  {
+    "ts": "2026-10-17T02:08:38+00:00",
+    "outfit_id": "celadon_cloud",
+    "tone_id": "royal",
+    "target": "body_ring",
+    "cache_hit": false,
+    "render_ms": 20781,
+    "cost": "重"
+  },
+  {
+    "ts": "2026-10-17T02:08:56+00:00",
+    "outfit_id": "phoenix_crimson",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": false,
+    "render_ms": 17931,
+    "cost": "重"
+  },
+  {
+    "ts": "2026-10-17T02:09:13+00:00",
+    "outfit_id": "phoenix_crimson",
+    "tone_id": "light",
+    "target": "body_ring",
+    "cache_hit": false,
+    "render_ms": 17172,
+    "cost": "重"
+  },
+  {
+    "ts": "2026-10-17T02:09:13+00:00",
+    "outfit_id": "phoenix_crimson",
+    "tone_id": "royal",
+    "target": "body_ring",
+    "cache_hit": true,
+    "render_ms": 0,
+    "cost": "轻"
+  },
+  {
+    "ts": "2026-10-17T02:12:59+00:00",
+    "outfit_id": "a",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": false,
+    "render_ms": 0,
+    "cost": "重"
+  },
+  {
+    "ts": "2026-10-17T02:12:59+00:00",
+    "outfit_id": "a",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": true,
+    "render_ms": 0,
+    "cost": "轻"
+  },
+  {
+    "ts": "2026-10-17T02:12:59+00:00",
+    "outfit_id": "a",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": false,
+    "render_ms": 1,
+    "cost": "重"
+  },
+  {
+    "ts": "2026-10-17T02:12:59+00:00",
+    "outfit_id": "a",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": false,
+    "render_ms": 0,
+    "cost": "重"
+  },
+  {
+    "ts": "2026-10-17T02:12:59+00:00",
+    "outfit_id": "a",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": false,
+    "render_ms": 0,
+    "cost": "重"
+  },
+  {
+    "ts": "2026-10-17T02:12:59+00:00",
+    "outfit_id": "a",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": true,
+    "render_ms": 0,
+    "cost": "轻"
+  },
+  {
+    "ts": "2026-10-17T02:17:49+00:00",
+    "outfit_id": "celadon_cloud",
+    "tone_id": "light",
+    "target": "body_ring",
+    "cache_hit": true,
+    "render_ms": 0,
+    "cost": "轻"
+  },
+  {
+    "ts": "2026-10-17T02:18:32+00:00",
+    "outfit_id": "celadon_cloud",
+    "tone_id": "light",
+    "target": "body_ring",
+    "cache_hit": true,
+    "render_ms": 0,
+    "cost": "轻"
+  },
+  {
+    "ts": "2026-10-17T02:19:22+00:00",
+    "outfit_id": "phoenix_crimson",
+    "tone_id": "royal",
+    "target": "body_ring",
+    "cache_hit": true,
+    "render_ms": 0,
+    "cost": "轻"
+  },
+  {
+    "ts": "2026-10-17T02:19:50+00:00",
+    "outfit_id": "phoenix_crimson",
+    "tone_id": "royal",
+    "target": "body_ring",
+    "cache_hit": true,
+    "render_ms": 0,
+    "cost": "轻"
+  },
+  {
+    "ts": "2026-10-17T02:19:50+00:00",
+    "outfit_id": "celadon_cloud",
+    "tone_id": "royal",
+    "target": "body_ring",
+    "cache_hit": true,
+    "render_ms": 0,
+    "cost": "轻"
+  },
+  {
+    "ts": "2026-10-17T02:19:57+00:00",
+    "outfit_id": "a",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": false,
+    "render_ms": 0,
+    "cost": "重"
+  },
+  {
+    "ts": "2026-10-17T02:19:57+00:00",
+    "outfit_id": "a",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": true,
+    "render_ms": 0,
+    "cost": "轻"
+  },
+  {
+    "ts": "2026-10-17T02:19:57+00:00",
+    "outfit_id": "a",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": false,
+    "render_ms": 1,
+    "cost": "重"
+  },
+  {
+    "ts": "2026-10-17T02:19:57+00:00",
+    "outfit_id": "a",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": false,
+    "render_ms": 1,
+    "cost": "重"
+  },
+  {
+    "ts": "2026-10-17T02:19:57+00:00",
+    "outfit_id": "a",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": false,
+    "render_ms": 1,
+    "cost": "重"
+  },
+  {
+    "ts": "2026-10-17T02:19:57+00:00",
+    "outfit_id": "a",
+    "tone_id": "ivory",
+    "target": "body_ring",
+    "cache_hit": true,
+    "render_ms": 0,
+    "cost": "轻"
   }
 ]

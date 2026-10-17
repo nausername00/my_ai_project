@@ -76,6 +76,11 @@ from social import collaborate_with_partners, get_social_status, list_local_part
 from speech import SpeechInputError, SpeechService, SpeechUnavailableError
 from proposals import ProposalStore
 from vision import VisionError, analyze_image
+from fashion_service import (
+    change_outfit,
+    current_outfit,
+    detect_fashion_command,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1033,6 +1038,12 @@ class ApiHandler(BaseHTTPRequestHandler):
             except (TypeError, ValueError, OSError) as error:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
+        if path == "/v1/fashion/status":
+            try:
+                self._send_json(HTTPStatus.OK, current_outfit())
+            except (TypeError, ValueError, OSError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
         if path == "/v1/notify":
             if not self._is_local_request():
                 self._send_json(HTTPStatus.FORBIDDEN, {"error": "notifications are 127.0.0.1 only"})
@@ -1082,6 +1093,19 @@ class ApiHandler(BaseHTTPRequestHandler):
         if self._reject_untrusted_browser_origin():
             return
         path = urlsplit(self.path).path
+        if path == "/v1/fashion/outfit":
+            try:
+                payload = self._read_json()
+                outfit_id = payload.get("outfit_id")
+                tone_id = payload.get("tone_id")
+                if outfit_id is not None and not isinstance(outfit_id, str):
+                    raise ValueError("outfit_id 必须是字符串")
+                if tone_id is not None and not isinstance(tone_id, str):
+                    raise ValueError("tone_id 必须是字符串")
+                self._send_json(HTTPStatus.OK, change_outfit(outfit_id, tone_id))
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
         if path == "/v1/backup/create":
             try:
                 character_root = getattr(
@@ -2480,6 +2504,31 @@ class ApiHandler(BaseHTTPRequestHandler):
                 if explore_proposal.get("proposed")
                 else None
             )
+            # M5c 聊天换装入口：命中"穿/换装+造型"直接换装返回，不进模型推理
+            fashion_command = detect_fashion_command(prompt)
+            if fashion_command is not None:
+                try:
+                    changed = change_outfit(
+                        fashion_command.get("outfit_id"),
+                        fashion_command.get("tone_id"),
+                    )
+                except (TypeError, ValueError, OSError) as error:
+                    changed = {"error": str(error)}
+                self._send_json(
+                    HTTPStatus.OK,
+                    {
+                        "text": (
+                            f"好呀，我换上{changed.get('outfit_name', '新造型')}了~"
+                            if "error" not in changed
+                            else "换装出了一点小状况，我们先继续聊吧。"
+                        ),
+                        "fashion": changed,
+                        "response_kind": "fashion",
+                        "affect": simulated_affect,
+                        "explore_proposal": explore_hint,
+                    },
+                )
+                return
             if self._is_self_reflection_question(prompt):
                 card = self.character_store.load_card()
                 self._send_json(

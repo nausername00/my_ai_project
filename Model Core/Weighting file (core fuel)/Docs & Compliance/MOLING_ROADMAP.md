@@ -755,3 +755,11 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
 5. **阈值沿用确认**：`ThresholdRouter`（avatars.py:242）验证在册——简单任务主墨灵直做、`direct_cues` 关键词直接处理、`ask_min_length=80` 长度兜底、复杂/跨领域才询问唤醒；沿用无需改动。
 
 **测试**：`test_fashion.py` +5 项缓存/日志/异步用例（cache_key 确定性、miss→hit、强制重渲、ops_log 等级、假 proc 异步轮询）。
+
+### M5 · 墨灵自我形象系统（2026-10-17 已落地 a/b/c）
+
+- **M5a 形象提案管线**：`m_studio/m5_self_style.py`（`SelfStyleProposal`：propose / propose-all / adopt / list；墨灵第一人称设计思路库——6 组时装×色调组合各配"为什么这么搭"的讲解，接 B 自导解说风格；渲染复用 FashionSystem 含优化 1 缓存）。实测：6 个提案全生成（2 缓存命中秒出、4 真实渲染），采纳即写入当前穿戴（fashion_state.json）。
+- **M5b 反差萌剧本**：`m_studio/m5_script.py`（`PraiseScript` 三拍：得意炫耀→说漏嘴→害羞狡辩，mood 对接 character 情绪枚举 开心/惊喜/害羞，`detect_praise` 触发检测；可注入造型名+设计思路）。实测：三拍剧本完整输出"哼哼~这可是结合「绯红金凤」的风格……说不定……在诱惑你呢~……手舞足蹈地狡辩"。
+- **M5c 聊天换装入口**：`fashion_service.py`（`detect_fashion_command` 长词优先别名表：青花云纹/绯红金凤/深蓝灰/暖白等；`change_outfit` 换装=compose+render(缓存)+save_state；`current_outfit` 当前穿戴+提案）+ `api.py` 三处接入：GET `/v1/fashion/status`、POST `/v1/fashion/outfit`、`/v1/generate` 聊天 hook。**端到端实测**：聊天"今天穿青花云纹吧"→ `response_kind=fashion` 直接换装（缓存 0ms，未指定色调自动沿用当前），非时装指令不进换装分支。
+- **测试**：+8 项 `test_m5_style.py`（M5a propose/adopt/未知提案；M5b 三拍顺序/思路注入/越界/mood 序列/触发检测）。回归 **720 passed / 7 skipped**。
+- 下一步：M5a 接主对话"墨灵自荐造型"（主动给用户看提案）、时装库扩展（新贴图/色调）、发型/身材维度登记 M4 远期。
