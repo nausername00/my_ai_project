@@ -28,14 +28,46 @@
       "texture": "m6_texture_emerald.jpg",
       "target": "body_ring",
       "desc": "翡翠绿宝石质感+金纹流光（M5 时装库扩展）"
+    },
+    {
+      "id": "dawn_silk",
+      "name": "晨光",
+      "texture": "m7_texture_dawn.jpg",
+      "target": "body_ring",
+      "desc": "晨光主题（M5 墨灵现场自主设计）"
     }
   ],
   "tones": {
-    "ivory": [0.95, 0.90, 0.82],
-    "light": [0.92, 0.94, 0.97],
-    "royal": [0.22, 0.28, 0.42],
-    "midnight": [0.10, 0.14, 0.26],
-    "emerald": [0.14, 0.38, 0.30]
+    "ivory": [
+      0.95,
+      0.9,
+      0.82
+    ],
+    "light": [
+      0.92,
+      0.94,
+      0.97
+    ],
+    "royal": [
+      0.22,
+      0.28,
+      0.42
+    ],
+    "midnight": [
+      0.1,
+      0.14,
+      0.26
+    ],
+    "emerald": [
+      0.14,
+      0.38,
+      0.3
+    ],
+    "dawn": [
+      0.92,
+      0.82,
+      0.6
+    ]
   },
   "state_path": "fashion_state.json"
 }
