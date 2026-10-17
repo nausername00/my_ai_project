@@ -91,3 +91,23 @@ def test_detect_praise_cues() -> None:
     assert detect_praise("这套造型真好看！")
     assert detect_praise("你太厉害了")
     assert not detect_praise("今天天气不错")
+
+
+# ------------------------------------------------------------------ M5a 自荐造型（fashion_service）
+def test_style_proposal_request_triggered() -> None:
+    from fashion_service import suggest_style_proposal
+
+    result = suggest_style_proposal("给我看看你的造型推荐")
+    assert result["proposed"] is True
+    assert result["trigger"] == "style_request"
+    assert "青花云纹" in result["text"] or "绯红金凤" in result["text"]
+    assert "穿上" in result["text"]
+    assert isinstance(result["proposals"], list) and result["proposals"]
+
+
+def test_style_proposal_look_cue_needs_subject() -> None:
+    from fashion_service import suggest_style_proposal
+
+    # 有"看看"但无形象主题 → 不触发（有边界）
+    assert suggest_style_proposal("给我看看这个文件")["proposed"] is False
+    assert suggest_style_proposal("今天天气不错")["proposed"] is False

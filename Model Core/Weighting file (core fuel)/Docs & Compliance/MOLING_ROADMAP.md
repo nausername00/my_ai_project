@@ -762,4 +762,5 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
 - **M5b 反差萌剧本**：`m_studio/m5_script.py`（`PraiseScript` 三拍：得意炫耀→说漏嘴→害羞狡辩，mood 对接 character 情绪枚举 开心/惊喜/害羞，`detect_praise` 触发检测；可注入造型名+设计思路）。实测：三拍剧本完整输出"哼哼~这可是结合「绯红金凤」的风格……说不定……在诱惑你呢~……手舞足蹈地狡辩"。
 - **M5c 聊天换装入口**：`fashion_service.py`（`detect_fashion_command` 长词优先别名表：青花云纹/绯红金凤/深蓝灰/暖白等；`change_outfit` 换装=compose+render(缓存)+save_state；`current_outfit` 当前穿戴+提案）+ `api.py` 三处接入：GET `/v1/fashion/status`、POST `/v1/fashion/outfit`、`/v1/generate` 聊天 hook。**端到端实测**：聊天"今天穿青花云纹吧"→ `response_kind=fashion` 直接换装（缓存 0ms，未指定色调自动沿用当前），非时装指令不进换装分支。
 - **测试**：+8 项 `test_m5_style.py`（M5a propose/adopt/未知提案；M5b 三拍顺序/思路注入/越界/mood 序列/触发检测）。回归 **720 passed / 7 skipped**。
-- 下一步：M5a 接主对话"墨灵自荐造型"（主动给用户看提案）、时装库扩展（新贴图/色调）、发型/身材维度登记 M4 远期。
+- **M5a 深化 · 主对话自荐造型（2026-10-17）**：`fashion_service.suggest_style_proposal()`——识别"给我看看造型/有什么推荐/换风格"等明确请求，返回提案列表（编号+名称×色调+思路首句）+ 引导语"直接说『穿上青花云纹』就能换"；有边界主动提议（与 explore_proposal 同构：仅明确请求触发，普通聊天不抢话）。`/v1/generate` 接入：命中返回 `response_kind=style_proposal`。**端到端实测**：聊天"给我看看你的造型推荐"→ 6 套提案+推荐语返回；"今天天气不错"不触发。测试 +2 项（请求触发/有边界不触发）。回归 **722 passed / 7 skipped**。
+- 下一步：时装库扩展（新贴图/色调）、发型/身材维度登记 M4 远期、M5b 反差萌接入主对话（praise 时顺势自荐）。

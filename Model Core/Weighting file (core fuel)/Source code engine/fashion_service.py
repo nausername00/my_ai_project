@@ -53,6 +53,42 @@ def detect_fashion_command(message: str) -> dict[str, str] | None:
     return {"outfit_id": outfit_id, "tone_id": tone_id}
 
 
+# M5a 自荐造型：明确请求才触发（有边界，不抢话）
+_PROPOSAL_WANT_CUES = ("造型", "新衣服", "新装", "推荐", "展示", "换风格", "打扮", "设计")
+_PROPOSAL_LOOK_CUES = ("看看", "给我看", "瞧瞧", "欣赏", "挑")
+
+
+def suggest_style_proposal(message: str) -> dict:
+    """识别"给我看看造型/有什么推荐"等请求 → 返回提案列表+推荐语。
+
+    与 explore_proposal 同构的"有边界主动提议"：仅明确请求时 proposed=True，
+    普通聊天不触发（默认关）。返回 {proposed, text, proposals, trigger}。
+    """
+    if not isinstance(message, str):
+        return {"proposed": False}
+    wants = any(c in message for c in _PROPOSAL_WANT_CUES)
+    looks = any(c in message for c in _PROPOSAL_LOOK_CUES)
+    subject = any(c in message for c in ("造型", "衣服", "风格", "形象", "服装"))
+    if not (wants or (looks and subject)):
+        return {"proposed": False}
+
+    proposals = current_outfit()["proposals"]
+    pending = [p for p in proposals if p["status"] == "pending"][:6]
+    if not pending:
+        return {"proposed": False, "text": "我的造型提案还在赶工中，回头一定补给你看！"}
+
+    lines = []
+    for p in pending:
+        idea_head = (p["idea"] or "").split("。")[0]
+        lines.append(f"{p['id']}. {p['outfit_name']}×{p['tone_id']}——{idea_head}。")
+    text = (
+        "哼哼~正好，我最近设计了几套造型，给你看看：\n"
+        + "\n".join(lines)
+        + "\n想试哪套，直接说『穿上青花云纹』或『换上绯红金凤』就行~"
+    )
+    return {"proposed": True, "text": text, "proposals": pending, "trigger": "style_request"}
+
+
 def change_outfit(outfit_id: str | None, tone_id: str | None) -> dict[str, Any]:
     """换装：解析最终参数（未指定项沿用当前穿戴）→ 渲染（带缓存）→ 保存状态。"""
     fs = FashionSystem()

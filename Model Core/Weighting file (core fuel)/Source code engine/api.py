@@ -80,6 +80,7 @@ from fashion_service import (
     change_outfit,
     current_outfit,
     detect_fashion_command,
+    suggest_style_proposal,
 )
 
 
@@ -2524,6 +2525,20 @@ class ApiHandler(BaseHTTPRequestHandler):
                         ),
                         "fashion": changed,
                         "response_kind": "fashion",
+                        "affect": simulated_affect,
+                        "explore_proposal": explore_hint,
+                    },
+                )
+                return
+            # M5a 自荐造型：明确请求"看看造型/有什么推荐"时展示提案（有边界，不抢话）
+            style_proposal = suggest_style_proposal(prompt)
+            if style_proposal.get("proposed"):
+                self._send_json(
+                    HTTPStatus.OK,
+                    {
+                        "text": style_proposal["text"],
+                        "style_proposal": style_proposal,
+                        "response_kind": "style_proposal",
                         "affect": simulated_affect,
                         "explore_proposal": explore_hint,
                     },
