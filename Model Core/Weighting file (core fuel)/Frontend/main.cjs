@@ -1404,7 +1404,7 @@ function registerIpcHandlers() {
   ipcMain.handle("companion:floating-expand", (event) => {
     assertWindowSender(event, floatingWindow, "Only the floating window can resize itself");
     if (floatingWindow && !floatingWindow.isDestroyed()) {
-      floatingWindow.setBounds({ width: 340, height: 560 });
+      floatingWindow.setBounds({ width: 340, height: 640 });
       return { expanded: true };
     }
     return { expanded: false, reason: "no-window" };

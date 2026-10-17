@@ -101,7 +101,7 @@
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
   }
-  #panel.expanded .interact-menu { top: 248px; }
+  #panel.expanded .interact-menu { top: 360px; }
   .interact-menu button {
     display: flex;
     align-items: center;
@@ -216,10 +216,13 @@
   }
   #panel.expanded #avatar-wrap {
     flex: 0 0 auto;
-    width: 228px;
-    height: 228px;
-    border-radius: 18px;
+    width: 240px;
+    height: 340px;
+    border-radius: 22px;
     font-size: 64px;
+    /* 舞台光晕替代硬紫底：角色站在光里，不再"困"在色块盒子里 */
+    background: radial-gradient(130px 96px at 50% 38%, rgba(159, 144, 255, 0.30), transparent 72%);
+    box-shadow: 0 0 36px rgba(124, 111, 255, 0.20);
   }
   #panel.expanded #avatar-wrap img {
     object-fit: contain;
@@ -605,7 +608,7 @@
       const ok = await window.MolingLive2D.init(live2dBox, {
         modelUrl:
           "moling://local/model/狐仙花嫁/狐仙花嫁/狐仙花嫁.model3.json",
-        fixedSize: { width: 228, height: 228 },
+        fixedSize: { width: 240, height: 340 },
       });
       if (!ok) return;
       live2dReady = true;
