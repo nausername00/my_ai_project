@@ -306,10 +306,16 @@
 
         <section class="conversation-view" id="conversation" aria-live="polite">
           <div class="welcome" id="welcome">
-            <figure class="character-display" id="character-display" title="摸摸我~" role="button" aria-label="摸摸墨灵的头">
+            <figure class="character-display" id="character-display" title="点我打开互动菜单" role="button" aria-label="墨灵互动菜单">
               <img id="welcome-avatar-image" alt="墨灵角色立绘" hidden />
               <span id="welcome-avatar-fallback" aria-hidden="true">墨</span>
               <div id="live2d-stage" class="live2d-stage" hidden></div>
+              <div class="interact-menu" id="interact-menu" role="menu" aria-label="互动工具" hidden>
+                <button type="button" data-chat="摸摸头">✋ 摸摸头</button>
+                <button type="button" data-chat="你好呀~">👋 打个招呼</button>
+                <button type="button" data-chat="今天有什么想聊的吗？">💬 今天聊什么</button>
+                <button type="button" data-chat="看看你现在的造型">🎨 看看造型</button>
+              </div>
             </figure>
             <div class="welcome-copy">
               <h1>你好，我是墨小灵</h1>

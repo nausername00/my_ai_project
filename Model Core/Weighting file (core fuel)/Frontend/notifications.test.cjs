@@ -71,6 +71,7 @@ test("floating preload exposes only its notification and window controls", () =>
     "hideFloating",
     "expandFloating",
     "collapseFloating",
+    "sendChat",
     "onCharacterUpdated",
     "onSpeechState",
   ]);

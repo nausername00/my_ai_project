@@ -786,5 +786,9 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
 - **奖励（文本版已落地）**：`m_studio/m5_headpat.py`（HeadpatScript）——三拍演出（开心→害羞→柔软，mood 接 character 情绪枚举）+ 轻量好感计数（headpat_state.json 持久化，第 5/15/30 次触发亲密度升级台词，如"三十次了！这是不是……算求婚了？"）。纯表现层，不改变执行/授权逻辑，默认记录不抢话。
 - `/v1/generate` 接入第三 hook（换装后、自荐前）：命中返回 `response_kind=headpat` + mood/expression/headpat 状态。**端到端实测**："摸摸头"→"嘿嘿~被摸头了……好舒服，可以再来一下吗？"（count=1）；普通消息不触发。
 - 测试：+6 项 `test_m5_headpat.py`（触发/不误触发/三拍循环/计数持久化/阈值/API 结构/普通消息）。回归 **733 passed / 7 skipped**。
-- **摸头前端点击版（2026-10-17）**：主窗口角色形象区（`#character-display`，含 Live2D 舞台/静态立绘降级）点击 = 摸摸头——`index.html` figure 加 title="摸摸我~"/role=button/aria-label；`style.css` 加 cursor:pointer；`renderer.js` 在 sendMessage 后加 click 监听（`sendButton.disabled` 防连点，复用完整消息链路走后端 headpat hook）。**端到端实测（CDP 真实页面点击）**：点击角色区 → 1.5s 出现三拍回复"（蹭蹭）……今天辛苦了吧？下次也让我摸摸你的头~"，Live2D 模式下正常（has-live2d=true）。前端 `node --check` 通过 + npm test 全绿。
+- **摸头前端点击版（2026-10-17，已被互动菜单版升级替代）**：主窗口角色形象区点击 = 摸摸头（初版直接摸头，随后升级为互动菜单）。
+- **互动工具菜单（2026-10-17）**：摸头从"单点直接触发"升级为**展开菜单**——点击角色形象区（主窗口 `#character-display` / 悬浮窗 `#avatar-wrap`）弹出互动菜单，点击菜单外自动关闭：
+  - **菜单项**：✋ 摸摸头 / 👋 打个招呼 / 💬 今天聊什么（触发建议引擎）/ 🎨 看看造型（触发时装 hook）；悬浮窗额外含 ⌂ 回到主窗口、− 隐藏悬浮窗。
+  - **主窗口侧**：`index.html` 角色区内置菜单 DOM + `style.css` 浮层样式（Live2D 画布上正常悬浮）+ `renderer.js` 点击 toggle、菜单外点击关闭、防连点；悬浮窗互动经新 IPC **转发进主窗口会话**：`floating-preload.cjs` 加 `sendChat(text)` → `main.cjs` 新增 `companion:floating-send-chat` handler（窗口发送者校验 + 文本校验）→ `preload.cjs` 加 `onFloatingChat` → renderer 收事件调 `sendMessage`，完整复用摸头/时装/建议 hook 链路。
+  - **端到端实测（CDP 双窗口真实点击）**：主窗口点角色区 → 菜单开（4 项）/再点关；选"摸摸头"→ 1.5s 三拍回复"嘿嘿~被摸头了……好舒服，可以再来一下吗？"；悬浮窗点头像 → 菜单开（6 项）；悬浮窗选"你好呀~"→ 1.5s 主窗口会话出现该消息并进入模型推理（转发链路贯通）。前端 `node --check` + npm test **69/69 全绿**（notifications.test 补 sendChat 键）。
 - 后续：前端点击触发并入前端批次（已完成）；亲密度可累积解锁表现（远期，接 K 演出）。

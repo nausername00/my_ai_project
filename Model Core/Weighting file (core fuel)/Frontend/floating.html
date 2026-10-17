@@ -79,7 +79,52 @@
     gap: 10px;
     min-height: 0;
     margin-top: 4px;
+    position: relative;
   }
+
+  /* 互动工具菜单：点击头像弹出（摸头/打招呼/聊话题/看造型/窗口操作） */
+  .interact-menu {
+    position: absolute;
+    left: 6px;
+    top: 74px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 158px;
+    padding: 6px;
+    background: rgba(26, 28, 38, 0.96);
+    border: 1px solid rgba(155, 140, 255, 0.3);
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    z-index: 30;
+    -webkit-app-region: no-drag;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  #panel.expanded .interact-menu { top: 248px; }
+  .interact-menu button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 10px;
+    border: none;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--text);
+    font-size: 12.5px;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background 140ms ease, transform 120ms ease;
+  }
+  .interact-menu button:hover { background: rgba(155, 140, 255, 0.18); transform: translateX(2px); }
+  .interact-menu .menu-sep {
+    height: 1px;
+    margin: 3px 4px;
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .interact-menu[hidden] { display: none; }
 
   #avatar-wrap {
     flex: 0 0 64px;
@@ -282,10 +327,19 @@
       </div>
     </div>
     <div id="body">
-      <div id="avatar-wrap" title="点击打开主窗口">
+      <div id="avatar-wrap" title="点击打开互动菜单">
         <img id="avatar-image" alt="角色立绘" hidden />
         <div id="avatar-live2d"></div>
         <span id="avatar-text">灵</span>
+      </div>
+      <div id="interact-menu" class="interact-menu" role="menu" aria-label="互动工具" hidden>
+        <button type="button" data-action="chat" data-chat="摸摸头">✋ 摸摸头</button>
+        <button type="button" data-action="chat" data-chat="你好呀~">👋 打个招呼</button>
+        <button type="button" data-action="chat" data-chat="今天有什么想聊的吗？">💬 今天聊什么</button>
+        <button type="button" data-action="chat" data-chat="看看你现在的造型">🎨 看看造型</button>
+        <div class="menu-sep"></div>
+        <button type="button" data-action="main">⌂ 回到主窗口</button>
+        <button type="button" data-action="hide">− 隐藏悬浮窗</button>
       </div>
       <div id="content">
         <div id="nickname">墨小灵</div>
@@ -380,10 +434,44 @@
       .catch((error) => console.error("Could not handle notification action:", error));
   }
 
-  avatarEl.addEventListener("click", () => {
-    window.floating.showMainWindow().catch((error) => {
-      console.error("Could not show the main window:", error);
-    });
+  avatarEl.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const menu = document.getElementById("interact-menu");
+    const closeMenu = () => {
+      menu.hidden = true;
+      document.removeEventListener("click", closeMenu);
+    };
+    menu.hidden = !menu.hidden;
+    if (!menu.hidden) {
+      setTimeout(() => document.addEventListener("click", closeMenu), 0);
+    } else {
+      document.removeEventListener("click", closeMenu);
+    }
+  });
+
+  const interactMenu = document.getElementById("interact-menu");
+  interactMenu.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const item = event.target.closest("button[data-action]");
+    if (!item) return;
+    const action = item.dataset.action;
+    if (action === "chat") {
+      window.floating.sendChat(item.dataset.chat).catch((error) => {
+        console.error("Could not send chat from floating window:", error);
+      });
+      interactMenu.hidden = true;
+      return;
+    }
+    interactMenu.hidden = true;
+    if (action === "main") {
+      window.floating.showMainWindow().catch((error) => {
+        console.error("Could not show the main window:", error);
+      });
+    } else if (action === "hide") {
+      window.floating.hideFloating().catch((error) => {
+        console.error("Could not hide the floating window:", error);
+      });
+    }
   });
 
   document.getElementById("btn-hide").addEventListener("click", () => {

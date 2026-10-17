@@ -4874,14 +4874,39 @@ async function sendMessage(text) {
   }
 }
 
-// M5 摸头前端点击版：点击角色形象区域 = 摸摸头（复用完整消息链路，后端 hook 命中三拍演出）
-const characterDisplayForHeadpat = document.getElementById("character-display");
-if (characterDisplayForHeadpat) {
-  characterDisplayForHeadpat.addEventListener("click", () => {
+// M5 互动工具菜单：点击角色形象区弹出（摸头/打招呼/聊话题/看造型），复用完整消息链路
+const characterDisplayForInteract = document.getElementById("character-display");
+const interactMenu = document.getElementById("interact-menu");
+if (characterDisplayForInteract && interactMenu) {
+  const closeInteractMenu = () => {
+    interactMenu.hidden = true;
+    document.removeEventListener("click", closeInteractMenu);
+  };
+  characterDisplayForInteract.addEventListener("click", (event) => {
+    event.stopPropagation();
     if (sendButton.disabled) return; // 正在生成时忽略连点
-    sendMessage("摸摸头");
+    interactMenu.hidden = !interactMenu.hidden;
+    if (!interactMenu.hidden) {
+      // 点击菜单外部任意处关闭
+      setTimeout(() => document.addEventListener("click", closeInteractMenu), 0);
+    } else {
+      document.removeEventListener("click", closeInteractMenu);
+    }
+  });
+  interactMenu.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const item = event.target.closest("button[data-chat]");
+    if (!item) return;
+    closeInteractMenu();
+    sendMessage(item.dataset.chat);
   });
 }
+// 悬浮窗互动转发：悬浮窗互动菜单发出的指令进入主窗口会话
+window.companion.onFloatingChat?.((text) => {
+  if (typeof text === "string" && text.trim()) {
+    sendMessage(text.trim());
+  }
+});
 
 async function reflectOnConversation(characterId, history) {
   const status = document.getElementById("agent-reflection-status");

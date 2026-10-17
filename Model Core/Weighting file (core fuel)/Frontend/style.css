@@ -3428,6 +3428,49 @@ body {
   transition: transform 200ms ease, box-shadow 240ms ease;
   cursor: pointer;
 }
+/* 互动工具菜单：点击角色形象区弹出 */
+.interact-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 148px;
+  padding: 6px;
+  background: var(--surface-2, #1c1f28);
+  border: 1px solid rgba(155, 140, 255, 0.28);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  z-index: 30;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+.interact-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-1, #e8eaf0);
+  font-size: 13px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease, transform 120ms ease;
+}
+.interact-menu button:hover {
+  background: rgba(155, 140, 255, 0.16);
+  transform: translateX(2px);
+}
+.interact-menu[hidden] { display: none; }
+.character-display.has-live2d .interact-menu {
+  /* Live2D 画布在 figure 内铺满时，菜单浮在角色下方 */
+}
 .character-display:hover {
   transform: translateY(-3px);
   box-shadow: var(--shadow-lg);

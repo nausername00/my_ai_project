@@ -1477,6 +1477,18 @@ function registerIpcHandlers() {
     }
     return { shown: false, reason: "no-window" };
   });
+  // 互动菜单：悬浮窗发送互动指令 → 转发给主窗口会话执行（摸头/打招呼等走完整消息链路）
+  ipcMain.handle("companion:floating-send-chat", (event, text) => {
+    assertWindowSender(event, floatingWindow, "Only the floating window can send chat");
+    if (typeof text !== "string" || !text.trim()) {
+      throw new Error("chat text must be a non-empty string");
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("companion:floating-chat", text.trim());
+      return { forwarded: true };
+    }
+    return { forwarded: false, reason: "no-window" };
+  });
 }
 
 function assertWindowSender(event, targetWindow, message) {

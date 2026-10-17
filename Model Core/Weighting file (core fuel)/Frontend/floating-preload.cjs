@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld(
     hideFloating: () => ipcRenderer.invoke("companion:floating-hide"),
     expandFloating: () => ipcRenderer.invoke("companion:floating-expand"),
     collapseFloating: () => ipcRenderer.invoke("companion:floating-collapse"),
+    sendChat: (text) => ipcRenderer.invoke("companion:floating-send-chat", text),
     onCharacterUpdated(callback) {
       if (typeof callback !== "function") {
         throw new TypeError("character update callback must be a function");

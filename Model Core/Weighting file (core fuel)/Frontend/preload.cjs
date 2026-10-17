@@ -150,5 +150,14 @@ contextBridge.exposeInMainWorld(
       return () =>
         ipcRenderer.removeListener("companion:notification-action", listener);
     },
+    onFloatingChat: (callback) => {
+      if (typeof callback !== "function") {
+        throw new TypeError("floating chat callback must be a function");
+      }
+      const listener = (_event, text) => callback(text);
+      ipcRenderer.on("companion:floating-chat", listener);
+      return () =>
+        ipcRenderer.removeListener("companion:floating-chat", listener);
+    },
   }),
 );
