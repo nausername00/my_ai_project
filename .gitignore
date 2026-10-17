@@ -99,3 +99,6 @@ Model Core/Weighting file (core fuel)/Character/personas.json
 Model Core/Weighting file (core fuel)/Character/short_memory.json
 Model Core/Weighting file (core fuel)/Character/captions.json
 Model Core/Weighting file (core fuel)/Character/memory_usage_log.json
+
+# ----- E4 文件锁运行时残留（2026-10-17 补录：锁文件允许残留且无害，不入库）-----
+*.lock

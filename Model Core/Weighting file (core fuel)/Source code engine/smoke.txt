@@ -1,6 +1,0 @@
-﻿pid_alive(999999999)= False
-pid_alive(self)= True
-l1.acquire= True
-l2.acquire(超时)= False
-release 后锁文件存在= False
-l2.acquire(释放后)= True
