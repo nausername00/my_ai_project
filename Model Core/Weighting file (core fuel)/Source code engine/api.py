@@ -82,6 +82,7 @@ from fashion_service import (
     detect_fashion_command,
     suggest_style_proposal,
 )
+from m_studio.m5_headpat import headpat_response
 
 
 # ---------------------------------------------------------------------------
@@ -2525,6 +2526,22 @@ class ApiHandler(BaseHTTPRequestHandler):
                         ),
                         "fashion": changed,
                         "response_kind": "fashion",
+                        "affect": simulated_affect,
+                        "explore_proposal": explore_hint,
+                    },
+                )
+                return
+            # M5 摸头奖励：显式动作触发（"摸摸头"），三拍回应 + 好感计数
+            headpat = headpat_response(prompt)
+            if headpat is not None:
+                self._send_json(
+                    HTTPStatus.OK,
+                    {
+                        "text": headpat["text"],
+                        "mood": headpat["mood"],
+                        "expression": headpat["expression"],
+                        "headpat": headpat["headpat"],
+                        "response_kind": "headpat",
                         "affect": simulated_affect,
                         "explore_proposal": explore_hint,
                     },
