@@ -32,14 +32,39 @@ TASK = (
 )
 
 
-def main() -> int:
-    backend = OllamaBackend(model_name="qwen2.5:3b", base_url="http://127.0.0.1:11434")
+def main(argv: list[str] | None = None) -> int:
+    """评审入口（含优化 2 模型分级/轻量模式）：
+    --model qwen2.5:3b|qwen2.5:0.5b   推理模型分级（默认 3b）
+    --light                            轻量模式：仅架构+代码 2 角色（无分歧时省一半推理）
+    --out <json>                       输出路径
+    """
+    argv = argv if argv is not None else sys.argv[1:]
+    model = "qwen2.5:3b"
+    if "--model" in argv:
+        model = argv[argv.index("--model") + 1]
+    light = "--light" in argv
+    out = OUT
+    if "--out" in argv:
+        out = argv[argv.index("--out") + 1]
+
+    backend = OllamaBackend(model_name=model, base_url="http://127.0.0.1:11434")
     engine = InferenceEngine(backend)
-    result = run_collaboration(engine, SYSTEM_PROMPT, TASK, role_configs=None)
-    with open(OUT, "w", encoding="utf-8") as f:
+    if light:
+        # 轻量模式：只保留架构 + 代码两个角色（方向明确时足够，省一半推理）
+        import collaboration
+        role_configs = [
+            {"key": c.key, "enabled": True, "instruction": c.instruction}
+            for c in collaboration.COLLABORATORS if c.key in ("architecture", "code")
+        ]
+    else:
+        role_configs = None
+    result = run_collaboration(engine, SYSTEM_PROMPT, TASK, role_configs=role_configs)
+    result["meta"] = {"model": model, "light": light, "roles": len(result.get("collaborators", []))}
+    with open(out, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
-    print(f"[M1-collab] saved -> {OUT}")
-    print(f"lead={result.get('lead')} model={result.get('model')} synthesis_error={result.get('synthesis_error')}")
+    print(f"[M1-collab] saved -> {out}")
+    print(f"lead={result.get('lead')} model={model} light={light} "
+          f"roles={result.get('meta', {}).get('roles')} synthesis_error={result.get('synthesis_error')}")
     for c in result.get("collaborators", []):
         print(f"  - {c.get('name')}/{c.get('focus')}: status={c.get('status')}")
     return 0

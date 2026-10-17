@@ -37,7 +37,8 @@ def fs_tmp(tmp_path) -> FashionSystem:
     }
     reg_path = tmp_path / "registry.json"
     reg_path.write_text(json.dumps(registry), encoding="utf-8")
-    return FashionSystem(registry_path=str(reg_path), state_dir=str(tmp_path))
+    return FashionSystem(registry_path=str(reg_path), state_dir=str(tmp_path),
+                         cache_dir=str(tmp_path / "cache"))
 
 
 def test_list_outfits(fs: FashionSystem) -> None:
@@ -108,3 +109,91 @@ def test_bad_registry_raises(tmp_path) -> None:
     bad.write_text('{"outfits": [], "nope": 1}', encoding="utf-8")
     with pytest.raises(FashionError):
         FashionSystem(registry_path=str(bad), state_dir=str(tmp_path))
+
+
+# ---------------------------------------------------------------------------
+# 优化 1/3/4：渲染缓存 / 操作日志 / 异步句柄
+# ---------------------------------------------------------------------------
+
+def test_cache_key_deterministic(fs_tmp: FashionSystem) -> None:
+    params = fs_tmp.compose("a", "ivory")
+    assert fs_tmp.cache_key(params) == fs_tmp.cache_key(params)
+    params2 = dict(params, base_color="0.5,0.5,0.5")
+    assert fs_tmp.cache_key(params) != fs_tmp.cache_key(params2)
+
+
+def test_cache_miss_then_hit(fs_tmp: FashionSystem, tmp_path, monkeypatch) -> None:
+    params = fs_tmp.compose("a", "ivory")
+    out = str(tmp_path / "out.png")
+
+    calls = []
+
+    def fake_blender(args):
+        calls.append(args)
+        with open(out, "w", encoding="utf-8") as f:
+            f.write("fake-png")
+        return type("P", (), {"returncode": 0, "stdout": "[ok]", "stderr": ""})()
+
+    monkeypatch.setattr(fs_tmp, "_run_blender", fake_blender)
+
+    first = fs_tmp.render(params, out_path=out)
+    assert first["cache_hit"] is False
+    assert len(calls) == 1
+    assert fs_tmp.cache_hit(params) is not None
+
+    second = fs_tmp.render(params, out_path=out)
+    assert second["cache_hit"] is True
+    assert second["cost"] == "轻"
+    assert len(calls) == 1  # 第二次未再调 blender
+
+
+def test_render_no_cache_force(fs_tmp: FashionSystem, tmp_path, monkeypatch) -> None:
+    params = fs_tmp.compose("a", "ivory")
+    out = str(tmp_path / "out.png")
+    calls = []
+
+    def fake_blender(args):
+        calls.append(1)
+        with open(out, "w", encoding="utf-8") as f:
+            f.write("fake-png")
+        return type("P", (), {"returncode": 0, "stdout": "[ok]", "stderr": ""})()
+
+    monkeypatch.setattr(fs_tmp, "_run_blender", fake_blender)
+    fs_tmp.render(params, out_path=out)
+    fs_tmp.render(params, out_path=out, use_cache=False)
+    assert len(calls) == 2  # use_cache=False 强制重渲
+
+
+def test_ops_log_written(fs_tmp: FashionSystem, tmp_path, monkeypatch) -> None:
+    params = fs_tmp.compose("a", "ivory")
+    out = str(tmp_path / "out.png")
+
+    def fake_blender(args):
+        with open(out, "w", encoding="utf-8") as f:
+            f.write("fake-png")
+        return type("P", (), {"returncode": 0, "stdout": "[ok]", "stderr": ""})()
+
+    monkeypatch.setattr(fs_tmp, "_run_blender", fake_blender)
+    fs_tmp.render(params, out_path=out)
+    fs_tmp.render(params, out_path=out)  # 第二次命中缓存
+
+    log = fs_tmp.ops_log(limit=10)
+    assert len(log) >= 2
+    assert log[-1]["cache_hit"] is True
+    assert log[-2]["cache_hit"] is False
+    assert log[-1]["cost"] == "轻"
+    assert log[-2]["cost"] == "重"
+
+
+def test_wait_render_with_fake_proc(fs_tmp: FashionSystem) -> None:
+    class FakeProc:
+        returncode = 0
+
+        def communicate(self, timeout=None):
+            return "[async ok]", ""
+
+    task = {"proc": FakeProc(), "out": "x.png"}
+    result = FashionSystem.wait_render(task, timeout=5)
+    assert result["rc"] == 0
+    assert result["cost"] == "重"
+    assert result["out"] == "x.png"
