@@ -834,6 +834,15 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
 - 展开态交互深化（Live2D 点触互动、情绪巡演入口等）。
 - 悬浮窗与主窗口联动体验（消息气泡、提示音的轻量反馈）。
 
+#### 悬浮窗"横跳"修复（2026-10-18 已完成，提交 8892967）
+
+用户反馈"角色在格子内外反复横跳"且"无法摸头"。根因：① 展开/折叠时渲染层立即切 classList（240×340 Live2D 盒）而窗口 setBounds 异步 → 过渡期角色被裁/变形；② Live2D init 后固定循环 idle 动作（狐仙花嫁转身/摆臂），58% 高度易超圆角盒；③ 多实例残留时旧窗口叠层导致点击落错目标（摸头"不响应"假象）。修复三件套：
+- `floating.html`：avatar 尺寸平滑过渡（width/height/border-radius/background 0.22s）；展开/折叠点击不再立即 syncLive2dVisibility，改 `resize` 事件 180ms 防抖后统一 `sync` + `setCharacterSide`。
+- `live2d-avatar.js`：`setCharacterSide(side, container, opts)` 增 `heightRatio/widthRatio` 参数（默认仍 0.58/0.45，K6 演出不受影响）；悬浮窗侧传 0.5/0.4 留动作余量。
+- `main.cjs`：引入 `screen`，展开时用 `getDisplayMatching(bounds).workArea` 校正窗口不超屏。
+- **验证**：`floating-avatar.test.cjs` 4/4 + 前端全量 `npm test` **83/83 全绿**；摸头链路（互动菜单 ✋ → IPC → 主窗口会话 → 墨灵三拍回复）端到端实测通。真实窗口验收期间发现**多实例残留 + 缓存锁（Access denied → Electron -1）为主要环境干扰**，已定位：反复杀进程后需等句柄释放再启动、启动器与 npm start 勿并发。**待用户单实例正常启动后复验**：展开/折叠角色不再横跳、超屏窗口落位正确、摸头有响应。
+- 入库治理（同提交）：`mobile_token.txt`/`Backups/`/`headpat_state.json`/`ops_log.json`/插件清单/调试产物全部 gitignore 并移出索引（token 历史已入库无法撤回，后续不再更新入库）。
+
 ### B 路径 · 手机端真 App（原生壳，2026-10-17 用户拍板 B，C 后续补）
 
 用户重估手机端定位：不再满足"网页遥控器"，拍板走 **B（原生壳 App）**，C（完整独立移动 App：手机内轻量模型 + 记忆同步，电脑关机可继续陪伴）后续补。
