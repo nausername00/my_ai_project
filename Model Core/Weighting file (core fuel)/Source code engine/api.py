@@ -220,6 +220,16 @@ _PUBLIC_PATHS = ("/health", "/favicon.ico")
 _STATUS_PREFIX = "/v1/status/"
 # T5 手机客户端载体：PWA 静态壳公开可读（无任何数据），真实 API 仍需认证。
 _MOBILE_PREFIX = "/v1/mobile/"
+# 受信浏览器来源：桌面壳 moling://local 与 Capacitor 手机 App 的 WebView 来源。
+# 用于 CSRF 白名单（_reject_untrusted_browser_origin）与 CORS 回显（_cors_headers）。
+_ALLOWED_BROWSER_ORIGINS = frozenset(
+    {
+        "moling://local",
+        "capacitor://localhost",
+        "https://localhost",
+        "http://localhost",
+    }
+)
 
 
 def _bearer_token(headers: Any) -> str:
@@ -641,20 +651,31 @@ class ApiHandler(BaseHTTPRequestHandler):
     def _reject_untrusted_browser_origin(self) -> bool:
         """Block cross-origin browser writes to the loopback service (CSRF)."""
         origin = getattr(self, "headers", {}).get("Origin")
-        # 放行：桌面壳 moling://local 与 Capacitor 手机 App 的 WebView 来源
-        # （capacitor://localhost / https://localhost / http://localhost 均为 App 自身）。
-        if not origin or origin in {
-            "moling://local",
-            "capacitor://localhost",
-            "https://localhost",
-            "http://localhost",
-        }:
+        if not origin or origin in _ALLOWED_BROWSER_ORIGINS:
             return False
         self._send_json(
             HTTPStatus.FORBIDDEN,
             {"error": "cross-origin browser requests are not allowed"},
         )
         return True
+
+    def _cors_headers(self) -> list[tuple[str, str]]:
+        """对受信浏览器来源回显 CORS 头；其余来源不返回任何 CORS 头。"""
+        origin = getattr(self, "headers", {}).get("Origin")
+        if not origin or origin not in _ALLOWED_BROWSER_ORIGINS:
+            return []
+        return [
+            ("Access-Control-Allow-Origin", origin),
+            ("Vary", "Origin"),
+            (
+                "Access-Control-Allow-Methods",
+                "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+            ),
+            (
+                "Access-Control-Allow-Headers",
+                "Content-Type, Authorization, X-Moling-Tool-Capability",
+            ),
+        ]
 
     @classmethod
     def _append_notification(cls, notification: dict[str, Any]) -> dict[str, Any]:
@@ -688,6 +709,8 @@ class ApiHandler(BaseHTTPRequestHandler):
         self._last_status = int(status)
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
+        for name, value in self._cors_headers():
+            self.send_header(name, value)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -701,10 +724,26 @@ class ApiHandler(BaseHTTPRequestHandler):
     ) -> None:
         self._last_status = int(status)
         self.send_response(status)
+        for name, value in self._cors_headers():
+            self.send_header(name, value)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def do_OPTIONS(self) -> None:
+        """CORS 预检：受信浏览器来源返回 204 + 完整 CORS 头；其余 404。"""
+        origin = getattr(self, "headers", {}).get("Origin")
+        if origin and origin in _ALLOWED_BROWSER_ORIGINS:
+            self.send_response(HTTPStatus.NO_CONTENT)
+            for name, value in self._cors_headers():
+                self.send_header(name, value)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        self.send_response(HTTPStatus.NOT_FOUND)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     # 手机端 PWA 静态根：默认项目根 Frontend/mobile（开发/源码运行）；
     # 安装版由 Electron 主进程注入 MOLING_MOBILE_ROOT（打包进 resources/mobile）。

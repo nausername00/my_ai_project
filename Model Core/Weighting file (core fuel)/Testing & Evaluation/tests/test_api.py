@@ -140,6 +140,64 @@ class ApiTests(unittest.TestCase):
                 # 放行后走到业务校验（backup/create 缺参数 → 400），而不是 403。
                 self.assertNotEqual(response.status, 403)
 
+    def test_cors_preflight_and_headers_for_trusted_origin(self) -> None:
+        # 预检：受信来源必须返回 204 + 完整 CORS 头，否则 WebView fetch 直接抛
+        # "Failed to fetch"（网络层拦截），App 永远连不上后端。
+        self.connection.request(
+            "OPTIONS",
+            "/v1/generate",
+            b"",
+            {
+                "Origin": "capacitor://localhost",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type,authorization",
+            },
+        )
+        response = self.connection.getresponse()
+        self.assertEqual(response.status, 204)
+        self.assertEqual(
+            response.getheader("Access-Control-Allow-Origin"),
+            "capacitor://localhost",
+        )
+        self.assertIn(
+            "POST",
+            response.getheader("Access-Control-Allow-Methods", ""),
+        )
+        self.assertIn(
+            "authorization",
+            response.getheader("Access-Control-Allow-Headers", "").casefold(),
+        )
+        response.read()
+
+        # 实际 POST 响应也必须携带回显头（同源跨域读取由 WebView 校验）。
+        self.connection.request(
+            "POST",
+            "/v1/generate",
+            json.dumps({"prompt": "hi", "history": []}).encode("utf-8"),
+            {
+                "Content-Type": "application/json",
+                "Origin": "capacitor://localhost",
+            },
+        )
+        response = self.connection.getresponse()
+        self.assertEqual(response.status, 200)
+        self.assertEqual(
+            response.getheader("Access-Control-Allow-Origin"),
+            "capacitor://localhost",
+        )
+        response.read()
+
+        # 非受信来源预检：不返回 CORS 头。
+        self.connection.request(
+            "OPTIONS",
+            "/v1/generate",
+            b"",
+            {"Origin": "https://attacker.example"},
+        )
+        response = self.connection.getresponse()
+        self.assertIsNone(response.getheader("Access-Control-Allow-Origin"))
+        response.read()
+
     def test_vision_analysis_rejects_invalid_image_formats(self) -> None:
         for content_type, image in (
             ("image/gif", b"GIF89a"),
