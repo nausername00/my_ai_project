@@ -198,6 +198,40 @@ class ApiTests(unittest.TestCase):
         self.assertIsNone(response.getheader("Access-Control-Allow-Origin"))
         response.read()
 
+    def test_same_origin_browser_request_is_allowed(self) -> None:
+        # 手机浏览器直接打开 http://<电脑IP>:8000/v1/mobile/ 时，页面同源 POST
+        # 携带 Origin: http://<电脑IP>:8000（与 Host 一致）→ 必须放行，否则远程
+        # 加载的手机页/App 远程页都发不了消息。
+        origin = "http://10.132.46.248:8000"
+        self.connection.request(
+            "POST",
+            "/v1/generate",
+            json.dumps({"prompt": "hi", "history": []}).encode("utf-8"),
+            {
+                "Content-Type": "application/json",
+                "Host": "10.132.46.248:8000",
+                "Origin": origin,
+            },
+        )
+        response = self.connection.getresponse()
+        self.assertEqual(response.status, 200)
+        response.read()
+
+        # 跨站来源（Origin ≠ Host）依然 403。
+        self.connection.request(
+            "POST",
+            "/v1/generate",
+            json.dumps({"prompt": "hi", "history": []}).encode("utf-8"),
+            {
+                "Content-Type": "application/json",
+                "Host": "10.132.46.248:8000",
+                "Origin": "http://10.132.46.249:8000",
+            },
+        )
+        response = self.connection.getresponse()
+        self.assertEqual(response.status, 403)
+        response.read()
+
     def test_vision_analysis_rejects_invalid_image_formats(self) -> None:
         for content_type, image in (
             ("image/gif", b"GIF89a"),

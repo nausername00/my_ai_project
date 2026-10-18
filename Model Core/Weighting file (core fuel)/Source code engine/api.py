@@ -653,11 +653,31 @@ class ApiHandler(BaseHTTPRequestHandler):
         origin = getattr(self, "headers", {}).get("Origin")
         if not origin or origin in _ALLOWED_BROWSER_ORIGINS:
             return False
+        # 同源请求放行：手机浏览器/远程加载页的真实来源是 http://<电脑IP>:8000，
+        # 其 Origin 与 Host 一致，天然安全（CSRF 只拦"跨站"来源）。
+        if self._is_same_origin(origin):
+            return False
         self._send_json(
             HTTPStatus.FORBIDDEN,
             {"error": "cross-origin browser requests are not allowed"},
         )
         return True
+
+    def _is_same_origin(self, origin: str) -> bool:
+        """Origin 与请求 Host 一致（协议 + 主机 + 端口）视为同源。"""
+        try:
+            from urllib.parse import urlsplit
+
+            origin_parts = urlsplit(origin)
+            if origin_parts.scheme not in {"http", "https"} or not origin_parts.netloc:
+                return False
+            origin_host = origin_parts.netloc
+            host_header = (self.headers.get("Host") or "").strip()
+            if not host_header:
+                return False
+            return origin_host == host_header
+        except Exception:
+            return False
 
     def _cors_headers(self) -> list[tuple[str, str]]:
         """对受信浏览器来源回显 CORS 头；其余来源不返回任何 CORS 头。"""
