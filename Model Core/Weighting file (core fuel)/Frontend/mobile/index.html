@@ -22,6 +22,13 @@
 
   <div class="settings" id="settingsPanel" hidden>
     <div class="setting-row">
+      <label for="serverInput">服务器地址（App 内必填：电脑局域网 IP + :8000；浏览器打开本页可留空自动同源）</label>
+      <div class="token-row">
+        <input type="text" id="serverInput" placeholder="http://192.168.1.5:8000" autocomplete="off" spellcheck="false" />
+        <button type="button" id="serverSave">保存</button>
+      </div>
+    </div>
+    <div class="setting-row">
       <label for="tokenInput">API Token（非本机访问必需；仅存本机浏览器）</label>
       <div class="token-row">
         <input type="password" id="tokenInput" placeholder="MOLING_API_TOKEN" autocomplete="off" />

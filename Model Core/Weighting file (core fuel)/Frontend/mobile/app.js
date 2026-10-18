@@ -18,11 +18,22 @@ const settingsBtn = document.getElementById("settingsBtn");
 const settingsPanel = document.getElementById("settingsPanel");
 const tokenInput = document.getElementById("tokenInput");
 const tokenSave = document.getElementById("tokenSave");
+const serverInput = document.getElementById("serverInput");
+const serverSave = document.getElementById("serverSave");
 const notifyToggle = document.getElementById("notifyToggle");
 const clearBtn = document.getElementById("clearBtn");
 
-const API = `${location.origin}/v1`;
+const SERVER_KEY = "moling_mobile_server";
+const TOKEN_KEY = "moling_mobile_token";
 const HISTORY_KEY = "moling_mobile_history";
+
+// API 基地址：优先用设置里保存的服务器地址（App 内必填），否则自动同源（浏览器打开本页）。
+function resolveApi() {
+  const saved = localStorage.getItem(SERVER_KEY);
+  const base = (saved || location.origin).replace(/\/+$/, "");
+  return `${base}/v1`;
+}
+let API = resolveApi();
 const HISTORY_LIMIT = 40;
 
 // 安全上下文：Notification / Web Speech / SW 离线缓存仅在 HTTPS 或本机（localhost）可用。
@@ -105,9 +116,20 @@ settingsBtn.addEventListener("click", () => {
 tokenSave.addEventListener("click", () => {
   apiToken = tokenInput.value.trim();
   try {
-    if (apiToken) localStorage.setItem("moling_mobile_token", apiToken);
-    else localStorage.removeItem("moling_mobile_token");
+    if (apiToken) localStorage.setItem(TOKEN_KEY, apiToken);
+    else localStorage.removeItem(TOKEN_KEY);
   } catch { /* 忽略存储失败 */ }
+  settingsPanel.hidden = true;
+  refreshStatus();
+});
+
+serverSave.addEventListener("click", () => {
+  const raw = serverInput.value.trim();
+  try {
+    if (raw) localStorage.setItem(SERVER_KEY, raw.replace(/\/+$/, ""));
+    else localStorage.removeItem(SERVER_KEY);
+  } catch { /* 忽略存储失败 */ }
+  API = resolveApi();
   settingsPanel.hidden = true;
   refreshStatus();
 });
@@ -277,6 +299,7 @@ input.addEventListener("input", () => {
 });
 
 // ---------- 初始化 ----------
+serverInput.value = localStorage.getItem(SERVER_KEY) || "";
 // 续聊：恢复本机保存的会话（最近 40 条），无记录则显示欢迎语。
 loadHistory();
 if (history.length === 0) {

@@ -46,6 +46,17 @@ test("app.js wires voice recognition with graceful degradation", () => {
   assert.match(app, /麦克风权限被拒绝/);
 });
 
+test("app.js supports configurable server address for the native shell (Capacitor)", () => {
+  // App 内页面从 capacitor:// 加载，同源相对地址连不到电脑 → 必须可配置服务器地址
+  assert.match(html, /id="serverInput"/);
+  assert.match(html, /id="serverSave"/);
+  assert.match(app, /moling_mobile_server/);
+  assert.match(app, /function resolveApi\(\)/);
+  assert.match(app, /localStorage\.getItem\(SERVER_KEY\)/);
+  assert.match(app, /serverSave\.addEventListener/);
+  assert.match(app, /API = resolveApi\(\);/);
+});
+
 test("app.js wires notifications behind a user switch and secure context", () => {
   assert.match(app, /"Notification" in window/);
   assert.match(app, /Notification\.requestPermission/);
