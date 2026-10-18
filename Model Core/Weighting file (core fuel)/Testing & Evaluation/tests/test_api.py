@@ -125,6 +125,21 @@ class ApiTests(unittest.TestCase):
                 self.assertEqual(response.status, 403)
                 self.assertIn("cross-origin", payload["error"])
 
+    def test_mobile_capacitor_origin_is_allowed(self) -> None:
+        # Capacitor 手机 App 的 WebView 请求携带 capacitor://localhost 来源，
+        # 必须放行，否则真机 App 无法调用任何 POST API。
+        for origin in ("capacitor://localhost", "https://localhost", "http://localhost"):
+            with self.subTest(origin=origin):
+                self.connection.request(
+                    "POST",
+                    "/v1/backup/create",
+                    b"{}",
+                    {"Content-Type": "text/plain", "Origin": origin},
+                )
+                response = self.connection.getresponse()
+                # 放行后走到业务校验（backup/create 缺参数 → 400），而不是 403。
+                self.assertNotEqual(response.status, 403)
+
     def test_vision_analysis_rejects_invalid_image_formats(self) -> None:
         for content_type, image in (
             ("image/gif", b"GIF89a"),

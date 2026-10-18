@@ -641,7 +641,14 @@ class ApiHandler(BaseHTTPRequestHandler):
     def _reject_untrusted_browser_origin(self) -> bool:
         """Block cross-origin browser writes to the loopback service (CSRF)."""
         origin = getattr(self, "headers", {}).get("Origin")
-        if not origin or origin == "moling://local":
+        # 放行：桌面壳 moling://local 与 Capacitor 手机 App 的 WebView 来源
+        # （capacitor://localhost / https://localhost / http://localhost 均为 App 自身）。
+        if not origin or origin in {
+            "moling://local",
+            "capacitor://localhost",
+            "https://localhost",
+            "http://localhost",
+        }:
             return False
         self._send_json(
             HTTPStatus.FORBIDDEN,
