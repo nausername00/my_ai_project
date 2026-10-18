@@ -368,7 +368,8 @@
 
   // K6：演出布局——人物靠左/居中/靠右（默认居中）。side: "left"|"center"|"right"
   // 注意：model.width/height 是含 scale 的显示 bounds，缩放计算必须用局部原始 bounds。
-  function setCharacterSide(side, container) {
+  // opts.heightRatio/widthRatio：角色占容器比例，用于为待机动画留出摆动余量（防出格）。
+  function setCharacterSide(side, container, opts = {}) {
     if (!model || !container) return;
     const cw = container.clientWidth || container.getBoundingClientRect().width || 300;
     const ch = container.clientHeight || container.getBoundingClientRect().height || 400;
@@ -385,9 +386,9 @@
       bw = model.width || cw;
       bh = model.height || ch;
     }
-    // 演出目标：角色高度约占画面 58%（留出字幕/舞台空间），宽度不超 45%
-    const targetH = ch * 0.58;
-    const targetW = cw * 0.45;
+    // 演出目标：角色高度约占画面 heightRatio（留出字幕/舞台空间与待机摆动余量），宽度不超 widthRatio
+    const targetH = ch * (opts.heightRatio || 0.58);
+    const targetW = cw * (opts.widthRatio || 0.45);
     const scale = Math.min(targetH / bh, targetW / bw);
     if (!Number.isFinite(scale) || scale <= 0) return;
     model.scale.set(scale);

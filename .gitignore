@@ -106,3 +106,17 @@ Model Core/Weighting file (core fuel)/Character/memory_usage_log.json
 # ----- K6 演出导出运行产物（2026-10-17 补录：渲染日志与 UI 导出目录不入库）-----
 Model Core/Weighting file (core fuel)/Frontend/k6_render_out.txt
 Model Core/Weighting file (core fuel)/Character/K6 Output/k6-ui-export/
+
+# ----- 凭据与运行时状态（2026-10-18 补录：token/备份/互动状态不入库）-----
+Model Core/Weighting file (core fuel)/mobile_token.txt
+Model Core/Weighting file (core fuel)/Backups/
+Model Core/Weighting file (core fuel)/Source code engine/m_studio/headpat_state.json
+Model Core/Weighting file (core fuel)/Source code engine/m_studio/ops_log.json
+Model Core/Weighting file (core fuel)/Source code engine/plugins.json
+Model Core/Weighting file (core fuel)/Source code engine/plugin_approvals.json
+
+# ----- 悬浮窗排查调试产物（2026-10-18 补录）-----
+Model Core/Weighting file (core fuel)/Frontend/_*.png
+Model Core/Weighting file (core fuel)/Frontend/moling_elog*.txt
+Model Core/Weighting file (core fuel)/Frontend/moling_run*.log
+Model Core/Weighting file (core fuel)/Frontend/_scan.txt

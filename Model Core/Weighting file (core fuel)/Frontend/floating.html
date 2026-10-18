@@ -141,7 +141,9 @@
     text-shadow: 0 1px 2px rgba(0,0,0,0.35);
     cursor: pointer;
     -webkit-app-region: no-drag;
-    transition: transform 0.15s ease;
+    /* 尺寸平滑过渡：展开/折叠时避免角色在窗口 resize 完成前被裁切/跳动 */
+    transition: transform 0.15s ease, width 0.22s ease, height 0.22s ease,
+      border-radius 0.22s ease, background 0.22s ease, box-shadow 0.22s ease;
   }
   #avatar-wrap img {
     width: 100%;
@@ -503,8 +505,26 @@
     request.catch((error) => {
       console.error("Could not resize the floating window:", error);
     });
-    syncLive2dVisibility();
+    // 注意：不在点击时立即显示/隐藏 Live2D——窗口 setBounds 是异步的，
+    // 立即切换会让角色在窗口 resize 完成前被裁切/拉伸（"格子内外横跳"）。
+    // 改为等窗口 resize 稳定后由 onFloatingResize 统一处理。
   });
+
+  // 窗口尺寸稳定后再校准 Live2D 位置与显隐，避免过渡期角色跳动/变形
+  let resizeTimer = null;
+  function onFloatingResize() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      syncLive2dVisibility();
+      if (panel.classList.contains("expanded") && live2dReady) {
+        window.MolingLive2D.setCharacterSide("center", live2dBox, {
+          heightRatio: 0.5,
+          widthRatio: 0.4,
+        });
+      }
+    }, 180);
+  }
+  window.addEventListener("resize", onFloatingResize);
 
   function handleNotification(note) {
     if (!note || typeof note !== "object") return;
@@ -612,7 +632,12 @@
       });
       if (!ok) return;
       live2dReady = true;
-      window.MolingLive2D.setCharacterSide("center", live2dBox);
+      // 悬浮窗角色高度 50%：为模型待机动画（呼吸/转身/摆臂）留出摆动余量，
+      // 避免角色头/耳/手在循环动画时被 avatar 圆角盒子裁切（"格子内外横跳"）。
+      window.MolingLive2D.setCharacterSide("center", live2dBox, {
+        heightRatio: 0.5,
+        widthRatio: 0.4,
+      });
       if (currentMood) {
         window.MolingLive2D.setExpressionByMood(currentMood);
       }

@@ -5,6 +5,7 @@ const {
   ipcMain,
   nativeImage,
   protocol,
+  screen,
   session,
   shell,
 } = require("electron");
@@ -1557,8 +1558,24 @@ function registerIpcHandlers() {
   ipcMain.handle("companion:floating-expand", (event) => {
     assertWindowSender(event, floatingWindow, "Only the floating window can resize itself");
     if (floatingWindow && !floatingWindow.isDestroyed()) {
-      floatingWindow.setBounds({ width: 340, height: 640 });
-      return { expanded: true };
+      const target = { width: 340, height: 640 };
+      const bounds = floatingWindow.getBounds();
+      let x = bounds.x;
+      let y = bounds.y;
+      try {
+        const workArea = screen.getDisplayMatching(bounds).workArea;
+        // 展开后底部不超出工作区：窗口曾被拖到屏幕下方时，向上平移避免角色/通知区被裁
+        if (y + target.height > workArea.y + workArea.height) {
+          y = Math.max(workArea.y, workArea.y + workArea.height - target.height);
+        }
+        if (x + target.width > workArea.x + workArea.width) {
+          x = Math.max(workArea.x, workArea.x + workArea.width - target.width);
+        }
+      } catch {
+        /* 取工作区失败时保持原位置 */
+      }
+      floatingWindow.setBounds({ x, y, width: target.width, height: target.height });
+      return { expanded: true, x, y };
     }
     return { expanded: false, reason: "no-window" };
   });
