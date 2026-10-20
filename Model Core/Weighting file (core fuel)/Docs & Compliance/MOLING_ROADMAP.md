@@ -818,6 +818,17 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
 - **M5b 反差萌接入主对话（2026-10-17）**：`m_studio/m5_praise_service.py`——被夸奖时三拍演出（得意炫耀→说漏嘴→害羞狡辩）并**顺势注入当前造型 + 设计思路**（炫耀内容真实指向此刻形象）。思路查找：现场设计（design_log）优先 → 自荐提案库（style_proposals）按 outfit_id×tone_id 匹配。`/v1/generate` 第四 hook（fashion→headpat→style_proposal→praise，明确请求优先于情感反馈）。**端到端实测**："你这身真好看"→ 三拍完整 + style=青花云纹 + idea="青花是沉淀的墨色…稳重而有格调"；普通消息不触发。测试 +5 项 `test_m5_praise.py`（夸奖检测/三拍结构/造型思路注入/design_log 优先/普通消息）。回归 **738 passed / 7 skipped**。
 - **E4 平台治理 · 最小版（2026-10-17）**：写操作互斥锁 + 请求排队当"保险丝"，防分身/多请求并发写状态文件互相覆盖（摸头计数/时装状态/设计日志/自荐提案）。`m_studio/lock_utils.py` 新建 **FileLock（内核级文件锁）**：对目标文件旁的 lock 文件加 msvcrt/fcntl 字节锁，目标文件不受锁影响可正常写入；无删除竞态（WinError 32 已根除）、进程崩溃内核自动释放、无陈旧锁问题。接入点：`m5_headpat.touch()`（读-改-写原子化）、`m5_design._save_log/注册写盘`、`fashion_system.save_state/ops_log`、`m5_self_style._save`；`api.py` 状态 hook（换装/摸头/自荐/夸奖）整段包 `_STATE_HOOK_LOCK` 串行化。踩坑记录：① Windows 下 `os.kill(pid,0)` 会发 CTRL_C_EVENT 中断自身进程（exit -1 无输出），pid 探测改 ctypes OpenProcess；② msvcrt 锁**目标文件**字节会令同文件 `open("w")` 写失败（PermissionError Errno 13），故改为锁独立 lock 文件。测试 +5 项 `test_lock_utils.py`（互斥/超时/重复获取/**20 线程并发摸头计数不丢**）。回归 **743 passed / 7 skipped**。**完整版（监控仪表盘/成本熔断）推迟**：单用户几乎无并发，等手机端/外部模型真加入、并发真来了再上——符合"可靠优于数量"。
 
+### 3D 创作深化（2026-10-20，第一梯队第 3 项）
+
+`m_studio/m9_bpy_render.py` + `m9_make_gif.py`——按现有 M 线三路结合管线扩展，逐一补齐 SKILL_CARD 已知限制：
+
+- **新形体**：`--target` 扩展 `gem`（程序化宝石：六棱锥上下对拼 + 高光材质 Roughness 0.12 / Metallic 0.4）、`star`（圆环顶点径向缩放成五角星）、`full`（台座+锥体+圆环+宝石+星全装配场景）；gem/star 单独展示时自动配台座衬底，full 场景自动抬高避开锥体/圆环。
+- **混合材质**：`--blend 0..1` 用 ShaderNodeMixRGB 把贴图与底色融合（0=纯贴图、1=纯底色），解决"Base Color 直贴"限制；台座/锥体/圆环/星用混合材质，宝石用纯底色高光。
+- **动画成片**：`--animate N` 渲染 N 帧绕 Z 旋转 + 上下漂浮 PNG 序列 → `m9_make_gif.py` 用系统 py（PIL/imageio）合成循环 GIF（**无 ffmpeg 依赖**；Blender 自带 Python 无 PIL，故"渲染在 Blender、合成在系统 py"）。
+- **真实渲染验证**：gem 静帧（台座云纹贴图 + 混合材质生效，构图成立）；full 动画 12 帧 → **逐帧像素核验 12 帧全非黑 + 帧 MD5 12 个全唯一**（确认旋转/漂浮真实生效）→ GIF 合成成功。
+- **踩坑记录（重要）**：动画首跑 12 帧全黑——根因是相机对象命名为 `m9_cam` 以 `m9_` 前缀开头，被动画循环误判为旋转对象，相机每帧绕 Z 乱转导致黑屏；修复为只旋转 `type == "MESH"` 对象。教训：**命名前缀过滤动画对象时必须按对象类型过滤，否则相机/灯光这类非网格对象会被误操作**。另：Blender 5.1 的 ShaderNodeMixRGB 无 `data_type` 属性（移除即可）。
+- SKILL_CARD.md 已更新（参数契约/映射表/验证要点/复用记录）；前端不涉及；Python 回归见下。
+
 ### 新想法 · 游戏化互动「摸头奖励」（2026-10-17 用户提出，文本版已交付）
 
 用户："要是添加摸头奖励定义的功能是不是有点游戏的味道"。游戏化亲密互动——玩家式"好感/奖励"回馈循环：
