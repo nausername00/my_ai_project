@@ -52,6 +52,21 @@ def test_list_tones(fs: FashionSystem) -> None:
     assert {"ivory", "light", "royal"} <= set(fs.list_tones())
 
 
+def test_current_outfit_status_payload(fs: FashionSystem) -> None:
+    """第三梯队 B：/v1/fashion/status 的负载需含完整时装库与色调列表（前端衣橱渲染依赖）。"""
+    from fashion_service import current_outfit
+
+    payload = current_outfit()
+    assert isinstance(payload, dict)
+    assert "current" in payload
+    assert isinstance(payload["outfits"], list) and len(payload["outfits"]) >= 9
+    assert {"celadon_cloud", "sakura_snow", "aurora"} <= {o["id"] for o in payload["outfits"]}
+    assert isinstance(payload["tones"], list) and len(payload["tones"]) >= 10
+    assert {"ivory", "sakura", "aurora"} <= set(payload["tones"])
+    assert all("id" in o and "name" in o for o in payload["outfits"])
+    assert "proposals" in payload
+
+
 def test_unknown_outfit_raises(fs: FashionSystem) -> None:
     with pytest.raises(FashionError):
         fs.get_outfit("no_such_outfit")

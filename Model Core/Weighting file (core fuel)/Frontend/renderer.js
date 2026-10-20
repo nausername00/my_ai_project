@@ -78,6 +78,12 @@ const galleryPanel = document.getElementById("gallery-panel");
 const galleryGrid = document.getElementById("gallery-grid");
 const galleryStatus = document.getElementById("gallery-status");
 const galleryRefresh = document.getElementById("gallery-refresh");
+const fashionWorkspaceButton = document.getElementById("fashion-workspace");
+const fashionPanel = document.getElementById("fashion-panel");
+const fashionGrid = document.getElementById("fashion-grid");
+const fashionStatus = document.getElementById("fashion-status");
+const fashionCurrent = document.getElementById("fashion-current");
+const fashionRefresh = document.getElementById("fashion-refresh");
 const collaborationPanel = document.getElementById("collaboration-panel");
 const collaborationForm = document.getElementById("collaboration-form");
 const collaborationTask = document.getElementById("collaboration-task");
@@ -2358,7 +2364,8 @@ function setWorkspace(workspace) {
   const isCollaboration = workspace === "collaboration";
   const isPartners = workspace === "partners";
   const isGallery = workspace === "gallery";
-  const isChat = !isTranslator && !isCollaboration && !isPartners && !isGallery;
+  const isFashion = workspace === "fashion";
+  const isChat = !isTranslator && !isCollaboration && !isPartners && !isGallery && !isFashion;
   document.getElementById("conversation").hidden = !isChat;
   document.getElementById("composer").hidden = !isChat;
   document.getElementById("chat-notice").hidden = !isChat;
@@ -2366,6 +2373,7 @@ function setWorkspace(workspace) {
   collaborationPanel.hidden = !isCollaboration;
   partnersPanel.hidden = !isPartners;
   galleryPanel.hidden = !isGallery;
+  fashionPanel.hidden = !isFashion;
   document.getElementById("new-chat").hidden = !isChat;
   document.getElementById("affect-indicator").hidden = !isChat;
   chatWorkspaceButton.classList.toggle("active", isChat);
@@ -2373,11 +2381,13 @@ function setWorkspace(workspace) {
   collaborationWorkspaceButton.classList.toggle("active", isCollaboration);
   partnersWorkspaceButton.classList.toggle("active", isPartners);
   galleryWorkspaceButton.classList.toggle("active", isGallery);
+  fashionWorkspaceButton.classList.toggle("active", isFashion);
   chatWorkspaceButton.setAttribute("aria-pressed", String(isChat));
   translatorWorkspaceButton.setAttribute("aria-pressed", String(isTranslator));
   collaborationWorkspaceButton.setAttribute("aria-pressed", String(isCollaboration));
   partnersWorkspaceButton.setAttribute("aria-pressed", String(isPartners));
   galleryWorkspaceButton.setAttribute("aria-pressed", String(isGallery));
+  fashionWorkspaceButton.setAttribute("aria-pressed", String(isFashion));
   document.querySelector(".topbar-title strong").textContent = isTranslator
     ? "文本翻译器"
     : isCollaboration
@@ -2386,9 +2396,12 @@ function setWorkspace(workspace) {
         ? "伙伴评审"
         : isGallery
           ? "墨灵的作品集"
-          : `和${activeCharacterNickname}聊天`;
+          : isFashion
+            ? "墨灵的时装衣橱"
+            : `和${activeCharacterNickname}聊天`;
   if (isGallery) void refreshGallery();
   if (isPartners) void loadPartnerStatus();
+  if (isFashion) void refreshFashion();
 }
 
 chatWorkspaceButton.addEventListener("click", () => setWorkspace("chat"));
@@ -2403,6 +2416,96 @@ partnersWorkspaceButton.addEventListener("click", () =>
 );
 galleryWorkspaceButton.addEventListener("click", () => setWorkspace("gallery"));
 galleryRefresh.addEventListener("click", () => void refreshGallery());
+fashionWorkspaceButton.addEventListener("click", () => setWorkspace("fashion"));
+fashionRefresh.addEventListener("click", () => void refreshFashion());
+
+// ------------------------------------------------------------------ 时装衣橱（第三梯队 B）
+function escapeHtmlForFashion(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[ch]));
+}
+
+async function refreshFashion() {
+  fashionStatus.textContent = "衣橱加载中…";
+  fashionCurrent.textContent = "";
+  try {
+    const status = await window.companion.fashionStatus();
+    if (!status || !Array.isArray(status.outfits)) {
+      fashionStatus.textContent = "衣橱暂不可用（后端未返回时装库）。";
+      return;
+    }
+    const current = status.current || {};
+    const currentOutfit = current.outfit_id || "";
+    const currentTone = current.tone_id || "";
+    const currentMeta = status.outfits.find((o) => o.id === currentOutfit) || null;
+    const currentName = currentMeta ? currentMeta.name : currentOutfit;
+    fashionCurrent.innerHTML =
+      `当前穿戴：<strong>${escapeHtmlForFashion(currentName)}</strong>` +
+      (currentTone ? ` × <strong>${escapeHtmlForFashion(currentTone)}</strong>` : "") +
+      "　（在衣橱里点「穿上」即可换装）";
+    fashionGrid.replaceChildren();
+    for (const outfit of status.outfits) {
+      const card = document.createElement("article");
+      card.className = "fashion-card" + (outfit.id === currentOutfit ? " is-current" : "");
+      const header = document.createElement("header");
+      const name = document.createElement("strong");
+      name.textContent = outfit.name;
+      header.appendChild(name);
+      if (outfit.id === currentOutfit) {
+        const badge = document.createElement("span");
+        badge.textContent = "穿着中";
+        badge.style.color = "#7c8cf8";
+        badge.style.fontSize = "11px";
+        header.appendChild(badge);
+      }
+      const desc = document.createElement("p");
+      desc.className = "fashion-desc";
+      desc.textContent = outfit.desc || "";
+      const footer = document.createElement("footer");
+      const select = document.createElement("select");
+      select.setAttribute("aria-label", `${outfit.name} 色调`);
+      for (const toneId of status.tones || []) {
+        const option = document.createElement("option");
+        option.value = toneId;
+        option.textContent = toneId;
+        if (toneId === (outfit.id === currentOutfit ? currentTone : "")) {
+          option.selected = true;
+        }
+        select.appendChild(option);
+      }
+      const wear = document.createElement("button");
+      wear.type = "button";
+      wear.className = "icon-button";
+      wear.textContent = "穿上";
+      wear.addEventListener("click", () => void wearFashion(outfit.id, select.value));
+      footer.appendChild(select);
+      footer.appendChild(wear);
+      card.append(header, desc, footer);
+      fashionGrid.appendChild(card);
+    }
+    fashionStatus.textContent = `衣橱已加载：${status.outfits.length} 套时装 · ${(status.tones || []).length} 种色调。`;
+  } catch (error) {
+    fashionStatus.textContent = `衣橱加载失败：${error?.message || String(error)}`;
+  }
+}
+
+async function wearFashion(outfitId, toneId) {
+  fashionStatus.textContent = "正在穿上…（首次会渲染，可能稍等）";
+  try {
+    const result = await window.companion.fashionOutfit(outfitId, toneId);
+    if (!result || result.error) {
+      fashionStatus.textContent = `换装失败：${result?.error || "未知错误"}`;
+      return;
+    }
+    const name = result.outfit_name || outfitId;
+    fashionStatus.textContent =
+      `已穿上 ${name} × ${result.tone_id}（cache=${result.cache_hit ? "命中" : "渲染"} · ${result.cost}）。`;
+    await refreshFashion();
+  } catch (error) {
+    fashionStatus.textContent = `换装失败：${error?.message || String(error)}`;
+  }
+}
 
 async function loadPartnerStatus() {
   partnersHint.textContent = "伙伴状态加载中…";

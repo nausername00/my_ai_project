@@ -45,6 +45,10 @@
           <span class="workspace-icon" aria-hidden="true">藏</span>
           <span class="workspace-label">墨灵的作品集</span>
         </button>
+        <button class="conversation workspace-button" id="fashion-workspace" type="button" aria-label="墨灵的时装衣橱" title="时装衣橱：看造型、挑色调、一键穿上" aria-pressed="false">
+          <span class="workspace-icon" aria-hidden="true">装</span>
+          <span class="workspace-label">时装衣橱</span>
+        </button>
         <div class="sidebar-bottom">
           <span class="local-indicator"></span>
           <span>本地服务</span>
@@ -302,6 +306,20 @@
             <button class="icon-button" id="gallery-refresh" type="button">刷新</button>
           </div>
           <div class="gallery-grid" id="gallery-grid" aria-live="polite"></div>
+        </section>
+
+        <section class="collaboration-panel" id="fashion-panel" aria-labelledby="fashion-title" hidden>
+          <div class="translator-heading">
+            <span class="eyebrow">MOLING WARDROBE · 时装衣橱</span>
+            <h1 id="fashion-title">墨灵的时装衣橱</h1>
+            <p>看造型、挑色调，一键给墨灵换上。当前穿戴会同步到对话与悬浮窗。</p>
+          </div>
+          <div class="gallery-toolbar">
+            <p class="form-status gallery-status" id="fashion-status" role="status" aria-live="polite"></p>
+            <button class="icon-button" id="fashion-refresh" type="button">刷新衣橱</button>
+          </div>
+          <div class="fashion-current" id="fashion-current" role="status" aria-live="polite"></div>
+          <div class="fashion-grid" id="fashion-grid" aria-live="polite"></div>
         </section>
 
         <section class="conversation-view" id="conversation" aria-live="polite">

@@ -73,6 +73,9 @@ contextBridge.exposeInMainWorld(
     discoverFile: () => ipcRenderer.invoke("companion:discover-file"),
     discoverContext: () => ipcRenderer.invoke("companion:discover-context"),
     partnersStatus: () => ipcRenderer.invoke("companion:partners-status"),
+    fashionStatus: () => ipcRenderer.invoke("companion:fashion-status"),
+    fashionOutfit: (outfitId, toneId) =>
+      ipcRenderer.invoke("companion:fashion-outfit", outfitId, toneId),
     partnersPreview: (scope, partnerIds) =>
       ipcRenderer.invoke("companion:partners-preview", scope, partnerIds),
     partnersEvaluate: (scope, partnerIds, externalConsent) =>

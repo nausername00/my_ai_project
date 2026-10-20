@@ -745,6 +745,15 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
 - 效果：对话「今天穿樱雪」「换上极光」「穿极夜蓝的青花云纹」都能正确识别并触发换装（长词优先、未指定项沿用当前穿戴）。
 - 测试：`test_m5_style.py` 新增 2 项（M10 新时装识别 + M10 新色调与组合指令）；Python 全量回归 **797 OK / 7 skipped**。
 
+**第三梯队 B · 前端时装衣橱面板（2026-10-20 完成）**：主窗口「时装衣橱」工作区——看造型、挑色调、一键穿上，不再靠背口令。
+
+- 后端：`current_outfit()` 扩展返回 `{current, outfits, tones, proposals}`——outfits 为完整时装库（9 套）、tones 为全部色调（10 个），供面板渲染。
+- IPC 桥：`companion:fashion-status`（GET /v1/fashion/status）+ `companion:fashion-outfit`（POST /v1/fashion/outfit，payload `{outfit_id, tone_id}`）；preload 暴露 `fashionStatus()` / `fashionOutfit(outfitId, toneId)`。
+- 前端：侧栏「装·时装衣橱」入口 + `fashion-panel`（当前穿戴条 + 9 套时装卡片：名称/描述/色调下拉/穿上按钮，穿着中卡片高亮）；`refreshFashion()` 渲染衣橱、`wearFashion()` 换装并即时反馈（cache/渲染、cost）。换装状态与对话换装指令共用同一状态（`fashion_state.json`）。
+- 测试：前端 `layout.test.cjs` 新增时装面板断言（HTML 骨架/样式/工作区切换/renderer 逻辑/IPC 桥）；前端全量 **90/90**；Python 全量 **798 OK / 7 skipped**（新增 `test_current_outfit_status_payload`）。
+- 真实验收：起服务 HTTP 实测——GET status 200（9 套时装含樱雪/青枫/极光 + 10 色调 + 当前穿戴）、POST 换装樱雪×樱雪粉 200（缓存命中 cost=轻）、状态持久化、验收后还原穿戴。
+
+
 
 
 ## 当前核心完善验证（2026-10-14）

@@ -146,8 +146,11 @@ def change_outfit(outfit_id: str | None, tone_id: str | None) -> dict[str, Any]:
 def current_outfit() -> dict[str, Any]:
     fs = FashionSystem()
     proposals = SelfStyleProposal()
+    current = fs.current()
     return {
-        "current": fs.current(),
+        "current": current,
+        "outfits": fs.list_outfits(),
+        "tones": fs.list_tones(),
         "proposals": [
             {
                 "id": p["id"],

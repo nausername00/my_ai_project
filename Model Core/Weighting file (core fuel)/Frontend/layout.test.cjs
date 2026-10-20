@@ -8,6 +8,7 @@ const html = fs.readFileSync(path.join(frontendDirectory, "index.html"), "utf8")
 const css = fs.readFileSync(path.join(frontendDirectory, "style.css"), "utf8");
 const renderer = fs.readFileSync(path.join(frontendDirectory, "renderer.js"), "utf8");
 const main = fs.readFileSync(path.join(frontendDirectory, "main.cjs"), "utf8");
+const preload = fs.readFileSync(path.join(frontendDirectory, "preload.cjs"), "utf8");
 const floating = fs.readFileSync(path.join(frontendDirectory, "floating.html"), "utf8");
 const index = fs.readFileSync(path.join(frontendDirectory, "index.html"), "utf8");
 const packageManifest = JSON.parse(
@@ -57,6 +58,43 @@ test("collapsed navigation keeps an accessible new-chat action and distinct work
     renderer,
     /galleryWorkspaceButton\.setAttribute\(\s*"aria-pressed",\s*String\(isGallery\)\s*\)/,
   );
+});
+
+test("fashion wardrobe workspace: button, panel, IPC bridge and wear flow", () => {
+  // 侧栏入口
+  assert.match(
+    html,
+    /<button class="conversation workspace-button" id="fashion-workspace"[^>]*aria-label="墨灵的时装衣橱"[^>]*>/,
+  );
+  assert.match(html, /<span class="workspace-icon" aria-hidden="true">装<\/span>/);
+  assert.match(html, /<span class="workspace-label">时装衣橱<\/span>/);
+  // 面板骨架
+  assert.match(html, /<section class="collaboration-panel" id="fashion-panel"[^>]*hidden>/);
+  assert.match(html, /id="fashion-status"[^>]*role="status"/);
+  assert.match(html, /id="fashion-current"[^>]*role="status"/);
+  assert.match(html, /id="fashion-grid"[^>]*aria-live="polite"/);
+  assert.match(html, /id="fashion-refresh"/);
+  // 样式
+  assert.match(css, /\.fashion-card\s*\{/);
+  assert.match(css, /\.fashion-card\.is-current\s*\{[\s\S]*?border-color:\s*#7c8cf8/);
+  assert.match(css, /\.fashion-grid\s*\{/);
+  // renderer：工作区切换 + 面板逻辑
+  assert.match(
+    renderer,
+    /fashionWorkspaceButton\.setAttribute\(\s*"aria-pressed",\s*String\(isFashion\)\s*\)/,
+  );
+  assert.match(renderer, /fashionPanel\.hidden = !isFashion/);
+  assert.match(renderer, /if \(isFashion\) void refreshFashion\(\);/);
+  assert.match(renderer, /fashionWorkspaceButton\.addEventListener\("click", \(\) => setWorkspace\("fashion"\)\)/);
+  assert.match(renderer, /async function refreshFashion\(\)/);
+  assert.match(renderer, /window\.companion\.fashionStatus\(\)/);
+  assert.match(renderer, /window\.companion\.fashionOutfit\(outfitId, toneId\)/);
+  // IPC 桥：main + preload
+  assert.match(main, /ipcMain\.handle\("companion:fashion-status"/);
+  assert.match(main, /ipcMain\.handle\("companion:fashion-outfit"/);
+  assert.match(main, /\/v1\/fashion\/outfit", "POST"/);
+  assert.match(preload, /fashionStatus: \(\) => ipcRenderer\.invoke\("companion:fashion-status"\)/);
+  assert.match(preload, /fashionOutfit: \(outfitId, toneId\) =>/);
 });
 
 test("desktop microphone recording can be discarded before local transcription", () => {

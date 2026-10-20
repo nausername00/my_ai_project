@@ -1119,6 +1119,15 @@ function registerIpcHandlers() {
   ipcMain.handle("companion:partners-status", () =>
     callApi("/v1/partners/status"),
   );
+  ipcMain.handle("companion:fashion-status", () =>
+    callApi("/v1/fashion/status"),
+  );
+  ipcMain.handle("companion:fashion-outfit", (_event, outfitId, toneId) =>
+    callApi("/v1/fashion/outfit", "POST", {
+      outfit_id: outfitId || null,
+      tone_id: toneId || null,
+    }),
+  );
   ipcMain.handle("companion:partners-preview", (_event, scope, partnerIds) => {
     const params = new URLSearchParams({ scope });
     for (const partnerId of partnerIds) params.append("partner_id", partnerId);
