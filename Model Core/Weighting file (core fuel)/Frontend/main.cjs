@@ -94,6 +94,11 @@ let miniGameWindow;
 let floatingWindowReady = false;
 let floatingCharacterUpdateVersion = 0;
 let floatingAvatarDisplayMode = avatarDisplayModes.FOLLOW;
+// 常驻语音唤醒（墨灵墨灵~ → 在的哟~ → 进对话）
+let voiceWakeProcess = null;
+let voiceWakeEnabled = false;
+let voiceWakeDevice = null;
+const VOICE_WAKE_EVENT_RE = /^EVENT\|([a-z]+)\|(.*)$/;
 const FLOATING_COMPACT_SIZE = Object.freeze({ width: 300, height: 144 });
 const FLOATING_EXPANDED_SIZE = Object.freeze({ width: 340, height: 640 });
 let notificationPollTimer;
@@ -541,6 +546,113 @@ async function synthesizeSpeech(text, voice, speakerId) {
   return audio;
 }
 
+// ---------------------------------------------------------------------------
+// 常驻语音唤醒（墨灵墨灵~ → 在的哟~ → 进对话）
+// 架构：Electron 主进程 spawn `wake_voice.py --listen`（本地 whisper 识别），
+// stdout 行协议 EVENT|type|payload；主进程把事件转发给渲染器，渲染器负责
+// TTS 播放（播放期间 PAUSE 唤醒进程，防墨灵自唤醒）。
+// ---------------------------------------------------------------------------
+function voiceWakeEvent(event) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("companion:voicewake-event", event);
+  }
+}
+
+function voiceWakeCommand(command) {
+  if (voiceWakeProcess?.stdin?.writable && voiceWakeProcess.exitCode === null) {
+    voiceWakeProcess.stdin.write(`${command}\n`);
+  }
+}
+
+function startVoiceWake() {
+  if (voiceWakeProcess) return;
+  // 打包版暂未内置独立唤醒程序（PyInstaller 需额外打进 MolingWake.exe，远期）。
+  if (app.isPackaged) {
+    voiceWakeEnabled = true; // 状态记忆，但实际不可用
+    voiceWakeEvent({ type: "error", message: "安装版暂不支持常驻语音唤醒（待打包配置更新）" });
+    return;
+  }
+  const engineDir = path.join(projectRoot, "Source code engine");
+  const wakeScript = path.join(engineDir, "wake_voice.py");
+  if (!require("node:fs").existsSync(wakeScript)) {
+    voiceWakeEvent({ type: "error", message: `未找到唤醒模块：${wakeScript}` });
+    return;
+  }
+  const args = ["-3", wakeScript, "--listen"];
+  if (Number.isInteger(voiceWakeDevice)) args.push("--device", String(voiceWakeDevice));
+  try {
+    voiceWakeProcess = spawn(resolvePython(), args, {
+      cwd: engineDir,
+      windowsHide: true,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  } catch (error) {
+    voiceWakeEvent({ type: "error", message: `唤醒进程启动失败：${error.message}` });
+    voiceWakeProcess = null;
+    return;
+  }
+  voiceWakeProcess.once("error", (error) => {
+    voiceWakeEvent({ type: "error", message: `唤醒进程异常：${error.message}` });
+    voiceWakeProcess = null;
+  });
+  voiceWakeProcess.once("exit", (code) => {
+    voiceWakeProcess = null;
+    if (voiceWakeEnabled) {
+      voiceWakeEvent({
+        type: "error",
+        message: code === 0 ? "唤醒进程已退出" : `唤醒进程退出（code ${code}）——请检查麦克风是否被其他程序占用`,
+      });
+    }
+  });
+  let buffer = "";
+  voiceWakeProcess.stdout.setEncoding("utf8");
+  voiceWakeProcess.stdout.on("data", (chunk) => {
+    buffer += chunk;
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      const match = line.match(VOICE_WAKE_EVENT_RE);
+      if (!match) continue;
+      const [, kind, payload] = match;
+      if (kind === "wake") {
+        voiceWakeEvent({ type: "wake", text: payload });
+      } else if (kind === "heard") {
+        voiceWakeEvent({ type: "heard", text: payload });
+      } else if (kind === "error") {
+        voiceWakeEvent({ type: "error", message: payload });
+      } else if (kind === "status") {
+        voiceWakeEvent({ type: "status", payload });
+      }
+    }
+  });
+  voiceWakeProcess.stderr.setEncoding("utf8");
+  voiceWakeProcess.stderr.on("data", (chunk) => {
+    const line = String(chunk).trim();
+    if (line) voiceWakeEvent({ type: "error", message: line });
+  });
+}
+
+function stopVoiceWake() {
+  if (!voiceWakeProcess) return;
+  try {
+    voiceWakeProcess.stdin.end();
+  } catch {
+    /* 忽略 */
+  }
+  const proc = voiceWakeProcess;
+  voiceWakeProcess = null;
+  setTimeout(() => {
+    if (proc.exitCode === null) proc.kill();
+  }, 1500);
+}
+
+function setVoiceWake(enabled) {
+  voiceWakeEnabled = Boolean(enabled);
+  if (voiceWakeEnabled) startVoiceWake();
+  else stopVoiceWake();
+  return { enabled: voiceWakeEnabled, running: Boolean(voiceWakeProcess) };
+}
+
 function getAvatarMimeType(fileName, bytes) {
   const extension = path.extname(fileName).toLowerCase();
   const mimeType = avatarMimeTypes.get(extension);
@@ -870,6 +982,21 @@ function registerIpcHandlers() {
   ipcMain.handle("companion:speech-status", () => callApi("/v1/speech/status"));
   ipcMain.handle("companion:speech-voices", () => callApi("/v1/speech/voices"));
   ipcMain.handle("companion:wake-status", () => callApi("/v1/wake/status"));
+  ipcMain.handle("companion:voicewake-set", (_event, enabled) =>
+    setVoiceWake(enabled),
+  );
+  ipcMain.handle("companion:voicewake-pause", () => {
+    voiceWakeCommand("PAUSE");
+    return true;
+  });
+  ipcMain.handle("companion:voicewake-resume", () => {
+    voiceWakeCommand("RESUME");
+    return true;
+  });
+  ipcMain.handle("companion:voicewake-status", () => ({
+    enabled: voiceWakeEnabled,
+    running: Boolean(voiceWakeProcess),
+  }));
   ipcMain.handle("companion:wake-send", (_event, body) =>
     callApi("/v1/wake", "POST", body || {}),
   );
@@ -1927,6 +2054,7 @@ app.whenReady().then(async () => {
 app.on("before-quit", () => {
   if (notificationPollTimer) clearInterval(notificationPollTimer);
   if (backendProcess && backendProcess.exitCode === null) backendProcess.kill();
+  if (voiceWakeProcess && voiceWakeProcess.exitCode === null) voiceWakeProcess.kill();
 });
 
 app.on("window-all-closed", () => {

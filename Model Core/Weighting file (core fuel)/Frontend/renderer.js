@@ -249,6 +249,7 @@ const voicePlaybackRateValue = document.getElementById("voice-playback-rate-valu
 const voicePlaybackVolume = document.getElementById("voice-playback-volume");
 const voicePlaybackVolumeValue = document.getElementById("voice-playback-volume-value");
 const voicePreferencesStatus = document.getElementById("voice-preferences-status");
+const voiceWakeStatus = document.getElementById("voice-wake-status");
 const avatarInput = document.getElementById("avatar-name");
 const avatarStatus = document.getElementById("avatar-status");
 const characterCardList = document.getElementById("character-card-list");
@@ -569,11 +570,82 @@ function initializeVoicePreferences() {
   save();
 }
 
-function svgDataUrl(svgText) {
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`;
+const VOICE_WAKE_STORAGE_KEY = "moling_voicewake_enabled";
+
+function setVoiceWakeStatus(text, isError = false) {
+  voiceWakeStatus.textContent = text;
+  voiceWakeStatus.classList.toggle("error", isError);
 }
 
-function attachExploreOffer(anchorMessage, proposal, userPrompt) {
+function initializeVoiceWake() {
+  const toggle = document.getElementById("voice-wake-enabled");
+  if (!toggle || typeof window.companion?.voiceWakeSet !== "function") return;
+  let stored = false;
+  try {
+    stored = localStorage.getItem(VOICE_WAKE_STORAGE_KEY) === "1";
+  } catch {
+    /* 忽略 */
+  }
+  toggle.checked = stored;
+  const apply = async (enabled) => {
+    try {
+      const state = await window.companion.voiceWakeSet(enabled);
+      try {
+        localStorage.setItem(VOICE_WAKE_STORAGE_KEY, state.enabled ? "1" : "0");
+      } catch {
+        /* 忽略 */
+      }
+      setVoiceWakeStatus(
+        state.enabled
+          ? state.running
+            ? "常驻语音唤醒已开启（喊「墨灵墨灵~」叫我；我说话时自动暂停识别）。"
+            : "已开启，但唤醒进程未运行（见下方错误提示）。"
+          : "常驻语音唤醒已关闭。",
+      );
+    } catch (error) {
+      setVoiceWakeStatus(`设置失败：${error.message}`, true);
+    }
+  };
+  toggle.addEventListener("change", () => apply(toggle.checked));
+  window.companion.onVoiceWakeEvent((payload) => {
+    const kind = payload?.type;
+    if (kind === "wake") {
+      welcome.hidden = true;
+      const bubble = addMessage(
+        `（听到你说「${payload.text || "墨灵墨灵"}~」）在的哟~`,
+        "assistant",
+      );
+      addSpeechControl(bubble, "在的哟~");
+      window.companion
+        .synthesize("在的哟~")
+        .then((wav) => playSynthesizedWav(wav))
+        .catch(() => {
+          /* 语音合成失败不影响文字回复 */
+        });
+      input?.focus();
+    } else if (kind === "heard") {
+      const text = String(payload.text || "").trim();
+      if (text) {
+        welcome.hidden = true;
+        void sendMessage(text);
+      }
+    } else if (kind === "error") {
+      setVoiceWakeStatus(String(payload.message || "唤醒进程异常"), true);
+    } else if (kind === "status") {
+      setVoiceWakeStatus(String(payload || ""));
+    }
+  });
+  // 上次开启过则恢复（进程由主进程拉起，失败会回传 error 事件）
+  if (stored) {
+    apply(true);
+  } else {
+    setVoiceWakeStatus("开启后本机麦克风常驻监听唤醒词，识别与回应全程本地离线；我说话时自动暂停识别（防自唤醒）。");
+  }
+}
+
+function svgDataUrl(svgText) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`;
+}function attachExploreOffer(anchorMessage, proposal, userPrompt) {
   const card = document.createElement("div");
   card.className = "explore-offer";
   card.dataset.topic = proposal.topic;
@@ -601,6 +673,7 @@ function attachExploreOffer(anchorMessage, proposal, userPrompt) {
   });
 
   initializeVoicePreferences();
+  initializeVoiceWake();
 
   tryButton.addEventListener("click", async () => {
     tryButton.disabled = true;
@@ -3528,13 +3601,22 @@ function playSynthesizedWav(wavBytes) {
   const playback = new Audio(audioUrl);
   applyVoicePreferences(playback);
   activeAudio = playback;
+  let resumed = false;
+  const resumeWake = () => {
+    if (resumed) return;
+    resumed = true;
+    window.companion?.voiceWakeResume?.().catch(() => {});
+  };
   const release = () => {
     URL.revokeObjectURL(audioUrl);
     if (activeAudio === playback) activeAudio = undefined;
+    resumeWake();
   };
+  // 语音播放期间暂停唤醒识别，防止墨灵自唤醒
+  window.companion?.voiceWakePause?.().catch(() => {});
   playback.addEventListener("ended", release, { once: true });
   playback.addEventListener("error", release, { once: true });
-  return playback.play();
+  return playback.play().then(() => undefined, release);
 }
 
 translatorSpeak.addEventListener("click", async () => {

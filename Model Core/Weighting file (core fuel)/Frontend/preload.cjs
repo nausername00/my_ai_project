@@ -22,6 +22,19 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke("companion:transcribe", audio, contentType),
     synthesize: (text, voice, speakerId) =>
       ipcRenderer.invoke("companion:synthesize", text, voice, speakerId),
+    voiceWakeSet: (enabled) =>
+      ipcRenderer.invoke("companion:voicewake-set", enabled === true),
+    voiceWakePause: () => ipcRenderer.invoke("companion:voicewake-pause"),
+    voiceWakeResume: () => ipcRenderer.invoke("companion:voicewake-resume"),
+    voiceWakeStatus: () => ipcRenderer.invoke("companion:voicewake-status"),
+    onVoiceWakeEvent: (callback) => {
+      if (typeof callback !== "function") {
+        throw new TypeError("voice wake callback must be a function");
+      }
+      const listener = (_event, payload) => callback(payload);
+      ipcRenderer.on("companion:voicewake-event", listener);
+      return () => ipcRenderer.removeListener("companion:voicewake-event", listener);
+    },
     getCharacter: () => ipcRenderer.invoke("companion:get-character"),
     notifySpeechState: (speaking) =>
       ipcRenderer.invoke("companion:speech-state", speaking === true),

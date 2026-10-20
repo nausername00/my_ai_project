@@ -715,6 +715,14 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
 - APK 重新打包（app-debug.apk，含最新前端）；`MOLING_MOBILE_CONNECT.md` 真机排查清单。
 - 前端全量 **87/87**。真机环境层实测（清单五步）待用户侧执行。
 
+**第二梯队 A · 常驻语音唤醒（2026-10-20 完成）**：方向 (b) 电脑端常驻唤醒落地——喊「墨灵墨灵~」→ 回应「在的哟~」→ 进入对话，全程本地离线。
+
+- 后端 `Source code engine/wake_voice.py`：`WakeVoiceEngine` 状态机（idle→listening→cooldown，8s 聆听窗 / 5s 冷却）；能量门限（RMS<140 跳过静音）；关键字「墨灵」子串匹配 + **whisper 繁体输出自动归一**（「墨靈墨靈在嗎?」也能命中）；经 stdin 的 PAUSE/RESUME/QUIT（TTS 播放期间暂停识别，防自唤醒）；stdout 事件行协议 `EVENT|type|payload`；CLI `--listen` 常驻 / `--test N` 真麦自测 / `--device`（麦克风索引）/ `--rate`（44.1k/48k 麦克风自动线性重采样到 16k 再喂 whisper）。
+- 复用现有 `speech.SpeechService`（faster_whisper small 已在本机缓存，离线可用）。
+- Electron 接入：`main.cjs` spawn `wake_voice.py --listen` + stdout 行解析 → 事件转发渲染器；渲染器设置面板新增「常驻语音唤醒」开关（localStorage 记忆 + 重启自动恢复）；`wake` → 显示气泡并合成播放「在的哟~」（复用 `playSynthesizedWav`，播放前后自动 PAUSE/RESUME 唤醒进程）；`heard` → 识别文本直接进 `sendMessage()` 完整对话链路（含 S1 分身阈值询问）；`error` → 设置面板状态提示；退出时杀子进程。
+- **测试**：`test_wake_voice.py` 14/14（关键字含繁体 / 状态机 / 静音跳过 / 去重 / 暂停抑制 / 识别失败容错 / rms / wav / 48k→16k 重采样）；离线端到端验证：Piper 合成「墨灵墨灵，在吗？」→ 真实 whisper 识别（输出繁体）→ 繁简归一 → wake 事件 ✅；Python 全量回归 **746 OK / 7 skipped**；前端语法 `npm check` 通过 + 前端全量 **87/87**。
+- **已知限制（诚实披露）**：① 本开发环境麦克风打开被拒（MME/WASAPI 全系失败，疑似设备占用或会话限制，非代码缺陷）——真麦唤醒需用户电脑实测（开关开启后若提示"唤醒进程退出"，先检查麦克风是否被会议软件等占用）；② 打包安装版暂不支持（PyInstaller 需额外打进 `MolingWake.exe`，列远期）；③ 唤醒词若正好跨 1.6s 块边界可能漏触发（聆听窗口 + 子串匹配已缓解）。
+
 
 
 ## 当前核心完善验证（2026-10-14）
