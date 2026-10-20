@@ -33,6 +33,7 @@ const composer = document.getElementById("composer");
 const input = document.getElementById("message-input");
 const sendButton = document.getElementById("send-button");
 const recordButton = document.getElementById("record-button");
+const cancelRecordButton = document.getElementById("cancel-record-button");
 const fileButton = document.getElementById("file-button");
 const observeButton = document.getElementById("observe-button");
 const imageButton = document.getElementById("image-button");
@@ -222,6 +223,9 @@ const statusSummary = document.getElementById("status-summary");
 const statusList = document.getElementById("status-list");
 const statusNote = document.getElementById("status-note");
 const statusRefresh = document.getElementById("status-refresh");
+const wolStatusNote = document.getElementById("wol-status-note");
+const wolRefresh = document.getElementById("wol-refresh");
+const wolTestSend = document.getElementById("wol-test-send");
 const proposalsEnabled = document.getElementById("proposals-enabled");
 const proposalsPaused = document.getElementById("proposals-paused");
 const proposalsFrequency = document.getElementById("proposals-frequency");
@@ -256,6 +260,10 @@ const voiceResourceStatus = document.getElementById("voice-resource-status");
 const characterVoiceSelect = document.getElementById("character-voice-select");
 const characterVoicePreview = document.getElementById("character-voice-preview");
 const characterVoicePreviewStatus = document.getElementById("character-voice-preview-status");
+const characterVoicePreviewSample = document.getElementById("character-voice-preview-sample");
+const speechReadiness = document.getElementById("speech-readiness");
+const characterVoiceSpeakerRow = document.getElementById("character-voice-speaker-row");
+const characterVoiceSpeakerSelect = document.getElementById("character-voice-speaker-select");
 const voiceSampleName = document.getElementById("voice-sample-name");
 const voiceSamplePreview = document.getElementById("voice-sample-preview");
 const voiceResourceRegister = document.getElementById("voice-resource-register");
@@ -277,6 +285,7 @@ let saveAppearanceRequested = false;
 let translationRequestVersion = 0;
 let voiceResources = [];
 let speechVoices = [];
+let speechSynthesisReady = false;
 let lastReferenceVoice = "";
 let pendingVoiceSample;
 let activeVoicePreview;
@@ -286,8 +295,12 @@ let selectedPersonalityPreset = "custom";
 const VOICE_PREFERENCES_KEY = "moling.voice.preferences.v1";
 const LOCAL_VOICE_PREFIX = "voice:";
 const AVATAR_DISPLAY_MODE_KEY = "moling.avatar.display-mode.v1";
-const VOICE_PREVIEW_TEXT =
-  "你好，我是墨灵。很高兴认识你，这是当前声线的试听。";
+const VOICE_PREVIEW_SAMPLES = Object.freeze({
+  greeting: "你好，我是墨灵。今天也辛苦了，先慢慢来。",
+  care: "如果你累了，就先歇一会儿。我会在这里，等你准备好了再继续。",
+  joke: "我没有在担心你，只是这份计划少了你就显得不太聪明。",
+  serious: "这项操作会修改文件。请先确认目标和备份，再决定是否继续。",
+});
 const DEFAULT_VOICE_PREFERENCES = Object.freeze({
   muted: false,
   rate: 1,
@@ -419,7 +432,7 @@ const personalityFieldNames = Object.keys(personalityFieldLabels);
 let recorder;
 let recordingStream;
 let recordingTimer;
-let recordingFailed = false;
+let recordingSession;
 let activeAudio;
 let conversationHistory = [];
 
@@ -905,7 +918,11 @@ function addSpeechControl(message, text) {
     let playback;
     try {
       const selectedVoice = getCharacterSynthesisVoice();
-      const audio = await window.companion.synthesize(text, selectedVoice);
+      const audio = await window.companion.synthesize(
+        text,
+        selectedVoice,
+        getCharacterSynthesisSpeaker(currentCharacterId, selectedVoice),
+      );
       const wavBytes =
         audio instanceof Uint8Array
           ? audio
@@ -968,12 +985,15 @@ function addSpeechControl(message, text) {
 
 async function transcribeRecording(chunks, mimeType) {
   const recording = new Blob(chunks, { type: mimeType });
+  cancelRecordButton.hidden = true;
   if (!recording.size) {
     setVoiceStatus("没有录到音频，请重试。", true);
+    resetRecordingControls();
     return;
   }
   if (recording.size > 25_000_000) {
     setVoiceStatus("录音超过 25 MB，请缩短后重试。", true);
+    resetRecordingControls();
     return;
   }
   recordButton.disabled = true;
@@ -994,10 +1014,16 @@ async function transcribeRecording(chunks, mimeType) {
   } catch (error) {
     setVoiceStatus(`语音识别失败：${error.message}`, true);
   } finally {
-    recordButton.disabled = false;
-    recordButton.textContent = "开始录音";
-    recordButton.setAttribute("aria-pressed", "false");
+    resetRecordingControls();
   }
+}
+
+function resetRecordingControls() {
+  recordButton.disabled = false;
+  recordButton.textContent = "开始录音";
+  recordButton.setAttribute("aria-pressed", "false");
+  cancelRecordButton.hidden = true;
+  cancelRecordButton.disabled = false;
 }
 
 function setEditorAvatar(dataUrl) {
@@ -1017,36 +1043,49 @@ async function toggleRecording() {
     setVoiceStatus("当前环境不支持麦克风录音。", true);
     return;
   }
+  const session = { cancelled: false, failed: false, recorder: undefined, stream: undefined };
+  recordingSession = session;
   recordButton.disabled = true;
+  cancelRecordButton.hidden = false;
+  cancelRecordButton.disabled = false;
   setVoiceStatus("等待麦克风授权…");
   try {
-    recordingStream = await navigator.mediaDevices.getUserMedia({
+    const stream = await navigator.mediaDevices.getUserMedia({
       audio: true,
       video: false,
     });
+    if (recordingSession !== session || session.cancelled) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    session.stream = stream;
+    recordingStream = stream;
     const options = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
       ? { mimeType: "audio/webm;codecs=opus" }
       : {};
-    recorder = new MediaRecorder(recordingStream, options);
+    recorder = new MediaRecorder(stream, options);
+    session.recorder = recorder;
     const chunks = [];
-    recordingFailed = false;
     recorder.addEventListener("dataavailable", (event) => {
-      if (event.data.size) chunks.push(event.data);
+      if (!session.cancelled && event.data.size) chunks.push(event.data);
     });
     recorder.addEventListener("error", () => {
-      recordingFailed = true;
+      session.failed = true;
       setVoiceStatus("录音过程中发生错误。", true);
     });
     recorder.addEventListener("stop", () => {
       clearTimeout(recordingTimer);
-      recordingStream?.getTracks().forEach((track) => track.stop());
-      recordingStream = undefined;
-      if (!recordingFailed) {
+      session.stream?.getTracks().forEach((track) => track.stop());
+      if (recordingStream === session.stream) recordingStream = undefined;
+      if (recordingSession === session) recordingSession = undefined;
+      if (session.cancelled) {
+        chunks.length = 0;
+        resetRecordingControls();
+        setVoiceStatus("已放弃录音；音频未送去识别。", false);
+      } else if (!session.failed) {
         transcribeRecording(chunks, recorder.mimeType || "audio/webm");
       } else {
-        recordButton.disabled = false;
-        recordButton.textContent = "开始录音";
-        recordButton.setAttribute("aria-pressed", "false");
+        resetRecordingControls();
       }
     }, { once: true });
     recorder.start(500);
@@ -1058,11 +1097,31 @@ async function toggleRecording() {
       if (recorder?.state === "recording") recorder.stop();
     }, 120_000);
   } catch (error) {
-    recordingStream?.getTracks().forEach((track) => track.stop());
-    recordingStream = undefined;
-    recordButton.disabled = false;
+    session.stream?.getTracks().forEach((track) => track.stop());
+    if (recordingStream === session.stream) recordingStream = undefined;
+    if (recordingSession !== session || session.cancelled) return;
+    recordingSession = undefined;
+    resetRecordingControls();
     setVoiceStatus(`无法开始录音：${error.message}`, true);
   }
+}
+
+function cancelRecording() {
+  const session = recordingSession;
+  if (!session) return;
+  session.cancelled = true;
+  clearTimeout(recordingTimer);
+  cancelRecordButton.disabled = true;
+  if (session.recorder?.state === "recording") {
+    setVoiceStatus("正在放弃录音…");
+    session.recorder.stop();
+    return;
+  }
+  session.stream?.getTracks().forEach((track) => track.stop());
+  if (recordingStream === session.stream) recordingStream = undefined;
+  recordingSession = undefined;
+  resetRecordingControls();
+  setVoiceStatus("已取消录音；即使稍后允许麦克风，也不会识别这段音频。", false);
 }
 
 function splitList(value) {
@@ -1519,6 +1578,7 @@ async function emotionTourVoiceSample() {
     const audio = await window.companion.synthesize(
       text,
       getCharacterSynthesisVoice(),
+      getCharacterSynthesisSpeaker(),
     );
     const bytes =
       audio instanceof Uint8Array
@@ -1605,6 +1665,47 @@ async function refreshStatus() {
     modelStatus.classList.add("error-message");
   }
   await refreshModelSetup();
+}
+
+async function refreshWakeDiagnosis() {
+  if (!wolStatusNote) return;
+  try {
+    const status = await window.companion.wakeStatus();
+    const adapters = (status.adapters || [])
+      .map(
+        (a) =>
+          `${a.name}（${a.is_wireless ? "无线/Wi-Fi" : "有线"} · ${a.mac} · ${
+            a.wake_on_magic_packet_reg === 0 ? "WOL 未开" : "WOL 已开"
+          }）`,
+      )
+      .join("<br/>");
+    const hints = (status.hints || []).map((h) => `· ${h}`).join("<br/>");
+    wolStatusNote.innerHTML =
+      `诊断：${adapters || "未枚举到物理网卡"}<br/>` +
+      `开机自启：${status.auto_start ? "已安装" : "未安装"} · ` +
+      `关机唤醒就绪：${status.wired_wol_ready ? "是（插网线+BIOS 开启后生效）" : "否"}<br/>` +
+      `指引：<br/>${hints}`;
+    wolStatusNote.classList.remove("error-message");
+  } catch (error) {
+    wolStatusNote.textContent = `远程唤醒诊断失败：${error.message}`;
+    wolStatusNote.classList.add("error-message");
+  }
+}
+
+async function sendWakeTest() {
+  if (!wolStatusNote) return;
+  wolStatusNote.textContent = "发送测试魔术包…";
+  wolStatusNote.classList.remove("error-message");
+  try {
+    const result = await window.companion.wakeSend({});
+    wolStatusNote.textContent = result.sent
+      ? `已发送 ${result.bytes} 字节魔术包 → ${result.target}:${result.port}（目标 ${result.mac}）`
+      : `发送失败：${result.error || "未知错误"}`;
+    if (!result.sent) wolStatusNote.classList.add("error-message");
+  } catch (error) {
+    wolStatusNote.textContent = `发送失败：${error.message}`;
+    wolStatusNote.classList.add("error-message");
+  }
 }
 
 async function refreshModelSetup() {
@@ -1733,6 +1834,30 @@ function characterVoiceStorageKey(characterId) {
   return `moling.characterVoice.${characterId || "default"}.v1`;
 }
 
+function characterVoiceSpeakerStorageKey(characterId, voiceName) {
+  return `moling.characterVoiceSpeaker.${characterId || "default"}.${voiceName}`;
+}
+
+function loadCharacterVoiceSpeaker(characterId, voiceName) {
+  if (!voiceName) return undefined;
+  try {
+    const value = Number(localStorage.getItem(characterVoiceSpeakerStorageKey(characterId, voiceName)));
+    return Number.isInteger(value) && value >= 0 ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function saveCharacterVoiceSpeaker(characterId, voiceName, speakerId) {
+  if (!voiceName || !Number.isInteger(speakerId)) return true;
+  try {
+    localStorage.setItem(characterVoiceSpeakerStorageKey(characterId, voiceName), String(speakerId));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function loadCharacterVoicePreference(characterId) {
   try {
     return localStorage.getItem(characterVoiceStorageKey(characterId)) || "";
@@ -1769,6 +1894,24 @@ function getCharacterSynthesisVoice(characterId = currentCharacterId) {
   return undefined;
 }
 
+function getCharacterSynthesisSpeaker(characterId = currentCharacterId, voiceName) {
+  const selectedVoice = voiceName || getCharacterSynthesisVoice(characterId);
+  const resolvedName = selectedVoice || speechVoices.find((voice) => voice.default)?.name;
+  const voice = speechVoices.find((item) => item.name === resolvedName);
+  const speakers = voice?.speakers || [];
+  if (!speakers.length) return undefined;
+  const selectedName = characterVoiceSelect.value.startsWith(LOCAL_VOICE_PREFIX)
+    ? characterVoiceSelect.value.slice(LOCAL_VOICE_PREFIX.length)
+    : characterVoiceSelect.value === ""
+      ? speechVoices.find((item) => item.default)?.name
+      : "";
+  if (selectedName === resolvedName) {
+    const selected = Number(characterVoiceSpeakerSelect.value);
+    if (Number.isInteger(selected)) return selected;
+  }
+  return loadCharacterVoiceSpeaker(characterId, resolvedName) ?? speakers[0].id;
+}
+
 async function loadSpeechVoices() {
   try {
     const payload = await window.companion.speechVoices();
@@ -1785,12 +1928,63 @@ async function loadSpeechVoices() {
   return speechVoices;
 }
 
+async function loadSpeechReadiness() {
+  try {
+    const status = await window.companion.speechStatus();
+    const synthesisReady =
+      status?.synthesis_runtime_installed === true &&
+      status?.voice_model_available === true;
+    speechSynthesisReady = synthesisReady &&
+      (status?.pinyin_resources_required !== true || status?.pinyin_resources_available === true);
+    const synthesisMessage = synthesisReady
+      ? `朗读：就绪（${status.voice_name || "本地声线"}；${status.voice_count ?? 0} 个可用声线）`
+      : status?.synthesis_runtime_installed !== true
+        ? "朗读：本地 Piper 运行组件不可用。"
+        : `朗读：缺少本地声线模型（需要 ${status.voice_name || "Piper 声线文件"}）；不会自动下载或上传。`;
+    const pinyinMessage = status?.pinyin_resources_required === true && status?.pinyin_resources_available !== true
+      ? "中文拼音资源未安装；朗读会保持关闭，不会联网下载。"
+      : "";
+    const recognitionMessage = status?.recognition_runtime_installed === true
+      ? `识别：本地 Whisper 可用${status.whisper_model_loaded ? "" : "，模型会在首次使用时加载"}。`
+      : "识别：本地 Whisper 运行组件不可用；仍可正常文字聊天。";
+    speechReadiness.textContent = `${synthesisMessage} ${pinyinMessage} ${recognitionMessage}`.trim();
+    updateCharacterVoicePreviewState();
+  } catch (error) {
+    speechSynthesisReady = false;
+    speechReadiness.textContent = `无法读取本机语音状态：${error.message}。文字聊天仍可使用。`;
+    updateCharacterVoicePreviewState();
+  }
+}
+
 function updateCharacterVoicePreviewState() {
   const value = characterVoiceSelect.value;
+  const isDefaultVoice = value === "";
   const isLocalVoice = value.startsWith(LOCAL_VOICE_PREFIX);
-  characterVoicePreview.disabled = !isLocalVoice;
-  if (!value) {
-    characterVoicePreviewStatus.textContent = "选择本地声线后可试听合成音色。";
+  const voiceName = isLocalVoice
+    ? value.slice(LOCAL_VOICE_PREFIX.length)
+    : isDefaultVoice
+      ? speechVoices.find((item) => item.default)?.name || ""
+      : "";
+  const voice = speechVoices.find((item) => item.name === voiceName);
+  const speakers = voice?.speakers || [];
+  characterVoiceSpeakerSelect.replaceChildren();
+  characterVoiceSpeakerRow.hidden = speakers.length < 2;
+  for (const speaker of speakers) {
+    const option = document.createElement("option");
+    option.value = String(speaker.id);
+    option.textContent = speaker.name || `说话人 ${speaker.id + 1}`;
+    characterVoiceSpeakerSelect.append(option);
+  }
+  if (speakers.length) {
+    const savedSpeaker = loadCharacterVoiceSpeaker(currentCharacterId, voiceName);
+    characterVoiceSpeakerSelect.value = String(
+      speakers.some((speaker) => speaker.id === savedSpeaker) ? savedSpeaker : speakers[0].id,
+    );
+  }
+  characterVoicePreview.disabled =
+    (!isLocalVoice && !isDefaultVoice) || !voice?.available || !speechSynthesisReady;
+  if (isDefaultVoice) {
+    characterVoicePreviewStatus.textContent = voiceName ? "试听当前应用默认合成音色。" : "本地默认声线尚未就绪。";
   } else if (isLocalVoice) {
     characterVoicePreviewStatus.textContent = "";
   } else {
@@ -1801,17 +1995,27 @@ function updateCharacterVoicePreviewState() {
 
 async function previewSelectedVoice() {
   const value = characterVoiceSelect.value;
-  if (!value.startsWith(LOCAL_VOICE_PREFIX)) {
+  if (!value.startsWith(LOCAL_VOICE_PREFIX) && value !== "") {
     characterVoicePreviewStatus.textContent = "请先选择一个本地声线。";
     return;
   }
-  const voiceName = value.slice(LOCAL_VOICE_PREFIX.length);
+  const voiceName = value.startsWith(LOCAL_VOICE_PREFIX)
+    ? value.slice(LOCAL_VOICE_PREFIX.length)
+    : speechVoices.find((voice) => voice.default)?.name;
+  if (!voiceName) {
+    characterVoicePreviewStatus.textContent = "本地默认声线尚未就绪。";
+    return;
+  }
   characterVoicePreview.disabled = true;
   characterVoicePreviewStatus.textContent = "正在合成试听…";
   let audioUrl;
   let playback;
   try {
-    const audio = await window.companion.synthesize(VOICE_PREVIEW_TEXT, voiceName);
+    const sampleText = VOICE_PREVIEW_SAMPLES[characterVoicePreviewSample.value] || VOICE_PREVIEW_SAMPLES.greeting;
+    const speakerId = Number.isInteger(Number(characterVoiceSpeakerSelect.value))
+      ? Number(characterVoiceSpeakerSelect.value)
+      : undefined;
+    const audio = await window.companion.synthesize(sampleText, voiceName, speakerId);
     const wavBytes =
       audio instanceof Uint8Array
         ? audio
@@ -1843,9 +2047,7 @@ async function previewSelectedVoice() {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     characterVoicePreviewStatus.textContent = `试听失败：${error.message}`;
   } finally {
-    characterVoicePreview.disabled = !characterVoiceSelect.value.startsWith(
-      LOCAL_VOICE_PREFIX,
-    );
+    updateCharacterVoicePreviewState();
   }
 }
 
@@ -2070,6 +2272,10 @@ document.getElementById("voice-registration-form").addEventListener("submit", as
 });
 
 characterVoiceSelect.addEventListener("change", () => {
+  characterForm.dataset.dirty = "true";
+});
+
+characterVoiceSpeakerSelect.addEventListener("change", () => {
   characterForm.dataset.dirty = "true";
 });
 
@@ -3353,7 +3559,11 @@ translatorSpeak.addEventListener("click", async () => {
     const requestedVoice = selectedVoice.startsWith(LOCAL_VOICE_PREFIX)
       ? selectedVoice.slice(LOCAL_VOICE_PREFIX.length)
       : getCharacterSynthesisVoice();
-    const wav = await window.companion.synthesize(text, requestedVoice);
+    const wav = await window.companion.synthesize(
+      text,
+      requestedVoice,
+      getCharacterSynthesisSpeaker(currentCharacterId, requestedVoice),
+    );
     await playSynthesizedWav(wav);
     translatorStatus.textContent = requestedVoice
       ? `正在使用所选本地声线「${requestedVoice}」朗读译文。`
@@ -4300,6 +4510,9 @@ function renderStatusMetrics(metrics) {
 
 function setupStatusPanel() {
   statusRefresh.addEventListener("click", loadStatusMetrics);
+  wolRefresh?.addEventListener("click", refreshWakeDiagnosis);
+  wolTestSend?.addEventListener("click", sendWakeTest);
+  refreshWakeDiagnosis();
   const backupButton = document.getElementById("backup-create");
   backupButton?.addEventListener("click", async () => {
     statusNote.textContent = "正在备份…";
@@ -5097,6 +5310,7 @@ composer.addEventListener("submit", (event) => {
 });
 
 recordButton.addEventListener("click", toggleRecording);
+cancelRecordButton.addEventListener("click", cancelRecording);
 
 fileButton.addEventListener("click", handleDiscoverFile);
 imageButton.addEventListener("click", handleAnalyzeImage);
@@ -5547,6 +5761,11 @@ characterForm.addEventListener("submit", async (event) => {
   };
   const selectedVoiceValue = characterVoiceSelect.value;
   const localVoiceSelected = selectedVoiceValue.startsWith(LOCAL_VOICE_PREFIX);
+  const selectedLocalVoiceName = localVoiceSelected
+    ? selectedVoiceValue.slice(LOCAL_VOICE_PREFIX.length)
+    : selectedVoiceValue === ""
+      ? speechVoices.find((voice) => voice.default)?.name || ""
+      : "";
   if (localVoiceSelected) {
     card.voice = lastReferenceVoice || null;
   } else {
@@ -5563,6 +5782,14 @@ characterForm.addEventListener("submit", async (event) => {
     ) {
       characterStatus.textContent =
         "角色卡已保存，但此浏览器无法保存声线偏好；下次可能需要重新选择。";
+      characterStatus.classList.add("error");
+    }
+    if (!saveCharacterVoiceSpeaker(
+      editingCharacterId,
+      selectedLocalVoiceName,
+      Number(characterVoiceSpeakerSelect.value),
+    )) {
+      characterStatus.textContent = "角色卡已保存，但说话人偏好未能写入此浏览器。";
       characterStatus.classList.add("error");
     }
     characterForm.dataset.dirty = "false";
@@ -5667,6 +5894,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupStatusPanel();
   refreshVoiceResources();
   void loadSpeechVoices();
+  void loadSpeechReadiness();
   void refreshMiniGamePreviewState();
   characterVoicePreview.addEventListener("click", previewSelectedVoice);
   characterVoiceSelect.addEventListener("change", () => {

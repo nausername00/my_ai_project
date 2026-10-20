@@ -94,6 +94,8 @@ let miniGameWindow;
 let floatingWindowReady = false;
 let floatingCharacterUpdateVersion = 0;
 let floatingAvatarDisplayMode = avatarDisplayModes.FOLLOW;
+const FLOATING_COMPACT_SIZE = Object.freeze({ width: 300, height: 144 });
+const FLOATING_EXPANDED_SIZE = Object.freeze({ width: 340, height: 640 });
 let notificationPollTimer;
 const pendingNotifications = [];
 const notificationActions = new Map();
@@ -495,7 +497,7 @@ async function transcribeAudio(audio, contentType) {
   return data;
 }
 
-async function synthesizeSpeech(text, voice) {
+async function synthesizeSpeech(text, voice, speakerId) {
   if (typeof text !== "string" || text.length > 2000) {
     throw new Error("语音文本无效或超过 2000 个字符");
   }
@@ -503,6 +505,7 @@ async function synthesizeSpeech(text, voice) {
   if (typeof voice === "string" && voice.trim()) {
     body.voice = voice.trim();
   }
+  if (Number.isInteger(speakerId)) body.speaker_id = speakerId;
   const response = await fetch(`${apiBaseUrl}/v1/speech`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -866,11 +869,15 @@ function registerIpcHandlers() {
   );
   ipcMain.handle("companion:speech-status", () => callApi("/v1/speech/status"));
   ipcMain.handle("companion:speech-voices", () => callApi("/v1/speech/voices"));
+  ipcMain.handle("companion:wake-status", () => callApi("/v1/wake/status"));
+  ipcMain.handle("companion:wake-send", (_event, body) =>
+    callApi("/v1/wake", "POST", body || {}),
+  );
   ipcMain.handle("companion:transcribe", (_event, audio, contentType) =>
     transcribeAudio(audio, contentType),
   );
-  ipcMain.handle("companion:synthesize", (_event, text, voice) =>
-    synthesizeSpeech(text, voice),
+  ipcMain.handle("companion:synthesize", (_event, text, voice, speakerId) =>
+    synthesizeSpeech(text, voice, speakerId),
   );
   ipcMain.handle("companion:get-character", () => callApi("/v1/character"));
   ipcMain.handle("companion:list-characters", () => callApi("/v1/characters"));
@@ -1558,32 +1565,18 @@ function registerIpcHandlers() {
   ipcMain.handle("companion:floating-expand", (event) => {
     assertWindowSender(event, floatingWindow, "Only the floating window can resize itself");
     if (floatingWindow && !floatingWindow.isDestroyed()) {
-      const target = { width: 340, height: 640 };
-      const bounds = floatingWindow.getBounds();
-      let x = bounds.x;
-      let y = bounds.y;
-      try {
-        const workArea = screen.getDisplayMatching(bounds).workArea;
-        // 展开后底部不超出工作区：窗口曾被拖到屏幕下方时，向上平移避免角色/通知区被裁
-        if (y + target.height > workArea.y + workArea.height) {
-          y = Math.max(workArea.y, workArea.y + workArea.height - target.height);
-        }
-        if (x + target.width > workArea.x + workArea.width) {
-          x = Math.max(workArea.x, workArea.x + workArea.width - target.width);
-        }
-      } catch {
-        /* 取工作区失败时保持原位置 */
-      }
-      floatingWindow.setBounds({ x, y, width: target.width, height: target.height });
-      return { expanded: true, x, y };
+      const bounds = fitFloatingBounds(floatingWindow.getBounds(), FLOATING_EXPANDED_SIZE);
+      floatingWindow.setBounds(bounds);
+      return { expanded: true, x: bounds.x, y: bounds.y };
     }
     return { expanded: false, reason: "no-window" };
   });
   ipcMain.handle("companion:floating-collapse", (event) => {
     assertWindowSender(event, floatingWindow, "Only the floating window can resize itself");
     if (floatingWindow && !floatingWindow.isDestroyed()) {
-      floatingWindow.setBounds({ width: 360, height: 220 });
-      return { collapsed: true };
+      const bounds = fitFloatingBounds(floatingWindow.getBounds(), FLOATING_COMPACT_SIZE);
+      floatingWindow.setBounds(bounds);
+      return { collapsed: true, x: bounds.x, y: bounds.y };
     }
     return { collapsed: false, reason: "no-window" };
   });
@@ -1655,6 +1648,8 @@ function registerIpcHandlers() {
     }
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("companion:floating-chat", text.trim());
+      mainWindow.show();
+      mainWindow.focus();
       return { forwarded: true };
     }
     return { forwarded: false, reason: "no-window" };
@@ -1665,6 +1660,23 @@ function assertWindowSender(event, targetWindow, message) {
   if (!targetWindow || targetWindow.isDestroyed() || event.sender !== targetWindow.webContents) {
     throw new Error(message);
   }
+}
+
+function fitFloatingBounds(bounds, size) {
+  let workArea;
+  try {
+    workArea = screen.getDisplayMatching(bounds).workArea;
+  } catch {
+    workArea = screen.getPrimaryDisplay().workArea;
+  }
+  const maxX = workArea.x + Math.max(0, workArea.width - size.width);
+  const maxY = workArea.y + Math.max(0, workArea.height - size.height);
+  return {
+    x: Math.min(maxX, Math.max(workArea.x, Math.round(bounds.x))),
+    y: Math.min(maxY, Math.max(workArea.y, Math.round(bounds.y))),
+    width: size.width,
+    height: size.height,
+  };
 }
 
 function createWindow() {
@@ -1746,11 +1758,16 @@ async function pushCharacterToFloating() {
 
 function createFloatingWindow() {
   floatingWindowReady = false;
+  const workArea = screen.getPrimaryDisplay().workArea;
+  const initialBounds = fitFloatingBounds(
+    {
+      x: workArea.x + workArea.width - FLOATING_COMPACT_SIZE.width - 24,
+      y: workArea.y + workArea.height - FLOATING_COMPACT_SIZE.height - 24,
+    },
+    FLOATING_COMPACT_SIZE,
+  );
   floatingWindow = new BrowserWindow({
-    width: 360,
-    height: 220,
-    x: 40,
-    y: 40,
+    ...initialBounds,
     frame: false,
     transparent: true,
     backgroundMaterial: "acrylic",
@@ -1769,7 +1786,8 @@ function createFloatingWindow() {
     },
   });
   floatingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  floatingWindow.setAlwaysOnTop(true, "screen-saver");
+  // 保持常规置顶；避免使用 screen-saver 级别，降低对全屏内容的覆盖干扰。
+  floatingWindow.setAlwaysOnTop(true, "floating");
   // Live2D 模型与前端资源经 moling:// 同源协议加载（file:// 无法跨协议 fetch 模型资源）
   floatingWindow.loadURL("moling://local/floating.html");
   floatingWindow.once("ready-to-show", () => {

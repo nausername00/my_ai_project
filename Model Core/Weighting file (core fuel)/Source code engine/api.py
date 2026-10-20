@@ -29,6 +29,7 @@ from governance import CostLedger, task_status_timeline
 from plugins import PluginApprovals, PluginRegistry, choose_backend
 from ocr import detect_ocr_engine, extract_fields, ocr_text
 from discovery import discover_file, observe_context
+from wol import diagnose_wol, pick_default_target_mac, send_wake
 from explore import (
     propose_exploration,
     record_exploration_reaction,
@@ -217,7 +218,6 @@ _COST_LEDGER = CostLedger()
 _AUTH_TOKEN = os.environ.get("MOLING_API_TOKEN", "").strip()
 _SELF_HOST_ENABLED = False
 _PUBLIC_PATHS = ("/health", "/favicon.ico")
-_STATUS_PREFIX = "/v1/status/"
 # T5 手机客户端载体：PWA 静态壳公开可读（无任何数据），真实 API 仍需认证。
 _MOBILE_PREFIX = "/v1/mobile/"
 # 受信浏览器来源：桌面壳 moling://local 与 Capacitor 手机 App 的 WebView 来源。
@@ -241,9 +241,8 @@ def _bearer_token(headers: Any) -> str:
 
 
 def _auth_allowed(path: str, is_loopback: bool, provided: str) -> bool:
-    """T4 认证判定：公开/状态端点与 mobile 静态壳放行；管理端点必须带有效 token；
-    其余端点 loopback 放行，非 loopback 必须带有效 token。"""
-    if path in _PUBLIC_PATHS or path.startswith(_STATUS_PREFIX) or path.startswith(_MOBILE_PREFIX):
+    """公开健康检查和 mobile 静态壳；其余端点本机放行、远程需有效 token。"""
+    if path in _PUBLIC_PATHS or path.startswith(_MOBILE_PREFIX):
         return True
     if path.startswith("/v1/admin/"):
         return bool(_AUTH_TOKEN) and hmac.compare_digest(provided, _AUTH_TOKEN)
@@ -345,9 +344,15 @@ def _tracked(method: Any):
             # 真实 HTTP 请求必有 client_address；无该属性（测试桩直接调用
             # do_GET/do_POST）按本机放行，不影响真实网络判定。
             client_addr = getattr(self, "client_address", None)
-            is_loopback = client_addr is None or (
-                client_addr[0] in ("127.0.0.1", "::1")
-            )
+            if client_addr is None:
+                is_loopback = True
+            else:
+                try:
+                    is_loopback = ipaddress.ip_address(
+                        client_addr[0].split("%", 1)[0]
+                    ).is_loopback
+                except ValueError:
+                    is_loopback = False
             if not _auth_allowed(
                 self.path,
                 is_loopback,
@@ -664,18 +669,43 @@ class ApiHandler(BaseHTTPRequestHandler):
         return True
 
     def _is_same_origin(self, origin: str) -> bool:
-        """Origin 与请求 Host 一致（协议 + 主机 + 端口）视为同源。"""
+        """只接受匹配的 IP literal 同源，避免 DNS rebinding 绕过 CSRF。"""
         try:
             from urllib.parse import urlsplit
 
             origin_parts = urlsplit(origin)
-            if origin_parts.scheme not in {"http", "https"} or not origin_parts.netloc:
+            if (
+                origin_parts.scheme not in {"http", "https"}
+                or not origin_parts.netloc
+                or origin_parts.path not in {"", "/"}
+                or origin_parts.query
+                or origin_parts.fragment
+            ):
                 return False
-            origin_host = origin_parts.netloc
+            if origin_parts.username is not None or origin_parts.password is not None:
+                return False
+            origin_host = origin_parts.hostname
+            if not origin_host:
+                return False
+            # 动态 LAN IP 可用于手机端同源访问；任意 DNS 名称可能被重绑定到本机。
+            ipaddress.ip_address(origin_host.split("%", 1)[0])
+            origin_port = origin_parts.port or (443 if origin_parts.scheme == "https" else 80)
             host_header = (self.headers.get("Host") or "").strip()
             if not host_header:
                 return False
-            return origin_host == host_header
+            host_parts = urlsplit("//" + host_header)
+            if host_parts.path or host_parts.query or host_parts.fragment:
+                return False
+            host_name = host_parts.hostname
+            if not host_name:
+                return False
+            ipaddress.ip_address(host_name.split("%", 1)[0])
+            host_port = host_parts.port or (443 if origin_parts.scheme == "https" else 80)
+            return (
+                ipaddress.ip_address(origin_host.split("%", 1)[0])
+                == ipaddress.ip_address(host_name.split("%", 1)[0])
+                and origin_port == host_port
+            )
         except Exception:
             return False
 
@@ -830,6 +860,13 @@ class ApiHandler(BaseHTTPRequestHandler):
         if path == "/v1/admin/self-host":
             # T4：self-host 状态（需 token；默认关）
             self._send_json(HTTPStatus.OK, _self_host_status())
+            return
+        if path == "/v1/wake/status":
+            # WOL 远程唤醒：本机网卡支持诊断（本机放行、远程需 token，默认规则）
+            diag = diagnose_wol()
+            diag["auto_start"] = _auto_start_installed()
+            diag["default_target_mac"] = pick_default_target_mac()
+            self._send_json(HTTPStatus.OK, diag)
             return
         if path == "/v1/agent/tools":
             self._send_json(
@@ -1431,6 +1468,40 @@ class ApiHandler(BaseHTTPRequestHandler):
                     self._send_json(HTTPStatus.BAD_REQUEST, result)
                 else:
                     self._send_json(HTTPStatus.OK, result)
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/wake":
+            # WOL 远程唤醒：向目标 MAC 发送魔术包。
+            # 边界说明：电脑关机（S5）时本服务已停止，此端点不可达；真正关机
+            # 唤醒请用同局域网手机 WOL App / 托管设备直发广播。本端点在后端存活时
+            # 用于：验证发送路径、睡眠（WoWLAN）唤醒、以及托管设备代理唤醒工作电脑。
+            try:
+                payload = self._read_json()
+                if set(payload) - {"mac", "target", "port"}:
+                    raise ValueError("wake 请求仅支持 mac / target / port 字段")
+                mac = payload.get("mac") or pick_default_target_mac()
+                target = payload.get("target") or "255.255.255.255"
+                port = payload.get("port") or 9
+                if not isinstance(mac, str) or not mac:
+                    raise ValueError("缺少有效 mac（可省略，将自动选择本机网卡）")
+                if not isinstance(target, str) or not target:
+                    raise ValueError("target 必须是字符串")
+                try:
+                    port = int(port)
+                    if not 1 <= port <= 65535:
+                        raise ValueError
+                except (TypeError, ValueError):
+                    raise ValueError("port 必须是 1-65535 的整数") from None
+                result = send_wake(mac, target=target, port=port)
+                result["hint"] = (
+                    "魔术包已发送；若电脑处于关机状态请确认：有线网卡接入、"
+                    "BIOS 开启 Wake-on-LAN、设备管理器允许此设备唤醒计算机。"
+                    if result.get("sent")
+                    else "发送失败，请检查目标地址/端口与网络权限。"
+                )
+                status = HTTPStatus.OK if result.get("sent") else HTTPStatus.BAD_GATEWAY
+                self._send_json(status, result)
             except (TypeError, ValueError, json.JSONDecodeError) as error:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
@@ -2365,6 +2436,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 audio = self.speech_service.synthesize_wav(
                     payload["text"],
                     voice=payload.get("voice"),
+                    speaker_id=payload.get("speaker_id"),
                 )
             except (KeyError, TypeError, SpeechInputError, ValueError, json.JSONDecodeError) as error:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})

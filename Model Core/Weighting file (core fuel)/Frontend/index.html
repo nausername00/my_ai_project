@@ -362,6 +362,7 @@
               <button class="icon-button" id="observe-button" type="button" title="让墨灵看看当前窗口">看窗口</button>
               <button class="icon-button" id="trio-button" type="button" title="三角协作：火破局 · 冰守界 · 衡裁决">三角</button>
               <button class="icon-button" id="record-button" type="button">开始录音</button>
+              <button class="icon-button" id="cancel-record-button" type="button" title="放弃录音，不进行识别" hidden>放弃录音</button>
               <button class="send-button" id="send-button" type="submit" aria-label="发送">
                 <span>发送</span>
                 <span aria-hidden="true">↑</span>
@@ -534,6 +535,17 @@
             <button class="icon-button" id="backup-create" type="button">备份角色数据</button>
           </div>
           <p class="form-status" id="status-note" role="status"></p>
+          <div class="performance-block" id="wol-section">
+            <h3>远程唤醒（Wake-on-LAN）</h3>
+            <p class="character-card-help">本机 WOL 支持状态与使用指引。真正的"关机→开机"唤醒需同局域网设备直接广播魔术包（如手机 WOL App / 托管设备）；下方按钮用于诊断与发送路径测试。</p>
+            <div id="wol-status">
+              <p class="form-status" id="wol-status-note" role="status">加载中…</p>
+            </div>
+            <div class="memory-actions">
+              <button class="icon-button" id="wol-refresh" type="button">刷新诊断</button>
+              <button class="icon-button" id="wol-test-send" type="button">发送测试魔术包</button>
+            </div>
+          </div>
         </section>
         <section id="affect-panel" hidden>
           <div class="affect-settings">
@@ -711,10 +723,23 @@
                   <option value="">当前应用合成音色 · Piper</option>
                 </select>
               </label>
+              <label id="character-voice-speaker-row" hidden>说话人
+                <select id="character-voice-speaker-select" aria-describedby="character-voice-speaker-note"></select>
+              </label>
+              <p class="character-card-help" id="character-voice-speaker-note">多说话人模型可以分别试听；选择会随角色设置保存。</p>
               <div class="voice-preview-row">
                 <button class="icon-button" id="character-voice-preview" type="button" disabled>试听所选声线</button>
                 <span class="character-card-help" id="character-voice-preview-status" role="status"></span>
               </div>
+              <label>试听内容
+                <select id="character-voice-preview-sample">
+                  <option value="greeting">日常问候</option>
+                  <option value="care">温柔关心</option>
+                  <option value="joke">冷面玩笑</option>
+                  <option value="serious">认真提醒</option>
+                </select>
+              </label>
+              <p class="character-card-help" id="speech-readiness" role="status" aria-live="polite">正在检查本机语音能力…</p>
               <button class="icon-button" id="open-voice-studio" type="button">管理声音资源与注册参考声线</button>
               <p class="character-card-help" id="character-voice-note">可从本地声线目录挑选并试听合成音色；选择会记住在此浏览器，不会上传音频。</p>
               <p class="form-status avatar-help" id="avatar-status" role="status"></p>
