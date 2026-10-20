@@ -59,6 +59,35 @@ test("collapsed navigation keeps an accessible new-chat action and distinct work
   );
 });
 
+test("desktop microphone recording can be discarded before local transcription", () => {
+  assert.match(
+    html,
+    /<button class="icon-button" id="cancel-record-button"[^>]*hidden>放弃录音<\/button>/,
+  );
+  assert.match(renderer, /cancelRecordButton\.addEventListener\("click", cancelRecording\)/);
+  assert.match(
+    renderer,
+    /if \(recordingSession !== session \|\| session\.cancelled\) \{\s*stream\.getTracks\(\)\.forEach\(\(track\) => track\.stop\(\)\);\s*return;\s*\}/,
+  );
+  assert.match(
+    renderer,
+    /if \(session\.cancelled\) \{\s*chunks\.length = 0;[\s\S]*?已放弃录音；音频未送去识别/,
+  );
+});
+
+test("voice settings expose local readiness and persona audition samples", () => {
+  assert.match(html, /id="speech-readiness"[^>]*role="status"/);
+  assert.match(html, /id="character-voice-preview-sample"/);
+  assert.match(html, /id="character-voice-speaker-select"/);
+  for (const sample of ["greeting", "care", "joke", "serious"]) {
+    assert.match(renderer, new RegExp(`${sample}: "`));
+  }
+  assert.match(renderer, /window\.companion\.speechStatus\(\)/);
+  assert.match(renderer, /loadSpeechReadiness\(\)/);
+  assert.match(renderer, /getCharacterSynthesisSpeaker\(/);
+  assert.match(renderer, /synthesize\(sampleText, voiceName, speakerId\)/);
+});
+
 test("collaboration feedback reports UI-measured request round-trip time", () => {
   assert.match(renderer, /const requestStartedAt = performance\.now\(\)/);
   assert.match(renderer, /formatDurationMs\(performance\.now\(\) - requestStartedAt\)/);
@@ -94,7 +123,10 @@ test("voice preferences and user-selected image analysis are visible, local-firs
   assert.match(html, /id="image-button"[^>]*title="选择一张图片，单次分析"/);
   assert.match(renderer, /function applyVoicePreferences\(audio\)/);
   assert.match(renderer, /localStorage\.setItem\(VOICE_PREFERENCES_KEY/);
-  assert.match(renderer, /window\.companion\.synthesize\(text, selectedVoice\)/);
+  assert.match(
+    renderer,
+    /window\.companion\.synthesize\(\s*text,\s*selectedVoice,\s*getCharacterSynthesisSpeaker\(/,
+  );
   assert.match(renderer, /getCharacterSynthesisVoice\(\)/);
   assert.match(index, /voice-playback\.js[\s\S]*renderer\.js/);
   assert.ok(packageManifest.build.files.includes("voice-playback.js"));
@@ -124,6 +156,28 @@ test("floating character presentation follows current affect and rejects stale u
   assert.match(renderer, /AVATAR_DISPLAY_MODE_KEY/);
   assert.match(renderer, /setAvatarDisplayMode\(nextMode\)/);
   assert.match(main, /companion:set-avatar-display-mode/);
+});
+
+test("floating companion stays reachable and respects fullscreen apps", () => {
+  assert.match(main, /FLOATING_COMPACT_SIZE = Object\.freeze\(\{ width: 300, height: 144 \}\)/);
+  assert.match(main, /FLOATING_EXPANDED_SIZE = Object\.freeze\(\{ width: 340, height: 640 \}\)/);
+  assert.match(main, /function fitFloatingBounds\(bounds, size\)/);
+  assert.match(main, /Math\.max\(0, workArea\.width - size\.width\)/);
+  assert.match(main, /Math\.max\(0, workArea\.height - size\.height\)/);
+  assert.match(main, /setAlwaysOnTop\(true, "floating"\)/);
+  assert.doesNotMatch(main, /setAlwaysOnTop\(true, "screen-saver"\)/);
+  assert.match(floating, /#panel:not\(\.expanded\) \.interact-menu\s*\{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(floating, /#panel:not\(\.expanded\) \.interact-menu\[hidden\]\s*\{\s*display: none/);
+  assert.match(floating, /@keyframes companion-breathe/);
+  assert.match(floating, /prefers-reduced-motion: reduce/);
+  assert.match(floating, /role="button" tabindex="0" aria-haspopup="menu" aria-expanded="false"/);
+  assert.match(floating, /event\.key === "Enter" \|\| event\.key === " "/);
+  assert.match(floating, /event\.key === "Escape" && !interactMenu\.hidden/);
+  assert.match(floating, /avatarEl\.style\.setProperty\("--mood-halo", moodColor/);
+  assert.match(
+    main,
+    /companion:floating-send-chat[\s\S]*?mainWindow\.show\(\);[\s\S]*?mainWindow\.focus\(\);/,
+  );
 });
 
 test("plans can be cleared honestly and offer a review-first offline mini-game task", () => {

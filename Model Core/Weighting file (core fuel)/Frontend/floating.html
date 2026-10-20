@@ -34,7 +34,7 @@
   #panel {
     position: absolute;
     inset: 0;
-    border-radius: 18px;
+    border-radius: 22px;
     background: var(--panel-bg);
     border: 1px solid var(--panel-border);
     backdrop-filter: blur(14px);
@@ -125,11 +125,30 @@
     background: rgba(255, 255, 255, 0.08);
   }
   .interact-menu[hidden] { display: none; }
+  #panel:not(.expanded) .interact-menu {
+    left: 0;
+    right: 0;
+    top: 0;
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: center;
+    gap: 2px;
+  }
+  #panel:not(.expanded) .interact-menu[hidden] { display: none; }
+  #panel:not(.expanded) .interact-menu button {
+    min-height: 24px;
+    padding: 3px 6px;
+    gap: 4px;
+    font-size: 11px;
+  }
+  #panel:not(.expanded) .interact-menu .menu-sep { display: none; }
 
   #avatar-wrap {
-    flex: 0 0 64px;
-    width: 64px;
-    height: 64px;
+    flex: 0 0 56px;
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
     background: radial-gradient(circle at 30% 30%, #9f90ff, #4d3fd8 70%);
     display: flex; align-items: center; justify-content: center;
@@ -170,6 +189,13 @@
   #avatar-wrap:hover { transform: scale(1.05); }
   #avatar-wrap.listening {
     animation: pulse 1.2s ease-in-out infinite;
+  }
+  #panel:not(.expanded) #avatar-wrap:not(.listening) {
+    animation: companion-breathe 4.5s ease-in-out infinite;
+  }
+  @keyframes companion-breathe {
+    0%, 100% { box-shadow: 0 0 14px var(--mood-halo, #7c6fff); }
+    50% { box-shadow: 0 0 23px var(--mood-halo, #7c6fff); }
   }
   @keyframes pulse {
     0%, 100% { box-shadow: 0 0 20px rgba(124, 111, 255, 0.45); }
@@ -225,6 +251,7 @@
     /* 舞台光晕替代硬紫底：角色站在光里，不再"困"在色块盒子里 */
     background: radial-gradient(130px 96px at 50% 38%, rgba(159, 144, 255, 0.30), transparent 72%);
     box-shadow: 0 0 36px rgba(124, 111, 255, 0.20);
+    animation: none;
   }
   #panel.expanded #avatar-wrap img {
     object-fit: contain;
@@ -241,6 +268,13 @@
     flex: 1 1 auto;
     width: 100%;
     min-height: 0;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #panel:not(.expanded) #avatar-wrap,
+    #avatar-wrap.listening {
+      animation: none;
+      transition: none;
+    }
   }
   .btn-toggle-size {
     font-size: 12px;
@@ -332,7 +366,7 @@
       </div>
     </div>
     <div id="body">
-      <div id="avatar-wrap" title="点击打开互动菜单">
+      <div id="avatar-wrap" title="点击打开互动菜单" role="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" aria-controls="interact-menu">
         <img id="avatar-image" alt="角色立绘" hidden />
         <div id="avatar-live2d"></div>
         <span id="avatar-text">灵</span>
@@ -439,22 +473,34 @@
       .catch((error) => console.error("Could not handle notification action:", error));
   }
 
+  const interactMenu = document.getElementById("interact-menu");
+  function closeInteractMenu() {
+    interactMenu.hidden = true;
+    avatarEl.setAttribute("aria-expanded", "false");
+    document.removeEventListener("click", closeInteractMenu);
+  }
+
+  function setInteractMenuOpen(open) {
+    interactMenu.hidden = !open;
+    avatarEl.setAttribute("aria-expanded", String(open));
+    document.removeEventListener("click", closeInteractMenu);
+    if (open) setTimeout(() => document.addEventListener("click", closeInteractMenu), 0);
+  }
+
   avatarEl.addEventListener("click", (event) => {
     event.stopPropagation();
-    const menu = document.getElementById("interact-menu");
-    const closeMenu = () => {
-      menu.hidden = true;
-      document.removeEventListener("click", closeMenu);
-    };
-    menu.hidden = !menu.hidden;
-    if (!menu.hidden) {
-      setTimeout(() => document.addEventListener("click", closeMenu), 0);
-    } else {
-      document.removeEventListener("click", closeMenu);
+    setInteractMenuOpen(interactMenu.hidden);
+  });
+  avatarEl.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      setInteractMenuOpen(interactMenu.hidden);
+    } else if (event.key === "Escape" && !interactMenu.hidden) {
+      event.preventDefault();
+      closeInteractMenu();
+      avatarEl.focus();
     }
   });
-
-  const interactMenu = document.getElementById("interact-menu");
   interactMenu.addEventListener("click", (event) => {
     event.stopPropagation();
     const item = event.target.closest("button[data-action]");
@@ -464,10 +510,10 @@
       window.floating.sendChat(item.dataset.chat).catch((error) => {
         console.error("Could not send chat from floating window:", error);
       });
-      interactMenu.hidden = true;
+      setInteractMenuOpen(false);
       return;
     }
-    interactMenu.hidden = true;
+    setInteractMenuOpen(false);
     if (action === "main") {
       window.floating.showMainWindow().catch((error) => {
         console.error("Could not show the main window:", error);
@@ -588,6 +634,7 @@
       window.MolingLive2D.setExpressionByMood(moodKey);
     }
     const moodColor = MOOD_COLORS[moodKey] || "";
+    avatarEl.style.setProperty("--mood-halo", moodColor || "#7c6fff");
     moodDot.style.background = moodColor || "var(--text-dim)";
     moodDot.style.boxShadow = moodColor ? `0 0 10px ${moodColor}` : "none";
     statusText.textContent = character.moodLabel

@@ -456,7 +456,11 @@ sent to the chat model until you edit or send it. Click “播放语音” below
 model response to synthesize and play it with the configured local Piper voice.
 The app requests microphone access only after “开始录音” is clicked, and
 grants that permission only to the main application window and audio input.
-Recordings are limited to two minutes and 25 MB.
+While recording, “放弃录音” discards the captured audio without transcription.
+If the operating system's microphone permission prompt is still open, the button
+cannot dismiss that prompt; it abandons the app's pending request, and any later
+permission result is closed without starting recognition. Recordings are limited
+to two minutes and 25 MB.
 
 The default Piper voice and its matching config are in
 `Character/assets/voices/`. Whisper defaults to the `small` model, runs on CPU,

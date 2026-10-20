@@ -13,7 +13,7 @@ import api
 
 
 class AuthCheckTest(unittest.TestCase):
-    """_auth_allowed 纯函数：公开/状态放行、admin 需 token、非本机需 token。"""
+    """_auth_allowed 纯函数：公开壳放行、远程状态/admin 需 token。"""
 
     def setUp(self) -> None:
         self.token_patch = patch("api._AUTH_TOKEN", "")
@@ -22,10 +22,14 @@ class AuthCheckTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.token_patch.stop()
 
-    def test_public_and_status_always_allowed(self) -> None:
+    def test_health_and_mobile_shell_are_public_but_remote_status_is_private(self) -> None:
         self.assertTrue(api._auth_allowed("/health", True, ""))
-        self.assertTrue(api._auth_allowed("/v1/status/metrics", False, ""))
-        self.assertTrue(api._auth_allowed("/v1/status/platform", False, ""))
+        self.assertTrue(api._auth_allowed("/v1/mobile/app.js", False, ""))
+        self.assertFalse(api._auth_allowed("/v1/status/metrics", False, ""))
+        self.assertFalse(api._auth_allowed("/v1/status/platform", False, ""))
+        self.assertTrue(api._auth_allowed("/v1/status/platform", True, ""))
+        with patch("api._AUTH_TOKEN", "secret"):
+            self.assertTrue(api._auth_allowed("/v1/status/platform", False, "secret"))
 
     def test_admin_requires_token_even_loopback(self) -> None:
         self.assertFalse(api._auth_allowed("/v1/admin/self-host", True, ""))

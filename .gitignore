@@ -120,3 +120,7 @@ Model Core/Weighting file (core fuel)/Frontend/_*.png
 Model Core/Weighting file (core fuel)/Frontend/moling_elog*.txt
 Model Core/Weighting file (core fuel)/Frontend/moling_run*.log
 Model Core/Weighting file (core fuel)/Frontend/_scan.txt
+
+# ----- 前端测试临时产物（2026-10-20 补录：J1 等测试运行期临时目录不入库）-----
+Model Core/Weighting file (core fuel)/Frontend/.test-tmp/
+

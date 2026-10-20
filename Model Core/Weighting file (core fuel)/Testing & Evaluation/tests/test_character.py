@@ -91,6 +91,36 @@ class CharacterStoreTests(unittest.TestCase):
         self.assertEqual(store.load_card().core_traits, ["温柔", "真诚", "有主见"])
         self.assertEqual(store.load_card().emotions, ["开心", "好奇", "担心", "害羞"])
 
+    def test_moling_persona_uses_cool_outside_warm_hearted_behavior_rules(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = CharacterStore(
+                str(root / "character.json"),
+                str(root / "memory.json"),
+                str(root / "assets"),
+            )
+            prompt = store.build_system_prompt()
+
+        self.assertIn("外在冷静、克制、有分寸，内在温柔", prompt)
+        self.assertIn("用户拒绝建议后停止推进", prompt)
+        self.assertIn("不宣称为真实主观感受", prompt)
+
+    def test_custom_persona_does_not_receive_moling_specific_style(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = CharacterStore(
+                str(root / "character.json"),
+                str(root / "memory.json"),
+                str(root / "assets"),
+            )
+            card = CharacterCard.from_dict(
+                {**CharacterCard().to_dict(), "personality_preset": "custom"}
+            )
+            store.save_card(card)
+            prompt = store.build_system_prompt()
+
+        self.assertNotIn("墨灵的性格呈现", prompt)
+
     def test_character_cards_can_be_created_listed_and_switched_without_affect_leaking(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

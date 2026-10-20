@@ -6,9 +6,11 @@
 
 - torch / transformers（MIT / Apache-2.0，Model extra）
 - faster-whisper（MIT，Speech extra）
-- piper-tts（MIT，Speech extra）
+- piper-tts（GPL-3.0，Speech extra；当前约束 `piper-tts>=1.8,<2` 属于 OHF-Voice 维护分支。旧版 rhasspy/piper 的 MIT 声明不能套用到当前包。）
 - peft（Apache-2.0，LoRA 微调可选）
 - onnx2tf / ai-edge-litert / tensorrt（各自许可，模型导出可选）
 
 Electron 前端依赖（node_modules）的许可由其各自包声明；
 构建分发时请保留各依赖的 LICENSE/NOTICE 文件。
+
+语音模型权重及训练语料有独立许可，不能由 TTS 软件包的许可替代；部署具体模型前须单独登记来源、版本、数据来源和许可。

@@ -23,7 +23,11 @@ function createElement() {
     src: "",
     alt: "",
     dataset: {},
-    style: {},
+    style: {
+      setProperty(name, value) {
+        this[name] = value;
+      },
+    },
     removeAttribute(name) {
       if (name === "src") this.src = "";
     },
@@ -32,12 +36,13 @@ function createElement() {
 
 test("floating avatar applies the active portrait and falls back after decode failure", () => {
   const elements = new Map(
-    ["avatar-image", "avatar-text", "nickname", "status-text", "mood-dot", "thinking-box"].map(
+    ["avatar-image", "avatar-text", "avatar-wrap", "nickname", "status-text", "mood-dot", "thinking-box"].map(
       (id) => [id, createElement()],
     ),
   );
   const sandbox = {
     document: { getElementById: (id) => elements.get(id) },
+    avatarEl: elements.get("avatar-wrap"),
   };
   const applyCharacterSource = extractBetween(
     floatingHtml,
@@ -52,6 +57,7 @@ test("floating avatar applies the active portrait and falls back after decode fa
   const image = elements.get("avatar-image");
   const text = elements.get("avatar-text");
   const status = elements.get("status-text");
+  const avatar = elements.get("avatar-wrap");
 
   applyCharacter({
     nickname: "墨灵",
@@ -64,6 +70,7 @@ test("floating avatar applies the active portrait and falls back after decode fa
   assert.equal(text.hidden, true);
   assert.equal(image.alt, "墨灵角色立绘");
   assert.equal(status.textContent, "模拟状态 · 开心");
+  assert.equal(avatar.style["--mood-halo"], "#ffd166");
 
   const staleErrorHandler = image.onerror;
   applyCharacter({ nickname: "新角色", avatarDataUrl: null, moodKey: "calm" });
@@ -87,12 +94,13 @@ test("floating avatar applies the active portrait and falls back after decode fa
 
 test("floating avatar retries the base portrait before its text fallback", () => {
   const elements = new Map(
-    ["avatar-image", "avatar-text", "nickname", "status-text", "mood-dot", "thinking-box"].map(
+    ["avatar-image", "avatar-text", "avatar-wrap", "nickname", "status-text", "mood-dot", "thinking-box"].map(
       (id) => [id, createElement()],
     ),
   );
   const sandbox = {
     document: { getElementById: (id) => elements.get(id) },
+    avatarEl: elements.get("avatar-wrap"),
   };
   const applyCharacterSource = extractBetween(
     floatingHtml,

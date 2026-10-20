@@ -527,9 +527,8 @@ def _resolve_regular_file(workspace_root: Path, relative_path: Any, *, must_exis
     if not isinstance(relative_path, str) or not relative_path.strip():
         raise ValueError("path must be a non-empty relative path")
     requested = Path(relative_path)
-    if requested.is_absolute():
-        raise ValueError("absolute paths are not allowed")
     root = workspace_root.resolve(strict=True)
+    _validate_workspace_path(root, requested)
     candidate = root / requested
     resolved = candidate.resolve(strict=must_exist)
     if not resolved.is_relative_to(root):
@@ -549,15 +548,36 @@ def _resolve_directory(workspace_root: Path, relative_path: Any) -> Path:
     if not isinstance(relative_path, str) or not relative_path.strip():
         raise ValueError("path must be a non-empty relative path")
     requested = Path(relative_path)
-    if requested.is_absolute():
-        raise ValueError("absolute paths are not allowed")
-    candidate = workspace_root / requested
+    root = workspace_root.resolve(strict=True)
+    _validate_workspace_path(root, requested)
+    candidate = root / requested
     resolved = candidate.resolve(strict=True)
-    if not resolved.is_relative_to(workspace_root):
+    if not resolved.is_relative_to(root):
         raise ValueError("path must remain within the project workspace")
     if not resolved.is_dir():
         raise ValueError("path must identify a project directory")
     return resolved
+
+
+def _validate_workspace_path(root: Path, requested: Path) -> None:
+    """Reject traversal, hidden/excluded components and symlinks in tool paths."""
+    if requested.is_absolute() or requested.drive:
+        raise ValueError("absolute or drive-relative paths are not allowed")
+    current = root
+    for part in requested.parts:
+        if part in {"", "."}:
+            continue
+        if part == "..":
+            raise ValueError("parent-directory traversal is not allowed")
+        if (
+            part.startswith(".")
+            or part.casefold() in EXCLUDED_DIRECTORIES
+            or _is_sensitive(Path(part))
+        ):
+            raise ValueError("hidden, sensitive, or excluded path components are not allowed")
+        current = current / part
+        if current.is_symlink():
+            raise ValueError("symbolic links are not allowed in project tool paths")
 
 
 def _is_sensitive(path: Path) -> bool:
@@ -611,9 +631,8 @@ def read_project_file(workspace_root: Path, arguments: Any) -> dict[str, Any]:
     arguments = validate_tool_arguments("read_project_file", arguments)
     relative_path = arguments["path"]
     requested = Path(relative_path)
-    if requested.is_absolute():
-        raise ValueError("absolute paths are not allowed")
     root = workspace_root.resolve(strict=True)
+    _validate_workspace_path(root, requested)
     candidate = root / requested
     resolved = candidate.resolve(strict=True)
     if not resolved.is_relative_to(root):

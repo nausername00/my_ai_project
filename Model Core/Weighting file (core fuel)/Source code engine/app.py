@@ -1,6 +1,7 @@
 """Application entry point for the local AI service."""
 
 import argparse
+import ipaddress
 import os
 import ssl
 from http.server import ThreadingHTTPServer
@@ -16,7 +17,31 @@ from speech import SpeechService
 
 
 def _is_loopback_host(host: str) -> bool:
-    return host.lower() in {"localhost", "127.0.0.1", "::1"}
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host.split("%", 1)[0]).is_loopback
+    except ValueError:
+        return False
+
+
+def validate_listener_security(
+    host: str,
+    *,
+    api_token: str,
+    tls_configured: bool,
+    allow_insecure_lan: bool = False,
+) -> None:
+    """Require authentication and encrypted transport for non-loopback listeners."""
+    if _is_loopback_host(host):
+        return
+    if not api_token.strip():
+        raise ValueError("非本机监听必须设置 MOLING_API_TOKEN。")
+    if not tls_configured and not allow_insecure_lan:
+        raise ValueError(
+            "非本机监听必须配置 TLS；如仅在可信局域网临时使用明文连接，"
+            "请显式传入 --allow-insecure-lan。"
+        )
 
 
 def create_server(host: str = "127.0.0.1", port: int = 8000) -> ThreadingHTTPServer:
@@ -65,6 +90,8 @@ def wrap_tls(server: ThreadingHTTPServer) -> ThreadingHTTPServer:
     cert = os.environ.get("MOLING_TLS_CERT", "").strip()
     key = os.environ.get("MOLING_TLS_KEY", "").strip()
     if not cert or not key:
+        if cert or key:
+            raise ValueError("MOLING_TLS_CERT 与 MOLING_TLS_KEY 必须同时配置。")
         return server
     if not (Path(cert).is_file() and Path(key).is_file()):
         raise FileNotFoundError(
@@ -80,13 +107,28 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the local AI service")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", default=8000, type=int)
+    parser.add_argument(
+        "--allow-insecure-lan",
+        action="store_true",
+        help="显式允许非本机监听使用明文 HTTP（令牌与数据不会加密）",
+    )
     args = parser.parse_args()
-    if not _is_loopback_host(args.host):
-        # 阶段 0 边界：显式远程监听必须单独配置认证，启动前给醒目警告。
+    tls_configured = bool(
+        os.environ.get("MOLING_TLS_CERT", "").strip()
+        and os.environ.get("MOLING_TLS_KEY", "").strip()
+    )
+    try:
+        validate_listener_security(
+            args.host,
+            api_token=os.environ.get("MOLING_API_TOKEN", ""),
+            tls_configured=tls_configured,
+            allow_insecure_lan=args.allow_insecure_lan,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
+    if not _is_loopback_host(args.host) and not tls_configured:
         print(
-            "[!] 警告：正在监听非回环地址，API 将对局域网/外部可达。"
-            " 服务无内置认证，除本机外对任何来源都未授权；"
-            " 建议仅在受信网络内使用，并自行加装认证/防火墙。",
+            "[!] 明文局域网模式已显式启用：令牌和对话内容不会加密，请仅在可信网络使用。",
             flush=True,
         )
     server = wrap_tls(create_server(args.host, args.port))

@@ -3,6 +3,7 @@
 from importlib.util import find_spec
 import importlib
 import io
+import json
 import os
 from pathlib import Path
 import re
@@ -57,6 +58,18 @@ def _voice_display(voice_name: str) -> str:
 
 class SpeechService:
     MAX_TEXT_LENGTH = 2000
+    # Piper's Chinese phonemizer may fetch/extract this bundle on first use.
+    # Require the complete local bundle before allowing synthesis so the
+    # runtime cannot silently initiate a network download.
+    PINYIN_REQUIRED_FILES = (
+        "g2pw.onnx",
+        "config.py",
+        "POLYPHONIC_CHARS.txt",
+        "MONOPHONIC_CHARS.txt",
+        "bopomofo_to_pinyin_wo_tune_dict.json",
+        "char_bopomofo_dict.json",
+        "bert-base-chinese_s2t_dict.txt",
+    )
 
     def __init__(
         self,
@@ -64,6 +77,7 @@ class SpeechService:
         whisper_cache_dir: str | None = None,
         piper_voice_path: str | None = None,
         language: str | None = None,
+        piper_data_dir: str | None = None,
     ) -> None:
         local_data = Path(
             os.getenv(
@@ -92,6 +106,13 @@ class SpeechService:
             piper_voice_path
             or os.getenv("PIPER_VOICE_PATH", str(default_voice))
         ).expanduser()
+        self.piper_data_dir = Path(
+            piper_data_dir
+            or os.getenv(
+                "PIPER_DATA_DIR",
+                str(local_data / "Moling" / "models" / "piper"),
+            )
+        ).expanduser()
         self.language = language or os.getenv("WHISPER_LANGUAGE", "zh")
         self._whisper: Any = None
         self._voice: Any = None
@@ -110,8 +131,49 @@ class SpeechService:
                 self.piper_voice_path.suffix + ".json"
             ).is_file(),
             "voice_count": len(self.list_voices()),
+            "pinyin_resources_required": self._voice_uses_pinyin(self.piper_voice_path),
+            "pinyin_resources_available": self._pinyin_resources_available(
+                self.piper_voice_path
+            ),
             "processing": "local",
         }
+
+    @staticmethod
+    def _read_voice_config(voice_path: Path) -> dict[str, Any]:
+        try:
+            value = json.loads(
+                voice_path.with_suffix(voice_path.suffix + ".json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            return value if isinstance(value, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    @classmethod
+    def _voice_uses_pinyin(cls, voice_path: Path) -> bool:
+        return str(cls._read_voice_config(voice_path).get("phoneme_type", "")).lower() == "pinyin"
+
+    def _pinyin_resources_available(self, voice_path: Path) -> bool:
+        if not self._voice_uses_pinyin(voice_path):
+            return True
+        resource_dir = self.piper_data_dir / "g2pW"
+        return all((resource_dir / name).is_file() for name in self.PINYIN_REQUIRED_FILES)
+
+    @classmethod
+    def _voice_speakers(cls, voice_path: Path) -> list[dict[str, Any]]:
+        config = cls._read_voice_config(voice_path)
+        speaker_map = config.get("speaker_id_map")
+        if isinstance(speaker_map, dict) and speaker_map:
+            speakers = []
+            for name, speaker_id in speaker_map.items():
+                if isinstance(speaker_id, int) and not isinstance(speaker_id, bool):
+                    speakers.append({"id": speaker_id, "name": str(name)})
+            return sorted(speakers, key=lambda item: item["id"])
+        count = config.get("num_speakers", 1)
+        if isinstance(count, int) and not isinstance(count, bool) and 1 < count <= 512:
+            return [{"id": speaker_id, "name": f"说话人 {speaker_id + 1}"} for speaker_id in range(count)]
+        return []
 
     def list_voices(self) -> list[dict[str, Any]]:
         """List locally installed Piper voices as a试听-able catalog.
@@ -135,6 +197,7 @@ class SpeechService:
                         "language": _voice_language(name),
                         "default": onnx.resolve() == self.piper_voice_path.resolve(),
                         "available": True,
+                        "speakers": self._voice_speakers(onnx),
                     }
                 )
         if not entries and self.piper_voice_path.is_file():
@@ -146,6 +209,7 @@ class SpeechService:
                     "language": _voice_language(name),
                     "default": True,
                     "available": True,
+                    "speakers": self._voice_speakers(self.piper_voice_path),
                 }
             )
         return entries
@@ -186,7 +250,12 @@ class SpeechService:
             "duration_seconds": round(info.duration, 2),
         }
 
-    def synthesize_wav(self, text: str, voice: str | None = None) -> bytes:
+    def synthesize_wav(
+        self,
+        text: str,
+        voice: str | None = None,
+        speaker_id: int | None = None,
+    ) -> bytes:
         if not isinstance(text, str):
             raise SpeechInputError("text must be a string")
         text = text.strip()
@@ -196,11 +265,27 @@ class SpeechService:
             raise SpeechInputError(
                 f"text must not exceed {self.MAX_TEXT_LENGTH} characters"
             )
-        voice_engine = self._get_voice(voice)
+        voice_path = self._voice_path_for(voice)
+        if self._voice_uses_pinyin(voice_path) and not self._pinyin_resources_available(voice_path):
+            raise SpeechUnavailableError(
+                "此中文声线需要本地 g2pW 拼音资源；请先将已核验的资源放入 Piper 数据目录。应用不会自动下载。"
+            )
+        speakers = self._voice_speakers(voice_path)
+        if speaker_id is not None:
+            if isinstance(speaker_id, bool) or not isinstance(speaker_id, int):
+                raise SpeechInputError("speaker_id must be an integer")
+            if not any(item["id"] == speaker_id for item in speakers):
+                raise SpeechInputError("speaker_id is not available for this voice")
+        voice_engine = self._get_voice(voice, voice_path=voice_path)
         output = io.BytesIO()
         try:
             with wave.open(output, "wb") as wav_file:
-                voice_engine.synthesize_wav(text, wav_file)
+                if speaker_id is None:
+                    voice_engine.synthesize_wav(text, wav_file)
+                else:
+                    piper_module = importlib.import_module("piper")
+                    syn_config = piper_module.SynthesisConfig(speaker_id=speaker_id)
+                    voice_engine.synthesize_wav(text, wav_file, syn_config=syn_config)
         except (OSError, RuntimeError, ValueError) as error:
             raise SpeechUnavailableError(f"local speech synthesis failed: {error}") from error
         return output.getvalue()
@@ -247,8 +332,10 @@ class SpeechService:
             )
         return candidate
 
-    def _get_voice(self, voice_name: str | None = None) -> Any:
-        voice_path = self._voice_path_for(voice_name)
+    def _get_voice(
+        self, voice_name: str | None = None, *, voice_path: Path | None = None
+    ) -> Any:
+        voice_path = voice_path or self._voice_path_for(voice_name)
         cache_key = str(voice_path.resolve())
         cached = self._voice_cache.get(cache_key)
         if cached is not None:
@@ -269,6 +356,7 @@ class SpeechService:
                     voice_path,
                     config_path=config_path,
                     use_cuda=False,
+                    download_dir=self.piper_data_dir,
                 )
             except (OSError, RuntimeError, ValueError) as error:
                 raise SpeechUnavailableError(

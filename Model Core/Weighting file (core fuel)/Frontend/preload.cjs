@@ -20,8 +20,8 @@ contextBridge.exposeInMainWorld(
     speechVoices: () => ipcRenderer.invoke("companion:speech-voices"),
     transcribe: (audio, contentType) =>
       ipcRenderer.invoke("companion:transcribe", audio, contentType),
-    synthesize: (text, voice) =>
-      ipcRenderer.invoke("companion:synthesize", text, voice),
+    synthesize: (text, voice, speakerId) =>
+      ipcRenderer.invoke("companion:synthesize", text, voice, speakerId),
     getCharacter: () => ipcRenderer.invoke("companion:get-character"),
     notifySpeechState: (speaking) =>
       ipcRenderer.invoke("companion:speech-state", speaking === true),

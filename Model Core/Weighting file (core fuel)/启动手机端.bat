@@ -33,7 +33,8 @@ if not defined MOLING_API_TOKEN (
 ) else (
     echo   复用已有 Token（见 mobile_token.txt）
 )
-echo   你的 Token: %MOLING_API_TOKEN%
+echo   Token 已保存到：%TOKEN_FILE%
+echo   请在手机页设置中从该文件复制 Token；启动信息不会显示 Token。
 echo   ^(在手机页右上角齿轮图标里填入后保存；仅存手机浏览器^)
 echo.
 
@@ -50,9 +51,13 @@ echo.
 echo   [提示] 关闭本窗口即停止服务。按 Ctrl+C 可退出。
 echo.
 
+echo   [安全提示] 当前手机端脚本使用明文 HTTP，Token 和对话数据不会加密。
+choice /C YN /N /M "仅在可信局域网临时继续？(Y/N): "
+if errorlevel 2 exit /b 1
+echo.
 cd /d "%ENGINE_DIR%"
 set "MOLING_API_TOKEN=%MOLING_API_TOKEN%"
-py -3 app.py --host 0.0.0.0 --port 8000
+py -3 app.py --host 0.0.0.0 --port 8000 --allow-insecure-lan
 
 echo.
 echo   服务已停止。

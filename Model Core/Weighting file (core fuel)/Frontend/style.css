@@ -2235,6 +2235,10 @@ button {
   font-size: 11px;
 }
 
+.character-editor-dialog label[hidden] {
+  display: none;
+}
+
 .character-editor-dialog input,
 .character-editor-dialog textarea,
 .character-editor-dialog select {

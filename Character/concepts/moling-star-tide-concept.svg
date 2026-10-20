@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1280" viewBox="0 0 1000 1280" role="img" aria-labelledby="title desc">
+  <title id="title">墨灵「星澜司书」视觉概念稿 v0.1</title>
+  <desc id="desc">暗金长发、蓝灰星环眼，身穿黑白立领服装，以星澜蓝银装饰和一枚红色结饰点睛的女性伙伴角色设计。</desc>
+  <defs>
+    <linearGradient id="bg" x2="0" y2="1"><stop stop-color="#101722"/><stop offset="1" stop-color="#1a2635"/></linearGradient>
+    <linearGradient id="hair" x2="1" y2="1"><stop stop-color="#f2d99c"/><stop offset=".46" stop-color="#bd985a"/><stop offset="1" stop-color="#765b3e"/></linearGradient>
+    <linearGradient id="skin" x2=".8" y2="1"><stop stop-color="#fff0df"/><stop offset="1" stop-color="#d9b9aa"/></linearGradient>
+    <linearGradient id="coat" x2="1" y2="1"><stop stop-color="#252c38"/><stop offset="1" stop-color="#0b1018"/></linearGradient>
+    <linearGradient id="silver" x2="1" y2="1"><stop stop-color="#f3fbff"/><stop offset=".5" stop-color="#a9c9dd"/><stop offset="1" stop-color="#68879f"/></linearGradient>
+    <radialGradient id="halo"><stop stop-color="#548db5" stop-opacity=".32"/><stop offset="1" stop-color="#548db5" stop-opacity="0"/></radialGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="18"/></filter>
+  </defs>
+  <rect width="1000" height="1280" rx="34" fill="url(#bg)"/>
+  <circle cx="506" cy="560" r="345" fill="url(#halo)"/>
+  <g fill="none" stroke="#9fc7df" stroke-opacity=".28">
+    <circle cx="500" cy="535" r="285"/><circle cx="500" cy="535" r="310" stroke-dasharray="2 12"/>
+    <path d="M185 535h72m486 0h72M500 210v70m0 510v70"/>
+  </g>
+  <g fill="#c7e8fa" opacity=".85"><path d="m225 342 5 14 14 5-14 5-5 14-5-14-14-5 14-5z"/><path d="m765 388 4 10 10 4-10 4-4 10-4-10-10-4 10-4z"/><circle cx="277" cy="666" r="3"/><circle cx="731" cy="612" r="3"/></g>
+
+  <text x="66" y="82" fill="#f4f4f0" font-family="Microsoft YaHei, sans-serif" font-size="30" letter-spacing="5">MOLING  /  CHARACTER STUDY</text>
+  <text x="68" y="126" fill="#a9c9dd" font-family="Microsoft YaHei, sans-serif" font-size="17" letter-spacing="4">星澜司书 · 主原型提案 v0.1</text>
+  <path d="M68 153h864" stroke="#a9c9dd" stroke-opacity=".35"/>
+
+  <!-- long layered hair behind the shoulders -->
+  <path d="M353 350Q284 413 300 612q8 152-74 315 114-25 170-126l45-183z" fill="url(#hair)" stroke="#f0dcae" stroke-opacity=".58" stroke-width="3"/>
+  <path d="M642 350q76 68 55 259-10 178 85 302-124-24-181-124l-39-182z" fill="url(#hair)" stroke="#f0dcae" stroke-opacity=".5" stroke-width="3"/>
+  <path d="M330 463q-3 224-71 414M670 443q-2 244 74 390" fill="none" stroke="#f8e8c4" stroke-opacity=".48" stroke-width="5"/>
+
+  <!-- torso and asymmetric scholar coat -->
+  <path d="M389 701q-108 32-153 126l-54 265q116 77 318 79 214-2 321-84l-62-264q-39-91-151-121z" fill="url(#coat)" stroke="#60758a" stroke-width="3"/>
+  <path d="M404 706q42 24 96 42l-22 414q-119-6-188-49l49-229q15-105 65-178z" fill="#f3f1eb" stroke="#b6cbd9" stroke-width="3"/>
+  <path d="M596 706q-42 24-96 42l22 414q119-6 188-49l-49-229q-15-105-65-178z" fill="#171e29" stroke="#526477" stroke-width="3"/>
+  <path d="M404 707q44 47 96 59l-26 83q-68-21-105-71zM596 707q-44 47-96 59l26 83q68-21 105-71z" fill="#263242" stroke="url(#silver)" stroke-width="3"/>
+  <path d="M497 765v382M512 765v382" stroke="url(#silver)" stroke-width="3" opacity=".86"/>
+  <path d="M267 839q83 16 132 81l-40 170q-66-29-108-68z" fill="#141b26" stroke="#71889b" stroke-width="3"/>
+  <path d="M733 839q-83 16-132 81l40 170q66-29 108-68z" fill="#141b26" stroke="#71889b" stroke-width="3"/>
+  <path d="M294 923q47 24 85 62m327-62q-47 24-85 62" fill="none" stroke="#a9c9dd" stroke-width="4" opacity=".8"/>
+  <!-- short trailing mantle -->
+  <path d="M373 801q-76 91-91 253 47 38 112 53l34-166z" fill="#101722" stroke="#8299aa" stroke-width="2"/>
+  <path d="M627 801q76 91 91 253-47 38-112 53l-34-166z" fill="#101722" stroke="#8299aa" stroke-width="2"/>
+  <path d="M308 1034q38 20 73 31m311-31q-38 20-73 31" stroke="#9fc7df" stroke-width="3" fill="none"/>
+
+  <!-- neck, face, ears -->
+  <path d="M454 615v108q45 47 92 0V615z" fill="url(#skin)"/>
+  <path d="M365 480q0-159 136-164 137 7 137 164l-25 133q-39 98-112 105-78-11-112-105z" fill="url(#skin)" stroke="#f9e8d5" stroke-width="3"/>
+  <path d="M364 530q-41-23-31 28 11 44 42 35m263-63q41-23 31 28-11 44-42 35" fill="url(#skin)" stroke="#d2b3a3" stroke-width="3"/>
+  <!-- fringe, calm expression -->
+  <path d="M354 477q-17-191 145-203 160 11 161 196-43-58-82-95-31 83-91 116-55 27-98 10l-18 98q-35-43-17-122z" fill="url(#hair)" stroke="#e7c987" stroke-width="3"/>
+  <path d="M387 424q58-98 117-109m34 8q59 35 91 115M368 523q34-36 77-41" fill="none" stroke="#fff0ca" stroke-opacity=".7" stroke-width="5"/>
+  <!-- eyes -->
+  <path d="M397 520q34-27 72 0-31 43-66 8zM531 520q34-27 72 0-31 43-66 8z" fill="#f9f5ec"/>
+  <ellipse cx="438" cy="523" rx="13" ry="19" fill="#54788e"/><ellipse cx="572" cy="523" rx="13" ry="19" fill="#54788e"/>
+  <ellipse cx="438" cy="524" rx="6" ry="13" fill="#172430"/><ellipse cx="572" cy="524" rx="6" ry="13" fill="#172430"/>
+  <circle cx="443" cy="516" r="4" fill="#fff"/><circle cx="577" cy="516" r="4" fill="#fff"/>
+  <path d="M396 510q34-18 72 0m63 0q34-18 72 0" fill="none" stroke="#554335" stroke-width="5" stroke-linecap="round"/>
+  <path d="M493 539q-4 23 3 27" fill="none" stroke="#bd9582" stroke-width="3" stroke-linecap="round"/>
+  <path d="M479 590q18 8 38 0" fill="none" stroke="#9e6e68" stroke-width="3" stroke-linecap="round"/>
+  <path d="M386 562q19 8 32 2m165-2q19 8 32 2" fill="none" stroke="#d9948e" stroke-opacity=".4" stroke-width="5" stroke-linecap="round"/>
+  <!-- small hair ornament and single red knot -->
+  <path d="M634 412l12 20-12 20-12-20z" fill="url(#silver)" stroke="#eff8ff" stroke-width="2"/>
+  <circle cx="634" cy="432" r="4" fill="#cf5260"/>
+  <path d="M492 735q8-19 17 0 9-19 18 0l-18 22z" fill="#b84655" stroke="#f0a0a5" stroke-width="2"/>
+  <path d="M509 755l-13 31 17-9 13 13-7-35" fill="#b84655" stroke="#e18a91" stroke-width="2"/>
+
+  <!-- notes -->
+  <g font-family="Microsoft YaHei, sans-serif">
+    <path d="M198 405h98l54 44" fill="none" stroke="#a9c9dd" stroke-width="2"/><circle cx="350" cy="449" r="4" fill="#a9c9dd"/>
+    <text x="80" y="390" fill="#e9f2f6" font-size="19">暗金分层长发</text><text x="80" y="417" fill="#9fb4c3" font-size="14">露出双眼，发束便于拆层</text>
+    <path d="M687 520h103l50-32" fill="none" stroke="#a9c9dd" stroke-width="2"/><circle cx="687" cy="520" r="4" fill="#a9c9dd"/>
+    <text x="800" y="463" fill="#e9f2f6" font-size="19">蓝灰星环眼</text><text x="800" y="490" fill="#9fb4c3" font-size="14">冷静目光，柔和高光</text>
+    <path d="M668 736h83l45 43" fill="none" stroke="#a9c9dd" stroke-width="2"/><circle cx="668" cy="736" r="4" fill="#a9c9dd"/>
+    <text x="800" y="802" fill="#e9f2f6" font-size="19">一点朱红</text><text x="800" y="829" fill="#9fb4c3" font-size="14">只留在胸前结饰</text>
+  </g>
+
+  <path d="M68 1178h864" stroke="#a9c9dd" stroke-opacity=".35"/>
+  <g font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#dce8ef">
+    <circle cx="90" cy="1210" r="9" fill="#151b25" stroke="#8494a3"/><text x="108" y="1216">墨黑</text>
+    <circle cx="200" cy="1210" r="9" fill="#f0eee8"/><text x="218" y="1216">月白</text>
+    <circle cx="310" cy="1210" r="9" fill="#9fc7df"/><text x="328" y="1216">星澜蓝银</text>
+    <circle cx="466" cy="1210" r="9" fill="#b84655"/><text x="484" y="1216">朱红点睛</text>
+    <text x="932" y="1216" text-anchor="end" fill="#91a6b7">概念草图 · 非最终立绘</text>
+  </g>
+</svg>

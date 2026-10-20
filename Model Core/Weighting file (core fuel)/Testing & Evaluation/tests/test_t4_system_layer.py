@@ -81,6 +81,13 @@ class WrapTlsTest(unittest.TestCase):
             app.wrap_tls(self.server)
 
     @patch.dict(os.environ, {}, clear=False)
+    def test_partial_tls_configuration_is_rejected(self) -> None:
+        os.environ["MOLING_TLS_CERT"] = str(Path(self.tmp.name) / "cert.pem")
+        os.environ.pop("MOLING_TLS_KEY", None)
+        with self.assertRaisesRegex(ValueError, "必须同时配置"):
+            app.wrap_tls(self.server)
+
+    @patch.dict(os.environ, {}, clear=False)
     def test_configured_wraps_socket(self) -> None:
         cert, key = _make_pem_pair(Path(self.tmp.name))
         os.environ["MOLING_TLS_CERT"] = cert
@@ -88,6 +95,31 @@ class WrapTlsTest(unittest.TestCase):
         result = app.wrap_tls(self.server)
         self.assertIs(result, self.server)
         self.assertIsInstance(self.server.socket, ssl.SSLSocket)
+
+
+class ListenerSecurityTest(unittest.TestCase):
+    def test_loopback_needs_no_remote_credentials(self) -> None:
+        app.validate_listener_security(
+            "127.0.0.2", api_token="", tls_configured=False
+        )
+
+    def test_remote_listener_requires_token_and_tls_by_default(self) -> None:
+        with self.assertRaisesRegex(ValueError, "MOLING_API_TOKEN"):
+            app.validate_listener_security(
+                "0.0.0.0", api_token="", tls_configured=True
+            )
+        with self.assertRaisesRegex(ValueError, "TLS"):
+            app.validate_listener_security(
+                "192.168.1.20", api_token="secret", tls_configured=False
+            )
+
+    def test_insecure_lan_requires_explicit_opt_in_and_token(self) -> None:
+        app.validate_listener_security(
+            "0.0.0.0",
+            api_token="secret",
+            tls_configured=False,
+            allow_insecure_lan=True,
+        )
 
 
 class SelfHostStatusTest(unittest.TestCase):

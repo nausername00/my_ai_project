@@ -37,6 +37,26 @@ class AgentToolTests(unittest.TestCase):
         self.assertEqual(result["content"], "墨灵学习计划")
         self.assertEqual(result["path"], "notes.md")
 
+    def test_file_tools_cannot_target_hidden_or_excluded_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in (".private", "node_modules"):
+                folder = root / name
+                folder.mkdir()
+                (folder / "note.md").write_text("private", encoding="utf-8")
+            for tool, arguments in (
+                ("list_project_files", {"path": ".private"}),
+                ("read_project_file", {"path": ".private/note.md"}),
+                ("write_project_file", {"path": ".private/new.md", "content": "x"}),
+                ("patch_project_file", {"path": ".private/note.md", "old_string": "private", "new_string": "x"}),
+                ("list_project_files", {"path": "node_modules"}),
+                ("read_project_file", {"path": "node_modules/note.md"}),
+                ("write_project_file", {"path": "node_modules/new.md", "content": "x"}),
+            ):
+                with self.subTest(tool=tool, path=arguments["path"]):
+                    with self.assertRaises(ValueError):
+                        execute_project_tool(root, tool, arguments)
+
     def test_creates_new_utf8_file_and_verifies_read_back(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -13,6 +13,7 @@ from pathlib import Path
 from threading import Thread
 from unittest.mock import patch
 
+import api
 from agent_tools import _trace_store
 from app import create_server
 from character import CharacterCard
@@ -22,6 +23,16 @@ from speech import SpeechInputError, SpeechService, SpeechUnavailableError
 
 
 VISION_TEST_CAPABILITY = "ab" * 32
+
+
+class AuthPolicyTests(unittest.TestCase):
+    def test_remote_status_routes_require_token(self) -> None:
+        with patch.object(api, "_AUTH_TOKEN", "test-token"):
+            self.assertFalse(api._auth_allowed("/v1/status/platform", False, ""))
+            self.assertTrue(api._auth_allowed("/v1/status/platform", False, "test-token"))
+            self.assertTrue(api._auth_allowed("/v1/status/platform", True, ""))
+            self.assertTrue(api._auth_allowed("/health", False, ""))
+            self.assertTrue(api._auth_allowed("/v1/mobile/app.js", False, ""))
 
 
 def _png_chunk(chunk_type: bytes, data: bytes) -> bytes:
@@ -226,6 +237,21 @@ class ApiTests(unittest.TestCase):
                 "Content-Type": "application/json",
                 "Host": "10.132.46.248:8000",
                 "Origin": "http://10.132.46.249:8000",
+            },
+        )
+        response = self.connection.getresponse()
+        self.assertEqual(response.status, 403)
+        response.read()
+
+        # Host 与 Origin 同为攻击者域名仍不能作为同源证明（防 DNS rebinding）。
+        self.connection.request(
+            "POST",
+            "/v1/generate",
+            json.dumps({"prompt": "hi", "history": []}).encode("utf-8"),
+            {
+                "Content-Type": "application/json",
+                "Host": "attacker.example:8000",
+                "Origin": "http://attacker.example:8000",
             },
         )
         response = self.connection.getresponse()
@@ -675,6 +701,22 @@ class ApiTests(unittest.TestCase):
             self.assertIn("language", voice)
             self.assertIn("available", voice)
             self.assertIn("default", voice)
+            self.assertIn("speakers", voice)
+
+    def test_speech_endpoint_passes_selected_speaker_id(self) -> None:
+        speech_service = self.server.RequestHandlerClass.speech_service
+        wav_bytes = b"RIFF\x04\x00\x00\x00WAVE"
+        with patch.object(speech_service, "synthesize_wav", return_value=wav_bytes) as synthesize:
+            self.connection.request(
+                "POST",
+                "/v1/speech",
+                json.dumps({"text": "你好", "voice": "local-model", "speaker_id": 17}),
+                {"Content-Type": "application/json"},
+            )
+            response = self.connection.getresponse()
+            self.assertEqual(response.status, 200)
+            response.read()
+            synthesize.assert_called_once_with("你好", voice="local-model", speaker_id=17)
 
     def test_speech_endpoint_rejects_unknown_voice_without_synthesis(self) -> None:
         self.connection.request(
