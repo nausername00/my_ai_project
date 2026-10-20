@@ -42,6 +42,27 @@
       "texture": "m8_texture_bloom.jpg",
       "target": "body_ring",
       "desc": "繁花主题（M5 墨灵现场自主设计）"
+    },
+    {
+      "id": "sakura_snow",
+      "name": "樱雪",
+      "texture": "m10_texture_sakura_snow.jpg",
+      "target": "body_ring",
+      "desc": "樱雪·樱粉花瓣落在雪白底（M10 时装库扩展·程序化生成）"
+    },
+    {
+      "id": "maple_moss",
+      "name": "青枫",
+      "texture": "m10_texture_maple_moss.jpg",
+      "target": "body_ring",
+      "desc": "青枫·秋枫红橙×青苔墨绿（M10 时装库扩展·程序化生成）"
+    },
+    {
+      "id": "aurora",
+      "name": "极光",
+      "texture": "m10_texture_aurora.jpg",
+      "target": "body_ring",
+      "desc": "极光·夜空蓝紫底上的绿紫极光（M10 时装库扩展·程序化生成）"
     }
   ],
   "tones": {
@@ -79,6 +100,21 @@
       0.86,
       0.78,
       0.82
+    ],
+    "sakura": [
+      0.92,
+      0.82,
+      0.86
+    ],
+    "maple": [
+      0.72,
+      0.42,
+      0.26
+    ],
+    "aurora": [
+      0.12,
+      0.16,
+      0.3
     ]
   },
   "state_path": "fashion_state.json"
