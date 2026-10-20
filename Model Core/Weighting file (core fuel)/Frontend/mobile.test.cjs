@@ -57,6 +57,25 @@ test("app.js supports configurable server address for the native shell (Capacito
   assert.match(app, /API = resolveApi\(\);/);
 });
 
+test("mobile page offers a connection self-test with layered diagnosis", () => {
+  // 连接自检：按钮 + 结果区 + 按失败类型给分层排查提示
+  assert.match(html, /id="testConnBtn"/);
+  assert.match(html, /id="testConnResult"/);
+  assert.match(app, /async function testConnection\(\)/);
+  assert.match(app, /testConnBtn\?\.addEventListener\("click", testConnection\)/);
+  // 探测后端 /health（不依赖 v1 前缀）
+  assert.match(app, /fetch\(`\$\{base\}\/health`/);
+  // 401/403 → token 提示；超时 → 启动方式提示；Failed to fetch → 分层排查清单
+  assert.match(app, /401 \|\| res\.status === 403/);
+  assert.match(app, /mobile_token\.txt/);
+  assert.match(app, /启动手机端\.bat/);
+  assert.match(app, /Windows 防火墙放行 8000/);
+  // 诊断样式存在
+  assert.match(css, /\.diag\.ok/);
+  assert.match(css, /\.diag\.warn/);
+  assert.match(css, /\.diag\.err/);
+});
+
 test("app.js wires notifications behind a user switch and secure context", () => {
   assert.match(app, /"Notification" in window/);
   assert.match(app, /Notification\.requestPermission/);

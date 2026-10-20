@@ -134,6 +134,46 @@ serverSave.addEventListener("click", () => {
   refreshStatus();
 });
 
+// ---------- 连接自检 ----------
+// 把"Failed to fetch"变成可操作的分层诊断：网络不通 / 后端未开 / 防火墙 / 地址或 token 问题。
+async function testConnection() {
+  const result = document.getElementById("testConnResult");
+  const btn = document.getElementById("testConnBtn");
+  if (!result || !btn) return;
+  result.textContent = "正在探测…";
+  result.className = "diag";
+  btn.disabled = true;
+  const base = API.replace(/\/v1$/, "");
+  try {
+    const res = await fetch(`${base}/health`, {
+      headers: authHeaders(),
+      signal: AbortSignal.timeout(6000),
+    });
+    if (res.ok) {
+      result.textContent = "✅ 后端已连通。若仍无法对话：检查 API Token 是否填对（设置右上角 ⚙）。";
+      result.className = "diag ok";
+    } else if (res.status === 401 || res.status === 403) {
+      result.textContent = `⚠️ 后端可达但返回 ${res.status}：非本机访问必须填写正确的 API Token（电脑 mobile_token.txt）。`;
+      result.className = "diag warn";
+    } else {
+      result.textContent = `⚠️ 后端可达但返回 HTTP ${res.status}。`;
+      result.className = "diag warn";
+    }
+  } catch (error) {
+    const msg = String(error && error.message || error);
+    if (/abort|timeout/i.test(msg)) {
+      result.textContent = "❌ 连接超时：确认电脑后端已用「启动手机端.bat」启动（它才会监听 0.0.0.0 供手机访问）。";
+    } else {
+      result.textContent = "❌ 无法连接（Failed to fetch）。依次排查：①手机与电脑连同一 WiFi；②电脑已用「启动手机端.bat」启动；③Windows 防火墙放行 8000 入站（首次启动弹窗点允许）；④服务器地址填电脑局域网 IP（如 http://192.168.1.5:8000）。";
+    }
+    result.className = "diag err";
+  } finally {
+    btn.disabled = false;
+  }
+}
+const testConnBtn = document.getElementById("testConnBtn");
+testConnBtn?.addEventListener("click", testConnection);
+
 // ---------- 通知开关 ----------
 function applyNotifyUI() {
   notifyToggle.textContent = notifyOn ? "开" : "关";

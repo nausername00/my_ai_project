@@ -35,6 +35,13 @@
         <button type="button" id="tokenSave">保存</button>
       </div>
     </div>
+    <div class="setting-row">
+      <label for="testConnBtn">连接自检：探测电脑后端是否可达，并给出分层排查提示</label>
+      <div class="token-row">
+        <button type="button" id="testConnBtn">测试连接</button>
+      </div>
+      <p class="diag" id="testConnResult" role="status"></p>
+    </div>
     <div class="setting-row row-inline">
       <label for="notifyToggle">新回复系统通知（需 HTTPS/本机；HTTP 局域网不可用）</label>
       <button type="button" class="toggle" id="notifyToggle" role="switch" aria-checked="false">关</button>
