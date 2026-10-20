@@ -29,6 +29,30 @@ html, body {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+/* 第三梯队 C：Live2D 角色舞台（手机端） */
+.avatar-stage {
+  position: relative;
+  height: 220px;
+  flex: 0 0 auto;
+  background: radial-gradient(ellipse at 50% 30%, #1c2336 0%, #12151f 70%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+.avatar-stage .live2d-stage {
+  position: absolute;
+  inset: 0;
+}
+.avatar-stage .avatar-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 72px;
+  color: rgba(232, 234, 242, 0.35);
+}
+.avatar-stage .avatar-fallback[hidden] { display: none; }
+
 .identity { display: flex; align-items: center; gap: 8px; font-size: 16px; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: #6b7280; }
 .dot.on { background: #34d399; box-shadow: 0 0 8px #34d39988; }

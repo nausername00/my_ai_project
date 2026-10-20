@@ -20,6 +20,12 @@
     </div>
   </header>
 
+  <!-- 第三梯队 C：手机端 Live2D 角色舞台（模型从电脑后端 /v1/model/asset 按需加载） -->
+  <div class="avatar-stage" id="avatarStage" role="img" aria-label="墨灵形象">
+    <div id="live2d-stage" class="live2d-stage" hidden></div>
+    <div class="avatar-fallback" id="avatarFallback" aria-hidden="true">墨</div>
+  </div>
+
   <div class="settings" id="settingsPanel" hidden>
     <div class="setting-row">
       <label for="serverInput">服务器地址（App 内必填：电脑局域网 IP + :8000；浏览器打开本页可留空自动同源）</label>
@@ -60,6 +66,8 @@
     <button type="submit" id="sendBtn" aria-label="发送">发送</button>
   </form>
 
+  <script src="vendor/live2dcubismcore.min.js"></script>
+  <script src="vendor/live2d-runtime.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -107,6 +107,37 @@ test("service worker cache bumped after mobile polish", () => {
   }
 });
 
+test("mobile page embeds a Live2D avatar stage (third tier C)", () => {
+  // 舞台骨架：角色区 + Live2D 容器 + 文字降级
+  assert.match(html, /id="avatarStage"/);
+  assert.match(html, /id="live2d-stage"[^>]*hidden/);
+  assert.match(html, /id="avatarFallback"/);
+  // 运行时从本地 vendor 引入（打包进 App，离线可显示形象；模型走后端按需加载）
+  assert.match(html, /vendor\/live2dcubismcore\.min\.js/);
+  assert.match(html, /vendor\/live2d-runtime\.js/);
+  assert.match(css, /\.avatar-stage\s*\{/);
+  assert.match(css, /\.avatar-stage \.live2d-stage\s*\{/);
+  assert.match(css, /\.avatar-fallback\[hidden\]\s*\{\s*display:\s*none;\s*\}/);
+  // app.js：模型路径 + 后端资产 URL + 加载/眨眼/口型/降级
+  assert.match(app, /MODEL_PATH = "狐仙花嫁\/狐仙花嫁\/狐仙花嫁\.model3\.json"/);
+  assert.match(app, /\/v1\/model\/asset\?path=/);
+  assert.match(app, /async function loadLive2D\(\)/);
+  assert.match(app, /runtime\.Live2DModel\.from/);
+  assert.match(app, /FileReferences/);
+  assert.match(app, /function startTalking\(/);
+  assert.match(app, /function stopTalking\(/);
+  assert.match(app, /ParamEyeLOpen/);
+  assert.match(app, /ParamMouthOpenY/);
+  assert.match(app, /startTalking\(Math\.min\(8000/);
+  assert.match(app, /loadLive2D\(\);/);
+  // 后端：手机端模型只读端点（白名单 + 防穿越）
+  assert.match(api, /def _serve_model_asset\(self, relative: str\)/);
+  assert.match(api, /_MODEL_ROOT/);
+  assert.match(api, /if relative\.startswith\(/);
+  assert.match(api, /or "\.\." in relative\.split\("\/"\):/);
+  assert.match(api, /path == "\/v1\/model\/asset"/);
+});
+
 test("installed build keeps the mobile PWA reachable (regression guard)", () => {
   // 后端：MOLING_MOBILE_ROOT 环境变量可覆盖移动页静态根
   assert.match(api, /MOLING_MOBILE_ROOT/);

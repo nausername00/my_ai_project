@@ -812,6 +812,52 @@ class ApiHandler(BaseHTTPRequestHandler):
         ".webmanifest": "application/manifest+json",
     }
 
+    # 第三梯队 C：手机页 Live2D 模型只读静态根（Character 目录）。
+    # 桌面壳用 moling:// 私有协议加载模型；浏览器/手机 WebView 没有该协议，
+    # 由这里按需提供 model3.json / moc3 / 纹理 / 动作 / 表情等模型资源。
+    _MODEL_ROOT = Path(
+        os.environ.get("MOLING_MODEL_ROOT")
+        or (Path(__file__).resolve().parent.parent / "Character")
+    )
+    _MODEL_MIME = {
+        ".json": "application/json; charset=utf-8",
+        ".moc3": "application/octet-stream",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".xmem": "application/octet-stream",
+    }
+
+    def _serve_model_asset(self, relative: str) -> None:
+        """手机端 Live2D 模型资源：只读、白名单扩展名、防目录穿越。
+
+        仅能读取 Character 目录内的模型文件；``..`` 直接拒绝；未匹配返回 404。
+        与页面 API 一致，非本机访问仍需 token（页面本身无敏感数据）。
+        """
+        if not relative:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "missing path"})
+            return
+        if relative.startswith(("/", "\\")) or ".." in relative.split("/"):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid path"})
+            return
+        suffix = Path(relative).suffix.lower()
+        if suffix not in self._MODEL_MIME:
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+            return
+        target = (self._MODEL_ROOT / relative).resolve()
+        if self._MODEL_ROOT.resolve() not in target.parents and target != self._MODEL_ROOT.resolve():
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+            return
+        if not target.is_file():
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+            return
+        self._send_bytes(
+            HTTPStatus.OK,
+            self._MODEL_MIME[suffix],
+            target.read_bytes(),
+        )
+
     def _serve_mobile_asset(self, relative: str) -> None:
         """T5 手机客户端载体：只读 serve PWA 静态文件。
 
@@ -1093,6 +1139,12 @@ class ApiHandler(BaseHTTPRequestHandler):
         if path == "/v1/model/backends":
             # T6 多后端并行：已注册后端一览（default + 额外）
             self._send_json(HTTPStatus.OK, {"backends": self.engine.list_backends()})
+            return
+        if path == "/v1/model/asset":
+            # 第三梯队 C：手机页 Live2D 模型资源（只读 Character 白名单，防穿越）
+            query = parse_qs(urlsplit(self.path).query)
+            relative = (query.get("path", [""])[0] or "").strip()
+            self._serve_model_asset(relative)
             return
         if path == "/v1/model/choose":
             # T6：按成本账本动态选型（GET ?task=&prefer=；speed/quality/balance）

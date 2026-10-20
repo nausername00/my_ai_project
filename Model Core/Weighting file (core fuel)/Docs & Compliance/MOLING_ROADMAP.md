@@ -753,6 +753,14 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
 - 测试：前端 `layout.test.cjs` 新增时装面板断言（HTML 骨架/样式/工作区切换/renderer 逻辑/IPC 桥）；前端全量 **90/90**；Python 全量 **798 OK / 7 skipped**（新增 `test_current_outfit_status_payload`）。
 - 真实验收：起服务 HTTP 实测——GET status 200（9 套时装含樱雪/青枫/极光 + 10 色调 + 当前穿戴）、POST 换装樱雪×樱雪粉 200（缓存命中 cost=轻）、状态持久化、验收后还原穿戴。
 
+**第三梯队 C · 手机页嵌 Live2D 角色（2026-10-20 完成）**：手机端陪伴页顶部出现墨灵 Live2D 形象（桌面壳用 moling:// 私有协议，手机 WebView 无此协议 → 后端新增模型只读端点按需供给）。
+
+- 后端：新增 `GET /v1/model/asset?path=<相对路径>`——只读服务 Character 目录内模型资源（model3.json/moc3/纹理/动作/表情），白名单扩展名 + 防目录穿越（`..` 直接 400，越界 404，非本机访问仍需 token）。
+- 手机页：顶部新增角色舞台（`avatar-stage`）——运行时（`live2dcubismcore.min.js` + `live2d-runtime.js` 共约 1.5MB）打包进 mobile/vendor（App 内嵌、离线可显示形象）；app.js 预取 model3.json → 把 FileReferences 子资源改写为后端绝对 asset URL → Blob 加载 → 等比适配 + 自动眨眼 + 回复时开口说话（时长按回复长度估算）；任何失败自动降级为文字形象，不阻塞聊天。
+- 测试：新增 `test_model_asset.py` 5 项（真实 model3 可读/目录穿越拒绝/越界拒绝/扩展名白名单/空参）；前端 `mobile.test.cjs` 新增 Live2D 舞台断言（HTML 骨架/样式/运行时引入/app.js 逻辑/后端端点）；前端全量 **91/91**、Python 全量 **803 OK / 7 skipped**。
+- 真实验收：起服务 HTTP 实测——model3 清单 200（Moc + 11 张纹理）、moc3 200（22.8MB）、纹理 200（408KB）、`../../api.py` 400、越界 `api.py` 404。
+
+
 
 
 
