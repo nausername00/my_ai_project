@@ -132,6 +132,23 @@ def test_detect_fashion_new_aliases() -> None:
     # 晨光 / 繁花（墨灵现场自主设计）
     assert detect_fashion_command("换装晨光")["outfit_id"] == "dawn_silk"
     assert detect_fashion_command("换上繁花")["outfit_id"] == "bloom_silk"
+    # M10 时装库扩展（第三梯队 A：樱雪/青枫/极光进换装识别）
+    assert detect_fashion_command("今天穿樱雪")["outfit_id"] == "sakura_snow"
+    assert detect_fashion_command("换上青枫")["outfit_id"] == "maple_moss"
+    assert detect_fashion_command("穿极光的")["outfit_id"] == "aurora"
+
+
+def test_detect_fashion_m10_tones() -> None:
+    from fashion_service import detect_fashion_command
+
+    # M10 新增色调：樱雪粉 / 枫叶橙 / 极夜蓝
+    assert detect_fashion_command("穿樱雪粉的青花云纹")["tone_id"] == "sakura"
+    assert detect_fashion_command("换上枫叶橙")["tone_id"] == "maple"
+    assert detect_fashion_command("穿极夜蓝")["tone_id"] == "aurora"
+    # 带时装+色调的组合指令
+    cmd = detect_fashion_command("换上极光的极夜蓝")
+    assert cmd["outfit_id"] == "aurora"
+    assert cmd["tone_id"] == "aurora"
 
 
 def test_detect_fashion_single_char_fallback() -> None:

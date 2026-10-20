@@ -35,9 +35,18 @@ _OUTFIT_ALIAS = (
     ("翡翠", "emerald_flow"),
     ("晨光", "dawn_silk"),
     ("繁花", "bloom_silk"),
+    # M10 时装库扩展（第三梯队 A：新时装进换装识别）
+    ("樱雪", "sakura_snow"),
+    ("樱花", "sakura_snow"),
+    ("青枫", "maple_moss"),
+    ("枫叶", "maple_moss"),
+    ("秋枫", "maple_moss"),
+    ("极光", "aurora"),
     # 单字兜底（长词已在前，只有未命中长词时才会到这里）
     ("蓝", "starlight_silk"),
     ("绿", "emerald_flow"),
+    ("枫", "maple_moss"),
+    ("樱", "sakura_snow"),
 )
 _TONE_ALIAS = (
     ("深蓝灰", "royal"),
@@ -53,6 +62,15 @@ _TONE_ALIAS = (
     ("翡翠绿", "emerald"),
     ("晨光金", "dawn"),
     ("花雾粉", "bloom"),
+    # M10 时装库扩展色调（第三梯队 A）
+    ("樱雪粉", "sakura"),
+    ("樱粉", "sakura"),
+    ("雪粉", "sakura"),
+    ("枫叶橙", "maple"),
+    ("枫橙", "maple"),
+    ("极夜蓝", "aurora"),
+    ("极光蓝", "aurora"),
+    ("极夜", "aurora"),
 )
 _COMMAND_CUES = ("穿", "换装", "换上", "换身", "造型")
 
