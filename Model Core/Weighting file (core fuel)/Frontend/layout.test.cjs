@@ -166,7 +166,8 @@ test("floating companion stays reachable and respects fullscreen apps", () => {
   assert.match(main, /Math\.max\(0, workArea\.height - size\.height\)/);
   assert.match(main, /setAlwaysOnTop\(true, "floating"\)/);
   assert.doesNotMatch(main, /setAlwaysOnTop\(true, "screen-saver"\)/);
-  assert.match(floating, /#panel:not\(\.expanded\) \.interact-menu\s*\{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  // 折叠态互动菜单：3 列网格容纳补全后的 9 项互动 + 操作项（2 列会溢出 144px 窗口）
+  assert.match(floating, /#panel:not\(\.expanded\) \.interact-menu\s*\{[\s\S]*?grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(floating, /#panel:not\(\.expanded\) \.interact-menu\[hidden\]\s*\{\s*display: none/);
   assert.match(floating, /@keyframes companion-breathe/);
   assert.match(floating, /prefers-reduced-motion: reduce/);

@@ -132,7 +132,7 @@
     width: 100%;
     min-width: 0;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     align-content: center;
     gap: 2px;
   }
@@ -306,6 +306,52 @@
   #panel:not(.expanded) #thinking-box {
     display: none;
   }
+
+  /* 互动即时反馈气泡：点互动工具后角色在悬浮窗内先开口 */
+  #interact-bubble {
+    position: absolute;
+    right: 10px;
+    top: 74px;
+    max-width: 170px;
+    background: rgba(26, 28, 38, 0.97);
+    border: 1px solid rgba(155, 140, 255, 0.35);
+    border-radius: 12px;
+    padding: 8px 11px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+    transition: opacity 0.22s ease, transform 0.22s ease;
+    z-index: 25;
+    pointer-events: none;
+    -webkit-app-region: no-drag;
+  }
+  #interact-bubble::before {
+    content: "";
+    position: absolute;
+    left: -6px;
+    top: 16px;
+    width: 10px;
+    height: 10px;
+    background: rgba(26, 28, 38, 0.97);
+    border-left: 1px solid rgba(155, 140, 255, 0.35);
+    border-bottom: 1px solid rgba(155, 140, 255, 0.35);
+    transform: rotate(45deg);
+  }
+  #interact-bubble.show {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  #panel:not(.expanded) #interact-bubble {
+    right: 4px;
+    top: 46px;
+    max-width: 150px;
+    font-size: 11px;
+    padding: 6px 9px;
+  }
+  #panel:not(.expanded) #interact-bubble::before { display: none; }
   #notifications::-webkit-scrollbar { width: 4px; }
   #notifications::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 
@@ -372,10 +418,15 @@
         <span id="avatar-text">灵</span>
       </div>
       <div id="interact-menu" class="interact-menu" role="menu" aria-label="互动工具" hidden>
-        <button type="button" data-action="chat" data-chat="摸摸头">✋ 摸摸头</button>
-        <button type="button" data-action="chat" data-chat="你好呀~">👋 打个招呼</button>
-        <button type="button" data-action="chat" data-chat="今天有什么想聊的吗？">💬 今天聊什么</button>
-        <button type="button" data-action="chat" data-chat="看看你现在的造型">🎨 看看造型</button>
+        <button type="button" data-action="chat" data-chat="摸摸头" data-line="唔…好舒服~（蹭蹭你的手心）" data-mood="happy">✋ 摸摸头</button>
+        <button type="button" data-action="chat" data-chat="戳戳脸" data-line="呀！别戳啦，痒痒的~（捂住脸偷看）" data-mood="shy">👆 戳戳脸</button>
+        <button type="button" data-action="chat" data-chat="击掌" data-line="啪！好耶~击掌成功！（眼睛亮晶晶）" data-mood="happy">🤝 击个掌</button>
+        <button type="button" data-action="chat" data-chat="请你吃甜点" data-line="诶？给我的吗！谢谢~（小口小口地吃）" data-mood="warm">🍰 投喂甜点</button>
+        <button type="button" data-action="chat" data-chat="夸夸你" data-line="诶嘿嘿…被你这么夸，开心到转圈圈~" data-mood="shy">✨ 夸夸我</button>
+        <button type="button" data-action="chat" data-chat="说晚安" data-line="晚安呀~明天也要一起哦。（轻轻挥手）" data-mood="warm">🌙 说晚安</button>
+        <button type="button" data-action="chat" data-chat="你好呀~" data-line="嗨~你来啦！等你有一会儿了哦。" data-mood="happy">👋 打个招呼</button>
+        <button type="button" data-action="chat" data-chat="今天有什么想聊的吗？" data-line="嗯…想听故事，还是想知道我今天的小发现？" data-mood="curious">💬 今天聊什么</button>
+        <button type="button" data-action="chat" data-chat="看看你现在的造型" data-line="（转了个圈）怎么样？这是我今天的造型哦~" data-mood="curious">🎨 看看造型</button>
         <div class="menu-sep"></div>
         <button type="button" data-action="main">⌂ 回到主窗口</button>
         <button type="button" data-action="hide">− 隐藏悬浮窗</button>
@@ -386,6 +437,7 @@
         <div id="thinking-box" hidden></div>
         <div id="notifications"></div>
       </div>
+      <div id="interact-bubble" hidden></div>
     </div>
   </div>
 
@@ -474,6 +526,56 @@
   }
 
   const interactMenu = document.getElementById("interact-menu");
+  const MOOD_COLORS = {
+    calm: "#7c8cf8",
+    happy: "#ffd166",
+    curious: "#7dd3fc",
+    surprised: "#f8a5ff",
+    worried: "#ff9f6e",
+    shy: "#ff8fab",
+    warm: "#ffb84d",
+    caring: "#6ee7b7",
+  };
+  const bubbleEl = document.getElementById("interact-bubble");
+  let bubbleTimer = null;
+
+  // 摸头奖励（轻量游戏化）：本机计数，每 5 次触发一次奖励台词
+  const HEADPAT_KEY = "moling_floating_headpat_count";
+  function headpatFeedback() {
+    let count = 0;
+    try { count = Number(localStorage.getItem(HEADPAT_KEY) || "0") || 0; } catch { /* 忽略 */ }
+    count += 1;
+    try { localStorage.setItem(HEADPAT_KEY, String(count)); } catch { /* 忽略 */ }
+    if (count % 5 === 0) {
+      return { line: `（被你摸了 ${count} 次啦~）今天也最喜欢你！蹭蹭~`, mood: "happy" };
+    }
+    return { line: "唔…好舒服~（蹭蹭你的手心）", mood: "happy" };
+  }
+
+  // 互动即时反馈：悬浮窗内角色先开口（台词气泡 + 情绪表情联动），
+  // 同时 sendChat 让主墨灵完整回应（对话区正式回复 + 后端情绪）。
+  function showInteractFeedback(line, moodKey) {
+    if (!bubbleEl || typeof line !== "string" || !line.trim()) return;
+    bubbleEl.textContent = line.trim();
+    bubbleEl.hidden = false;
+    bubbleEl.classList.remove("show");
+    void bubbleEl.offsetWidth; // 强制 reflow 触发过渡
+    bubbleEl.classList.add("show");
+    const color = MOOD_COLORS[moodKey] || "";
+    if (color) {
+      avatarEl.style.setProperty("--mood-halo", color);
+      const dot = document.getElementById("mood-dot");
+      dot.style.background = color;
+      dot.style.boxShadow = `0 0 10px ${color}`;
+      window.MolingLive2D?.setExpressionByMood(moodKey);
+    }
+    clearTimeout(bubbleTimer);
+    bubbleTimer = setTimeout(() => {
+      bubbleEl.classList.remove("show");
+      setTimeout(() => { bubbleEl.hidden = true; }, 240);
+    }, 2600);
+  }
+
   function closeInteractMenu() {
     interactMenu.hidden = true;
     avatarEl.setAttribute("aria-expanded", "false");
@@ -507,6 +609,14 @@
     if (!item) return;
     const action = item.dataset.action;
     if (action === "chat") {
+      let line = item.dataset.line;
+      let mood = item.dataset.mood;
+      if (item.dataset.chat === "摸摸头") {
+        const reward = headpatFeedback();
+        line = reward.line;
+        mood = reward.mood;
+      }
+      showInteractFeedback(line, mood);
       window.floating.sendChat(item.dataset.chat).catch((error) => {
         console.error("Could not send chat from floating window:", error);
       });

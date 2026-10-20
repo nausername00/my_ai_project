@@ -242,3 +242,48 @@ test("floating avatar loading falls back to base art when mood art cannot be rea
   assert.equal(sent[0].avatarDataUrl, "data:image/png;base64,base.png");
   assert.equal(sent[0].avatarFallbackDataUrl, null);
 });
+
+test("floating interact menu exposes all interaction tools with feedback lines", () => {
+  const buttons = [...floatingHtml.matchAll(
+    /<button[^>]*data-action="chat"[^>]*data-chat="([^"]+)"\s+data-line="([^"]*)"\s+data-mood="([^"]+)"/g,
+  )].map((m) => ({ chat: m[1], line: m[2], mood: m[3] }));
+
+  // 互动菜单补全：9 项互动工具全部带即时台词与情绪
+  const expectedChats = [
+    "摸摸头", "戳戳脸", "击掌", "请你吃甜点", "夸夸你", "说晚安",
+    "你好呀~", "今天有什么想聊的吗？", "看看你现在的造型",
+  ];
+  assert.equal(buttons.length, expectedChats.length);
+  for (const chat of expectedChats) {
+    const item = buttons.find((b) => b.chat === chat);
+    assert.ok(item, `missing interact menu item: ${chat}`);
+    assert.ok(item.line.trim(), `missing feedback line for ${chat}`);
+    assert.ok(item.mood, `missing mood for ${chat}`);
+  }
+});
+
+test("floating headpat reward counts locally and rewards every 5th pat", () => {
+  const store = new Map();
+  const sandbox = {
+    localStorage: {
+      getItem: (key) => (store.has(key) ? store.get(key) : null),
+      setItem: (key, value) => store.set(key, String(value)),
+    },
+  };
+  const source = extractBetween(
+    floatingHtml,
+    "const HEADPAT_KEY = ",
+    "// 互动即时反馈：悬浮窗内角色先开口",
+  );
+  vm.runInNewContext(`${source}; globalThis.headpatFeedback = headpatFeedback;`, sandbox);
+  const headpatFeedback = sandbox.headpatFeedback;
+
+  for (let i = 1; i <= 4; i += 1) {
+    const feedback = headpatFeedback();
+    assert.equal(feedback.mood, "happy");
+    assert.match(feedback.line, /好舒服/);
+  }
+  const reward = headpatFeedback();
+  assert.match(reward.line, /最喜欢你/);
+  assert.match(reward.line, /5 次/);
+});
