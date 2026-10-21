@@ -1,0 +1,7 @@
+{
+    "name": "霓影月",
+    "idea": "我愿意用细腻的笔触勾勒出月光洒落的夜晚，捕捉那份静谧而神秘的氛围。",
+    "tone_label": "月光银白",
+    "tone_rgb": [215, 245, 255],
+    "code": "import numpy as np\nimport PIL.Image\n\n# 固定随机种子\nnp.random.seed(42)\n\n# 定义主色调\nMORNING_LIGHT = np.array([255, 255, 255])  # 主色调为白色\nMORNING_LIGHT[:2] = MORNING_LIGHT[2]  # 确保主色调中R和G更高\nMORNING_LIGHT = MORNING_LIGHT.astype(int)\n\n# 创建2048x2048的RGB数组\nimg = np.zeros((2048, 2048, 3), dtype=np.uint8)\nfor x in range(2048):\n    for y in range(2048):\n        img[x, y] = MORNING_LIGHT\n\n# 生成无缝贴图\nimg = PIL.Image.fromarray(img)\nimg = img.resize((2048, 2048), PIL.Image.Resampling.BICUBIC)\nimg = img.transpose(PIL.Image.Transpose.FLIP_LEFT_RIGHT)\nimg = img.transpose(PIL.Image.Transpose.ROTATE_90)\nimg = img.transpose(PIL.Image.Transpose.FLIP_TOP_BOTTOM)\n\n# 保存图片\nimg.save('m13_texture_moon.jpg')\n"  
+}

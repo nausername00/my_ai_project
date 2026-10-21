@@ -77,6 +77,13 @@
       "texture": "m12_texture_gold_v2.jpg",
       "target": "body_ring",
       "desc": "鎏金幻影·晚霞镀金幻化成蝶（C 收官命题②·墨灵原创设计 v2 暖亮均匀）"
+    },
+    {
+      "id": "moon",
+      "name": "霓影月",
+      "texture": "m13_texture_moon_v3.jpg",
+      "target": "body_ring",
+      "desc": "霓影月·月光银白静谧月夜（C 收官命题③·墨灵执行者代码·v3 星点 800）"
     }
   ],
   "tones": {
@@ -139,6 +146,11 @@
       0.9137,
       0.5333,
       0.0431
+    ],
+    "moon_silver": [
+      0.8431,
+      0.9608,
+      1.0
     ]
   },
   "state_path": "fashion_state.json"
