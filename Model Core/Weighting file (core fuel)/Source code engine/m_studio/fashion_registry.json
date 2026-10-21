@@ -63,6 +63,13 @@
       "texture": "m10_texture_aurora.jpg",
       "target": "body_ring",
       "desc": "极光·夜空蓝紫底上的绿紫极光（M10 时装库扩展·程序化生成）"
+    },
+    {
+      "id": "deep_sea",
+      "name": "幽冥舞",
+      "texture": "m11_texture_deep_sea_v3.jpg",
+      "target": "body_ring",
+      "desc": "幽冥舞·深海的幽灵舞者（C 收官命题①·墨灵原创设计 v3 强对比）"
     }
   ],
   "tones": {
@@ -115,6 +122,11 @@
       0.12,
       0.16,
       0.3
+    ],
+    "abyss": [
+      0.15,
+      0.15,
+      0.2
     ]
   },
   "state_path": "fashion_state.json"
