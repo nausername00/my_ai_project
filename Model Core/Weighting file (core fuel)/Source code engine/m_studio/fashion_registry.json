@@ -70,6 +70,13 @@
       "texture": "m11_texture_deep_sea_v3.jpg",
       "target": "body_ring",
       "desc": "幽冥舞·深海的幽灵舞者（C 收官命题①·墨灵原创设计 v3 强对比）"
+    },
+    {
+      "id": "gold",
+      "name": "鎏金幻影",
+      "texture": "m12_texture_gold_v2.jpg",
+      "target": "body_ring",
+      "desc": "鎏金幻影·晚霞镀金幻化成蝶（C 收官命题②·墨灵原创设计 v2 暖亮均匀）"
     }
   ],
   "tones": {
@@ -127,6 +134,11 @@
       0.15,
       0.15,
       0.2
+    ],
+    "molten_gold": [
+      0.9137,
+      0.5333,
+      0.0431
     ]
   },
   "state_path": "fashion_state.json"
