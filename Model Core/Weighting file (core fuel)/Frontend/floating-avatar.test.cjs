@@ -248,10 +248,12 @@ test("floating interact menu exposes all interaction tools with feedback lines",
     /<button[^>]*data-action="chat"[^>]*data-chat="([^"]+)"\s+data-line="([^"]*)"\s+data-mood="([^"]+)"/g,
   )].map((m) => ({ chat: m[1], line: m[2], mood: m[3] }));
 
-  // 互动菜单补全：9 项互动工具全部带即时台词与情绪
+  // 互动菜单补全：12 项互动工具全部带即时台词与情绪
+  // （9 项基础 + A 悬浮窗完善新增：抱抱我 / 猜猜心情 / 讲个故事）
   const expectedChats = [
     "摸摸头", "戳戳脸", "击掌", "请你吃甜点", "夸夸你", "说晚安",
     "你好呀~", "今天有什么想聊的吗？", "看看你现在的造型",
+    "抱抱我", "猜猜我的心情", "讲个故事",
   ];
   assert.equal(buttons.length, expectedChats.length);
   for (const chat of expectedChats) {
@@ -286,4 +288,11 @@ test("floating headpat reward counts locally and rewards every 5th pat", () => {
   const reward = headpatFeedback();
   assert.match(reward.line, /最喜欢你/);
   assert.match(reward.line, /5 次/);
+});
+
+test("floating expanded interact menu scrolls instead of overflowing the window", () => {
+  // 展开态窗口 340x640；菜单自 top:360 起，加项后必须可滚动，否则超出窗口底部
+  assert.match(floatingHtml, /#panel\.expanded \.interact-menu\s*\{\s*top: 360px;/);
+  assert.match(floatingHtml, /max-height: 240px;\s*overflow-y: auto;/);
+  assert.match(floatingHtml, /#panel\.expanded \.interact-menu::-webkit-scrollbar/);
 });

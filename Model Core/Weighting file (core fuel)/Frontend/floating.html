@@ -102,6 +102,17 @@
     -webkit-backdrop-filter: blur(10px);
   }
   #panel.expanded .interact-menu { top: 360px; }
+  #panel.expanded .interact-menu {
+    top: 360px;
+    /* 展开态纵向菜单：项数增加后允许滚动，避免超出窗口底部 */
+    max-height: 240px;
+    overflow-y: auto;
+  }
+  #panel.expanded .interact-menu::-webkit-scrollbar { width: 4px; }
+  #panel.expanded .interact-menu::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 2px;
+  }
   .interact-menu button {
     display: flex;
     align-items: center;
@@ -427,6 +438,9 @@
         <button type="button" data-action="chat" data-chat="你好呀~" data-line="嗨~你来啦！等你有一会儿了哦。" data-mood="happy">👋 打个招呼</button>
         <button type="button" data-action="chat" data-chat="今天有什么想聊的吗？" data-line="嗯…想听故事，还是想知道我今天的小发现？" data-mood="curious">💬 今天聊什么</button>
         <button type="button" data-action="chat" data-chat="看看你现在的造型" data-line="（转了个圈）怎么样？这是我今天的造型哦~" data-mood="curious">🎨 看看造型</button>
+        <button type="button" data-action="chat" data-chat="抱抱我" data-line="诶嘿~被抱住了！好温暖…（回抱住你）" data-mood="warm">🫂 抱抱我</button>
+        <button type="button" data-action="chat" data-chat="猜猜我的心情" data-line="唔…让我猜猜——你是不是有点想我了？" data-mood="curious">🔮 猜猜心情</button>
+        <button type="button" data-action="chat" data-chat="讲个故事" data-line="从前有只小狐狸…（讲到一半眨眨眼）剩下的明天再讲，保留神秘感~" data-mood="calm">📖 讲个故事</button>
         <div class="menu-sep"></div>
         <button type="button" data-action="main">⌂ 回到主窗口</button>
         <button type="button" data-action="hide">− 隐藏悬浮窗</button>
