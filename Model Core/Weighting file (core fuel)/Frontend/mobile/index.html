@@ -20,10 +20,13 @@
     </div>
   </header>
 
-  <!-- 第三梯队 C：手机端 Live2D 角色舞台（模型从电脑后端 /v1/model/asset 按需加载） -->
-  <div class="avatar-stage" id="avatarStage" role="img" aria-label="墨灵形象">
+  <!-- 第三梯队 C：手机端 Live2D 角色舞台（模型从电脑后端 /v1/model/asset 按需加载）
+       B 手机入侵：点击舞台 = 摸摸头（互动反馈 + 摸头奖励），情绪联动表情与光晕 -->
+  <div class="avatar-stage" id="avatarStage" role="button" tabindex="0"
+       aria-label="墨灵形象，点击摸摸头" title="点击摸摸头">
     <div id="live2d-stage" class="live2d-stage" hidden></div>
     <div class="avatar-fallback" id="avatarFallback" aria-hidden="true">墨</div>
+    <div id="stageBubble" class="stage-bubble" role="status" hidden></div>
   </div>
 
   <div class="settings" id="settingsPanel" hidden>
@@ -51,6 +54,14 @@
     <div class="setting-row row-inline">
       <label for="notifyToggle">新回复系统通知（需 HTTPS/本机；HTTP 局域网不可用）</label>
       <button type="button" class="toggle" id="notifyToggle" role="switch" aria-checked="false">关</button>
+    </div>
+    <div class="setting-row row-inline">
+      <label for="wakeToggle">语音接收（说唤醒词「墨灵墨灵」→ 墨灵回应 → 再对我说一句，自动进对话；需 HTTPS/本机）</label>
+      <button type="button" class="toggle" id="wakeToggle" role="switch" aria-checked="false">关</button>
+    </div>
+    <div class="setting-row">
+      <label for="wakeWord">唤醒词（可自定义，如：墨灵墨灵 / 墨灵在么）</label>
+      <input type="text" id="wakeWord" value="墨灵墨灵" maxlength="12" autocomplete="off" spellcheck="false" />
     </div>
     <div class="setting-row row-inline">
       <label for="clearBtn">清空本机聊天记录（不影响电脑端记忆）</label>

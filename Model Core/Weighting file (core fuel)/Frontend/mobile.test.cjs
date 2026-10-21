@@ -180,3 +180,67 @@ test("manifest keeps standalone PWA shell with icon", () => {
   assert.match(manifest, /"start_url": "\/v1\/mobile\/index\.html"/);
   assert.match(manifest, /icon\.svg/);
 });
+
+// ---------- B 手机入侵 + 语音接收（2026-10-21） ----------
+test("mobile stage is tappable for headpat with local reward counting", () => {
+  // 舞台改为 button 语义，点击=摸头；气泡容器与标题提示存在
+  assert.match(html, /id="avatarStage" role="button"/);
+  assert.match(html, /点击摸摸头/);
+  assert.match(html, /id="stageBubble"/);
+  assert.match(app, /moling_mobile_headpat_count/);
+  // 摸头奖励：本机计数，每 5 次触发奖励台词（与桌面悬浮窗一致）
+  assert.match(app, /function headpatFeedback\(\)/);
+  assert.match(app, /被你摸了/);
+  assert.match(app, /今天也最喜欢你/);
+  // 舞台点击与键盘（无障碍）都能触发
+  assert.match(app, /avatarStageEl\.addEventListener\("click", handleHeadpat\)/);
+  assert.match(app, /event\.key === "Enter" \|\| event\.key === " "/);
+  // 气泡样式：定位 + 箭头 + 显隐过渡
+  assert.match(css, /\.avatar-stage \.stage-bubble/);
+  assert.match(css, /\.stage-bubble::before/);
+  assert.match(css, /\.stage-bubble\.show/);
+});
+
+test("mobile mood links to Live2D expression and stage halo", () => {
+  // 情绪→表情映射与桌面端一致（心心眼/星星眼/脸红/流泪）
+  assert.match(app, /MOOD_EXPRESSION_MAP = \{/);
+  assert.match(app, /happy: "心心眼"/);
+  assert.match(app, /surprised: "星星眼"/);
+  assert.match(app, /shy: "脸红"/);
+  assert.match(app, /worried: "流泪"/);
+  // 通过 expressionManager 按 Name 匹配切表情；失败静默回退
+  assert.match(app, /const defs = \(em && em\.definitions\) \|\| \[\]/);
+  assert.match(app, /em\.setExpression\(idx\)/);
+  // 舞台光晕情绪类
+  assert.match(css, /\.avatar-stage\.mood-happy/);
+  assert.match(css, /\.avatar-stage\.mood-warm/);
+  assert.match(css, /\.avatar-stage\.mood-curious/);
+  assert.match(css, /\.avatar-stage\.mood-shy/);
+  assert.match(css, /\.avatar-stage:active \.live2d-stage/);
+});
+
+test("mobile wake-word listening: toggle, custom word, respond then send", () => {
+  // 设置面板：唤醒开关 + 自定义唤醒词输入（默认「墨灵墨灵」）
+  assert.match(html, /id="wakeToggle"/);
+  assert.match(html, /id="wakeWord"/);
+  assert.match(html, /value="墨灵墨灵"/);
+  // 状态持久化 + 初始化恢复
+  assert.match(app, /moling_mobile_wake_on/);
+  assert.match(app, /moling_mobile_wake_word/);
+  assert.match(app, /DEFAULT_WAKE_WORD = "墨灵墨灵"/);
+  assert.match(app, /wakeOn = localStorage\.getItem\(WAKE_KEY\) === "1"/);
+  // 唤醒循环：等唤醒词 → 回应 → 等指令 → 发送；持续监听自动续接
+  assert.match(app, /wakePhase = "idle"/);
+  assert.match(app, /transcript\.includes\(wakeWord\) \|\| transcript\.includes\("墨灵"\)/);
+  assert.match(app, /墨灵在的哟/);
+  assert.match(app, /sendMessage\(transcript\)/);
+  assert.match(app, /rec\.continuous = true/);
+  assert.match(app, /if \(wakeOn && !wakeStopped\)/);
+  // 安全上下文限制：HTTP 局域网降级提示（与语音输入一致）
+  assert.match(app, /语音接收需要 HTTPS 或本机访问/);
+  assert.match(app, /wakeToggle\.disabled = !canSpeak/);
+  assert.match(app, /麦克风权限被拒绝/);
+  // 发送逻辑抽出 sendMessage 供输入框与唤醒共用
+  assert.match(app, /async function sendMessage\(text\)/);
+  assert.match(app, /composer\.addEventListener\("submit"/);
+});

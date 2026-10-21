@@ -407,6 +407,83 @@ async function loadLive2D() {
 }
 
 
+// ---------- B 手机入侵：摸头互动 + 情绪表情联动 ----------
+const HEADPAT_KEY = "moling_mobile_headpat_count";
+const MOOD_EXPRESSION_MAP = {
+  calm: null, happy: "心心眼", curious: "心心眼", surprised: "星星眼",
+  worried: "流泪", shy: "脸红", warm: "心心眼", caring: "星星眼",
+};
+const stageBubbleEl = document.getElementById("stageBubble");
+const avatarStageEl = document.getElementById("avatarStage");
+let stageBubbleTimer = null;
+
+// 摸头奖励（轻量游戏化，与桌面端悬浮窗一致）：本机计数，每 5 次触发奖励台词。
+function headpatFeedback() {
+  let count = 0;
+  try { count = Number(localStorage.getItem(HEADPAT_KEY) || "0") || 0; } catch { /* 忽略 */ }
+  count += 1;
+  try { localStorage.setItem(HEADPAT_KEY, String(count)); } catch { /* 忽略 */ }
+  if (count % 5 === 0) {
+    return { line: `（被你摸了 ${count} 次啦~）今天也最喜欢你！蹭蹭~`, mood: "happy" };
+  }
+  return { line: "唔…好舒服~（蹭蹭你的手心）", mood: "happy" };
+}
+
+// 舞台气泡：互动反馈即时台词（2.6s 自动消失）。
+function showStageBubble(line, moodKey) {
+  if (!stageBubbleEl || typeof line !== "string" || !line.trim()) return;
+  stageBubbleEl.textContent = line.trim();
+  stageBubbleEl.hidden = false;
+  stageBubbleEl.classList.remove("show");
+  void stageBubbleEl.offsetWidth; // 强制 reflow 触发过渡
+  stageBubbleEl.classList.add("show");
+  setStageMood(moodKey || "calm");
+  clearTimeout(stageBubbleTimer);
+  stageBubbleTimer = setTimeout(() => {
+    stageBubbleEl.classList.remove("show");
+    setTimeout(() => { stageBubbleEl.hidden = true; }, 240);
+  }, 2600);
+}
+
+// 情绪联动：舞台光晕 + Live2D 表情（心心眼/星星眼/脸红/流泪；模型没有对应表情时静默忽略）。
+function setStageMood(moodKey) {
+  const key = String(moodKey || "calm").toLowerCase();
+  avatarStageEl.classList.remove(
+    "mood-happy", "mood-warm", "mood-curious", "mood-shy",
+  );
+  if (["happy", "warm", "curious", "shy"].includes(key)) {
+    avatarStageEl.classList.add(`mood-${key}`);
+  }
+  const model = live2d && live2d.model;
+  if (!model || !model.internalModel || !model.internalModel.motionManager) return;
+  try {
+    const em = model.internalModel.motionManager.expressionManager;
+    const defs = (em && em.definitions) || [];
+    const name = MOOD_EXPRESSION_MAP[key] || null;
+    if (!name) {
+      if (em && em.setExpression) em.setExpression(0);
+      return;
+    }
+    const idx = defs.findIndex((d) => d && d.Name === name);
+    if (idx >= 0 && em && em.setExpression) em.setExpression(idx);
+  } catch { /* 表情切换失败静默（不阻塞互动） */ }
+}
+
+// 点击舞台 = 摸摸头；键盘 Enter/Space 同样支持（无障碍）。
+function handleHeadpat() {
+  const reward = headpatFeedback();
+  showStageBubble(reward.line, reward.mood);
+  startTalking(1400);
+}
+avatarStageEl.addEventListener("click", handleHeadpat);
+avatarStageEl.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    handleHeadpat();
+  }
+});
+
+
 async function api(path, payload) {
   const res = await fetch(`${API}${path}`, {
     method: "POST",
@@ -429,26 +506,24 @@ async function refreshStatus() {
   }
 }
 
-composer.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const text = input.value.trim();
-  if (!text) return;
-  input.value = "";
-  input.style.height = "auto";
-  addBubble(text, "user");
+// 发送一条消息进对话（输入框提交与语音唤醒共用）。
+async function sendMessage(text) {
+  const clean = String(text || "").trim();
+  if (!clean) return;
+  addBubble(clean, "user");
   const reply = addBubble("…", "bot");
   sendBtn.disabled = true;
   stopTalking();
   try {
     const { status, body } = await api("/generate", {
-      prompt: text,
+      prompt: clean,
       history: history.slice(-10),
     });
     if (status === 200 && typeof body.text === "string") {
       reply.textContent = body.text;
       // 回复时让 Live2D 角色开口说话（时长按回复长度估算）
       startTalking(Math.min(8000, 800 + body.text.length * 40));
-      history.push(["user", text], ["assistant", body.text]);
+      history.push(["user", clean], ["assistant", body.text]);
       persistHistory();
       setStatus(true, body.model || modelLabel.textContent);
       // 后台收到回复 → 系统通知（开关开启时）。
@@ -470,11 +545,137 @@ composer.addEventListener("submit", async (event) => {
     sendBtn.disabled = false;
     input.focus();
   }
+}
+
+composer.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  input.style.height = "auto";
+  await sendMessage(text);
 });
 
 input.addEventListener("input", () => {
   input.style.height = "auto";
   input.style.height = `${Math.min(input.scrollHeight, 120)}px`;
+});
+
+// ---------- B 语音接收：唤醒词 → 墨灵回应 → 等待下一句 → 自动进对话 ----------
+const wakeToggle = document.getElementById("wakeToggle");
+const wakeWordInput = document.getElementById("wakeWord");
+const WAKE_KEY = "moling_mobile_wake_on";
+const WAKE_WORD_KEY = "moling_mobile_wake_word";
+const DEFAULT_WAKE_WORD = "墨灵墨灵";
+let wakeOn = false;
+let wakeWord = DEFAULT_WAKE_WORD;
+let wakeRecognition = null;
+let wakePhase = "idle"; // idle=等唤醒词 | listening=已唤醒，等指令
+let wakeStopped = false;
+
+function applyWakeUI() {
+  wakeToggle.textContent = wakeOn ? "开" : "关";
+  wakeToggle.setAttribute("aria-checked", String(wakeOn));
+  wakeToggle.disabled = !canSpeak;
+  if (!canSpeak) wakeToggle.title = "语音接收需 HTTPS 或本机访问（HTTP 局域网不可用）";
+}
+
+// 唤醒回应：舞台气泡 + 开心表情 + 开口（近似"在的哟~"）。
+function wakeRespond() {
+  showStageBubble("墨灵在的哟~ 想聊什么？", "happy");
+  startTalking(1600);
+  if (document.hidden && notifyOn) sendNotification("墨灵在的哟", "语音唤醒成功，想聊什么？");
+}
+
+function startWakeListening() {
+  if (!canSpeak || !wakeOn) return;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { stopWakeListening(); return; }
+  if (wakeRecognition) { try { wakeRecognition.stop(); } catch { /* 忽略 */ } }
+  const rec = new SR();
+  rec.lang = "zh-CN";
+  rec.continuous = true;
+  rec.interimResults = false;
+  rec.onresult = (event) => {
+    const transcript = Array.from(event.results)
+      .map((r) => r[0].transcript)
+      .join("")
+      .replace(/\s+/g, "");
+    if (!transcript) return;
+    if (wakePhase === "idle") {
+      // 等唤醒词：命中（含自定义词或"墨灵"）→ 回应并进入听指令阶段
+      if (transcript.includes(wakeWord) || transcript.includes("墨灵")) {
+        wakePhase = "listening";
+        wakeRespond();
+      }
+    } else if (wakePhase === "listening") {
+      // 已唤醒：这句作为指令发送进对话，然后回到等唤醒词
+      wakePhase = "idle";
+      sendMessage(transcript);
+    }
+  };
+  rec.onerror = (event) => {
+    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      wakeOn = false;
+      persistWake();
+      applyWakeUI();
+      addBubble("语音接收：麦克风权限被拒绝，已在设置中关闭。", "bot");
+      wakeStopped = true;
+    }
+  };
+  rec.onend = () => {
+    // 持续监听：正常结束则自动续接（除非用户关闭或权限被拒）
+    if (wakeOn && !wakeStopped) {
+      try { rec.start(); } catch { /* 快速重连失败，稍后由用户重开 */ }
+    }
+  };
+  wakeRecognition = rec;
+  try {
+    rec.start();
+    wakeStopped = false;
+  } catch { /* 重复启动异常忽略 */ }
+}
+
+function stopWakeListening() {
+  wakeStopped = true;
+  if (wakeRecognition) {
+    try { wakeRecognition.stop(); } catch { /* 忽略 */ }
+    wakeRecognition = null;
+  }
+  wakePhase = "idle";
+}
+
+function persistWake() {
+  try {
+    if (wakeOn) localStorage.setItem(WAKE_KEY, "1");
+    else localStorage.removeItem(WAKE_KEY);
+    if (wakeWord.trim()) localStorage.setItem(WAKE_WORD_KEY, wakeWord.trim());
+    else localStorage.removeItem(WAKE_WORD_KEY);
+  } catch { /* 忽略存储失败 */ }
+}
+
+wakeToggle.addEventListener("click", () => {
+  if (!canSpeak) {
+    addBubble("语音接收需要 HTTPS 或本机访问（当前 HTTP 局域网不可用）。", "bot");
+    return;
+  }
+  wakeOn = !wakeOn;
+  persistWake();
+  applyWakeUI();
+  if (wakeOn) {
+    wakePhase = "idle";
+    startWakeListening();
+    addBubble(`语音接收已开启：说「${wakeWord}」唤醒我~`, "bot");
+  } else {
+    stopWakeListening();
+  }
+});
+
+wakeWordInput.addEventListener("change", () => {
+  wakeWord = wakeWordInput.value.trim() || DEFAULT_WAKE_WORD;
+  wakeWordInput.value = wakeWord;
+  persistWake();
+  if (wakeOn) startWakeListening(); // 唤醒词变更后重载监听
 });
 
 // ---------- 初始化 ----------
@@ -497,7 +698,18 @@ if ("serviceWorker" in navigator && location.protocol === "https:") {
 }
 
 tokenInput.value = apiToken;
+try {
+  wakeOn = localStorage.getItem(WAKE_KEY) === "1";
+  wakeWord = localStorage.getItem(WAKE_WORD_KEY) || DEFAULT_WAKE_WORD;
+} catch { /* 忽略读取失败，按默认关 */ }
 applyNotifyUI();
+applyWakeUI();
+wakeWordInput.value = wakeWord;
+// 上次开着语音接收 → 恢复持续监听（安全上下文内）
+if (wakeOn && canSpeak) {
+  wakePhase = "idle";
+  startWakeListening();
+}
 refreshStatus();
 setInterval(refreshStatus, 30000);
 input.focus();
