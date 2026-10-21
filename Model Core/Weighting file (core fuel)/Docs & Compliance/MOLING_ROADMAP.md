@@ -760,6 +760,13 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
 - 测试：新增 `test_model_asset.py` 5 项（真实 model3 可读/目录穿越拒绝/越界拒绝/扩展名白名单/空参）；前端 `mobile.test.cjs` 新增 Live2D 舞台断言（HTML 骨架/样式/运行时引入/app.js 逻辑/后端端点）；前端全量 **91/91**、Python 全量 **803 OK / 7 skipped**。
 - 真实验收：起服务 HTTP 实测——model3 清单 200（Moc + 11 张纹理）、moc3 200（22.8MB）、纹理 200（408KB）、`../../api.py` 400、越界 `api.py` 404。
 
+**手机端内更新机制（2026-10-21 完成）**：APK 从「内嵌完整手机页」改为「极轻壳 + 连接引导页」，手机页前端与 Live2D 模型全部从电脑端同源拉取——以后手机页一更新，手机重开 App 就是新版，**不再需要重新打包 APK**；顺带消除跨源 CORS（页面与 API 同源）。
+
+- 壳工程 `MobileApp`：新增 `launcher/index.html` 连接页（输入电脑地址 → 记忆 → 跳转 `http://<电脑>/v1/mobile/`）；服务器地址用 `@capacitor/preferences` 原生存储（Web 预览降级 localStorage）；`capacitor.config.json` webDir 由 `Frontend/mobile` 改为 `launcher`；AndroidManifest 增加 `usesCleartextTraffic="true"`（整页加载局域网 http 需要，Android 9+ 默认禁止）。
+- 手机页本体（`Frontend/mobile`）不变：仍由后端 `/v1/mobile/` 提供（含 Live2D 舞台/vendor 运行时），模型走 `/v1/model/asset`——App 整页加载后与页面同源，CORS 约束自然消失。
+- 回归：前端全量 **92/92**（新增 launcher 静态断言：webDir/preferences/跳转/cleartext）；真实 HTTP 验收——`/v1/mobile/` 页面 200（含 live2d-stage + vendor runtime + app.js）、runtime js 200（1.36MB）、model3 200（2.8KB）；`gradlew assembleDebug` 打包成功（壳内仅 launcher 引导页）。
+- 使用方式：手机装新 APK → 打开填电脑 IP（不填端口默认 8000）→ 自动进入手机页；以后电脑端更新手机页，手机重开 App（或下拉刷新）即得新版，无需重装。
+
 
 
 

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>墨灵 · 连接</title>
+<style>
+  :root {
+    --bg: #10131c;
+    --panel: #1a1f2c;
+    --text: #e8eaf2;
+    --muted: #8b93a7;
+    --accent: #6ea8ff;
+    --accent-dim: rgba(110, 168, 255, 0.16);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    padding-top: calc(24px + env(safe-area-inset-top));
+    gap: 18px;
+  }
+  .brand { text-align: center; }
+  .brand .name { font-size: 30px; font-weight: 700; letter-spacing: 2px; }
+  .brand .name b { color: var(--accent); }
+  .brand .tag { margin-top: 8px; font-size: 13px; color: var(--muted); }
+  .card {
+    width: 100%;
+    max-width: 360px;
+    background: var(--panel);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .card label { font-size: 13px; color: var(--muted); }
+  .card input {
+    width: 100%;
+    min-height: 48px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    font-size: 16px;
+    padding: 0 14px;
+    outline: none;
+  }
+  .card input:focus { border-color: var(--accent); }
+  .card .hint { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .connect {
+    width: 100%;
+    min-height: 48px;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #0b1020;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .connect:active { opacity: 0.85; }
+  .connect:disabled { opacity: 0.5; }
+  .status { font-size: 12px; color: var(--muted); min-height: 16px; text-align: center; }
+  .status .ok { color: #34d399; }
+  .status .err { color: #f87171; }
+</style>
+</head>
+<body>
+  <div class="brand">
+    <div class="name">墨<b>灵</b></div>
+    <div class="tag">你的本地 AI 伙伴 · 连接电脑端即可见面</div>
+  </div>
+  <div class="card">
+    <label for="server">电脑端墨灵地址</label>
+    <input id="server" type="text" inputmode="url" autocapitalize="off" spellcheck="false"
+           placeholder="如 192.168.1.5:8000">
+    <button id="connect" class="connect">连接墨灵</button>
+    <div class="hint">手机与电脑需在同一个网络，电脑端服务保持开启。支持 IP 或 IP:端口（不填端口默认 8000）。地址会保存在本机，下次打开自动带出。</div>
+  </div>
+  <div id="status" class="status"></div>
+
+<script>
+(function () {
+  "use strict";
+  var STORE_KEY = "moling_launcher_server";
+
+  // 原生存储（Capacitor 壳内跨页面共享）；Web 预览时降级 localStorage
+  function store() {
+    var prefs = window.Capacitor && window.Capacitor.Preferences;
+    return prefs || null;
+  }
+  function getSaved() {
+    return new Promise(function (resolve) {
+      var p = store();
+      if (!p) { resolve(localStorage.getItem(STORE_KEY) || ""); return; }
+      p.get({ key: STORE_KEY }).then(function (r) { resolve(r.value || ""); })
+       .catch(function () { resolve(""); });
+    });
+  }
+  function saveAddress(v) {
+    var p = store();
+    if (!p) { localStorage.setItem(STORE_KEY, v); return Promise.resolve(); }
+    return p.set({ key: STORE_KEY, value: v });
+  }
+
+  // 归一化输入 → http://host[:port]
+  function normalize(input) {
+    var s = (input || "").trim();
+    if (!s) return "";
+    s = s.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+    var host = s, port = "";
+    var m = s.match(/^(\S+?):(\d{1,5})$/);
+    if (m) { host = m[1]; port = m[2]; }
+    else if (!/:\d+$/.test(s)) { port = "8000"; }
+    return "http://" + host + (port ? ":" + port : "");
+  }
+
+  var input = document.getElementById("server");
+  var btn = document.getElementById("connect");
+  var statusEl = document.getElementById("status");
+
+  getSaved().then(function (v) { input.value = v; });
+
+  btn.addEventListener("click", function () {
+    var url = normalize(input.value);
+    if (!url) {
+      statusEl.textContent = "请先填写电脑端地址";
+      statusEl.className = "status err";
+      return;
+    }
+    btn.disabled = true;
+    statusEl.textContent = "正在连接电脑端的墨灵…";
+    statusEl.className = "status ok";
+    saveAddress(input.value.trim()).then(function () {
+      window.location.href = url + "/v1/mobile/";
+    }).catch(function () {
+      window.location.href = url + "/v1/mobile/";
+    });
+  });
+
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") btn.click();
+  });
+})();
+</script>
+</body>
+</html>
