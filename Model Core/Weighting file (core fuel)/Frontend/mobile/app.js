@@ -543,9 +543,8 @@ function setStageMood(moodKey) {
 
 // 点击舞台 = 摸摸头；键盘 Enter/Space 同样支持（无障碍）。
 function handleHeadpat() {
-  const reward = headpatFeedback();
-  showStageBubble(reward.line, reward.mood);
-  startTalking(1400);
+  // 步骤③：舞台摸头走真调后端（电脑+手机共享计数）；离线时降级本机反馈
+  callInteract("摸摸头", "唔…好舒服~（蹭蹭你的手心）", "happy");
 }
 avatarStageEl.addEventListener("click", handleHeadpat);
 avatarStageEl.addEventListener("keydown", (event) => {
@@ -574,12 +573,88 @@ interactBtn.addEventListener("click", () => {
 });
 
 interactMenu.addEventListener("click", (event) => {
-  const item = event.target.closest("button[data-line]");
+  const item = event.target.closest("button[data-prompt]");
   if (!item) return;
   setInteractMenu(true); // 保持菜单展开，方便连续互动
-  showStageBubble(item.dataset.line, item.dataset.mood);
-  startTalking(1500);
+  callInteract(item.dataset.prompt, item.dataset.line, item.dataset.mood);
 });
+
+// ── 手机端 3.0 步骤③ 互动真调后端 ──
+// 互动指令经 /v1/generate 走后端真实演出（摸头计数/夸夸/换装由后端状态驱动），
+// 与电脑端共享同一份状态；后端不可达时降级为本机台词，保证离线可玩。
+const INTERACT_FALLBACK_LINE = {
+  摸摸头: "唔…好舒服~（蹭蹭你的手心）",
+  抱抱我: "诶嘿~被抱住了！好温暖…（回抱住你）",
+  夸夸我: "诶嘿嘿…被你这么夸，开心到转圈圈~",
+  投喂甜点: "诶？给我的吗！谢谢~（小口小口地吃）",
+  说晚安: "晚安呀~明天也要一起哦。（轻轻挥手）",
+  今天聊什么: "嗯…想听故事，还是想知道我今天的小发现？",
+};
+const INTERACT_FALLBACK_MOOD = {
+  摸摸头: "happy", 抱抱我: "warm", 夸夸我: "shy",
+  投喂甜点: "warm", 说晚安: "warm", 今天聊什么: "curious",
+};
+let interactBusy = false;
+async function callInteract(prompt, fallbackLine, fallbackMood) {
+  if (interactBusy) return;
+  interactBusy = true;
+  try {
+    const { status, body } = await api("/generate", {
+      prompt: String(prompt || "").trim(),
+      history: history.slice(-10),
+    });
+    if (status === 200 && typeof body.text === "string") {
+      const text = body.text;
+      const mood = body.mood || body.affect?.mood || fallbackMood || "calm";
+      // 后端真演出：气泡 + 情绪联动 + 口型
+      showStageBubble(text, mood);
+      setStageMood(mood);
+      startTalking(Math.min(6000, 600 + text.length * 40));
+      // 互动内容进对话历史（更沉浸）
+      history.push(["user", String(prompt || "").trim()], ["assistant", text]);
+      persistHistory();
+      // 摸头计数真数据：电脑 + 手机共享同一份（后端状态文件）
+      const hp = body.headpat;
+      if (hp && Number.isFinite(hp.count)) {
+        try { localStorage.setItem(HEADPAT_KEY, String(hp.count)); } catch { /* 忽略 */ }
+        updateLoveHUD(hp.count);
+      }
+      // 换装演出：HUD 提示当前造型
+      if (body.response_kind === "fashion" && body.fashion?.outfit_name) {
+        const note = document.createElement("div");
+        note.className = "stage-bubble show";
+        note.textContent = `✨ 当前造型：${body.fashion.outfit_name}`;
+        note.style.bottom = "74px";
+        note.style.opacity = "1";
+        avatarStageEl.appendChild(note);
+        setTimeout(() => note.remove(), 3200);
+      }
+      return;
+    }
+    // 未授权：引导填 token；其他错误降级本地
+    if (status === 401) {
+      settingsPanel.hidden = false;
+      tokenInput.focus();
+      showStageBubble("诶？手机还没拿到钥匙…点右上角 ⚙ 填 API Token 就能真正互动啦~", "curious");
+      return;
+    }
+    showStageBubble(fallbackLine, fallbackMood);
+    startTalking(1500);
+  } catch {
+    // 离线降级：本地台词（游戏化不中断）；摸头仍累计本机计数
+    if (String(prompt || "") === "摸摸头") {
+      try {
+        const n = readLoveCount() + 1;
+        localStorage.setItem(HEADPAT_KEY, String(n));
+        updateLoveHUD(n);
+      } catch { /* 忽略 */ }
+    }
+    showStageBubble(fallbackLine, fallbackMood);
+    startTalking(1500);
+  } finally {
+    interactBusy = false;
+  }
+}
 
 dockChat.addEventListener("click", () => {
   setInteractMenu(false);
