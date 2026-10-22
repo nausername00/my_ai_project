@@ -9,24 +9,31 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="identity">
-      <span class="dot" id="statusDot"></span>
-      <strong id="companionName">墨灵</strong>
+  <!-- 手机端 3.0 步骤② 游戏化界面：
+       全屏墨灵舞台 + 顶部 HUD（心情/好感/电量）+ 底部工具栏 + 互动菜单 -->
+  <div class="stage-shell" id="stageShell">
+    <!-- 第三梯队 C：手机端 Live2D 角色舞台（模型从电脑后端 /v1/model/asset 按需加载）
+         B 手机入侵：点击舞台 = 摸摸头（互动反馈 + 摸头奖励），情绪联动表情与光晕 -->
+    <div class="avatar-stage" id="avatarStage" role="button" tabindex="0"
+         aria-label="墨灵形象，点击摸摸头" title="点击摸摸头">
+      <div id="live2d-stage" class="live2d-stage" hidden></div>
+      <div class="avatar-fallback" id="avatarFallback" aria-hidden="true">墨</div>
+      <div id="stageBubble" class="stage-bubble" role="status" hidden></div>
     </div>
-    <div class="top-actions">
-      <span class="model" id="modelLabel">…</span>
-      <button type="button" class="gear" id="settingsBtn" aria-label="设置">⚙</button>
+    <!-- 游戏 HUD：身份 + 心情 / 好感 / 电量（好感为本地互动雏形，电量读真电池） -->
+    <div class="hud" id="hud" aria-hidden="false">
+      <div class="hud-left">
+        <span class="dot" id="statusDot"></span>
+        <strong id="companionName">墨灵</strong>
+        <span class="model" id="modelLabel">…</span>
+      </div>
+      <div class="hud-right">
+        <span class="hud-chip" id="hudMood" title="心情"><span class="hud-icon" id="hudMoodIcon">◡</span><span id="hudMoodText">平静</span></span>
+        <span class="hud-chip" id="hudLove" title="好感"><span class="hud-icon">❤</span><span id="hudLoveText">萌新</span><span class="hud-bar"><i id="hudLoveBar"></i></span></span>
+        <span class="hud-chip" id="hudBattery" title="电量"><span class="hud-icon" id="hudBatteryIcon">🔋</span><span id="hudBatteryText">--%</span></span>
+        <button type="button" class="gear" id="settingsBtn" aria-label="设置" title="设置">⚙</button>
+      </div>
     </div>
-  </header>
-
-  <!-- 第三梯队 C：手机端 Live2D 角色舞台（模型从电脑后端 /v1/model/asset 按需加载）
-       B 手机入侵：点击舞台 = 摸摸头（互动反馈 + 摸头奖励），情绪联动表情与光晕 -->
-  <div class="avatar-stage" id="avatarStage" role="button" tabindex="0"
-       aria-label="墨灵形象，点击摸摸头" title="点击摸摸头">
-    <div id="live2d-stage" class="live2d-stage" hidden></div>
-    <div class="avatar-fallback" id="avatarFallback" aria-hidden="true">墨</div>
-    <div id="stageBubble" class="stage-bubble" role="status" hidden></div>
   </div>
 
   <div class="settings" id="settingsPanel" hidden>
@@ -70,6 +77,22 @@
   </div>
 
   <main class="chat" id="chatLog" aria-live="polite"></main>
+
+  <!-- 互动工具菜单：底部工具栏「互动」弹出（本地即时反馈，台词与桌面悬浮窗一致） -->
+  <div class="interact-menu" id="interactMenu" role="menu" aria-label="互动工具" hidden>
+    <button type="button" data-line="唔…好舒服~（蹭蹭你的手心）" data-mood="happy">✋ 摸摸头</button>
+    <button type="button" data-line="诶嘿~被抱住了！好温暖…（回抱住你）" data-mood="warm">🫂 抱抱我</button>
+    <button type="button" data-line="诶嘿嘿…被你这么夸，开心到转圈圈~" data-mood="shy">✨ 夸夸我</button>
+    <button type="button" data-line="诶？给我的吗！谢谢~（小口小口地吃）" data-mood="warm">🍰 投喂甜点</button>
+    <button type="button" data-line="晚安呀~明天也要一起哦。（轻轻挥手）" data-mood="warm">🌙 说晚安</button>
+    <button type="button" data-line="嗯…想听故事，还是想知道我今天的小发现？" data-mood="curious">💬 今天聊什么</button>
+  </div>
+
+  <nav class="dock" id="dock" aria-label="工具栏">
+    <button type="button" class="dock-btn dock-chat" id="dockChat">💬 对话</button>
+    <button type="button" class="dock-btn dock-interact" id="interactBtn" aria-haspopup="menu" aria-expanded="false">✋ 互动</button>
+    <button type="button" class="dock-btn dock-settings" id="dockSettings">⚙ 设置</button>
+  </nav>
 
   <form class="composer" id="composer">
     <textarea id="input" rows="1" placeholder="输入消息…" autocomplete="off"></textarea>

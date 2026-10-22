@@ -409,6 +409,76 @@ async function loadLive2D() {
 
 // ---------- B 手机入侵：摸头互动 + 情绪表情联动 ----------
 const HEADPAT_KEY = "moling_mobile_headpat_count";
+
+// ── 手机端 3.0 ② 游戏化 HUD：好感（本地互动雏形）/ 心情 / 电量 ──
+const LOVE_LEVELS = [
+  { min: 0, name: "萌新" },
+  { min: 10, name: "熟络" },
+  { min: 50, name: "默契" },
+  { min: 200, name: "羁绊" },
+];
+const MOOD_HUD_MAP = {
+  calm: ["◡", "平静"], happy: ["◕‿◕", "开心"], warm: ["♡", "温暖"],
+  curious: ["？", "好奇"], shy: ["〃", "害羞"], surprised: ["◎", "惊讶"],
+  worried: ["︵", "担心"], caring: ["✿", "关心"],
+};
+const MOOD_HUD_COLOR = {
+  calm: "#7c8cf8", happy: "#ffd166", warm: "#ffb84d", curious: "#7dd3fc",
+  shy: "#ff8fab", surprised: "#f8a5ff", worried: "#ff9f6e", caring: "#6ee7b7",
+};
+const hudMoodEl = document.getElementById("hudMood");
+const hudMoodIcon = document.getElementById("hudMoodIcon");
+const hudMoodText = document.getElementById("hudMoodText");
+const hudLoveText = document.getElementById("hudLoveText");
+const hudLoveBar = document.getElementById("hudLoveBar");
+const hudBatteryEl = document.getElementById("hudBattery");
+const hudBatteryIcon = document.getElementById("hudBatteryIcon");
+const hudBatteryText = document.getElementById("hudBatteryText");
+
+function readLoveCount() {
+  try { return Number(localStorage.getItem(HEADPAT_KEY) || "0") || 0; } catch { return 0; }
+}
+// 好感等级：由真实互动计数映射（当前=摸头次数；步骤④养成扩展时装/小游戏等来源）
+function updateLoveHUD(count) {
+  const n = Number.isFinite(count) ? count : readLoveCount();
+  let name = LOVE_LEVELS[0].name;
+  for (const lv of LOVE_LEVELS) if (n >= lv.min) name = lv.name;
+  if (hudLoveText) hudLoveText.textContent = name;
+  if (hudLoveBar) hudLoveBar.style.width = `${Math.min(100, (n / 300) * 100).toFixed(0)}%`;
+}
+// 心情 HUD：与情绪表情联动同步
+function updateMoodHUD(moodKey) {
+  const key = String(moodKey || "calm").toLowerCase();
+  const [icon, label] = MOOD_HUD_MAP[key] || MOOD_HUD_MAP.calm;
+  if (hudMoodIcon) hudMoodIcon.textContent = icon;
+  if (hudMoodText) hudMoodText.textContent = label;
+  if (hudMoodEl) hudMoodEl.style.borderColor = `${MOOD_HUD_COLOR[key] || "#7c8cf8"}66`;
+}
+// 真电池 → HUD 电量：充电 ⚡ / 普通 🔋；≤20% 低电趴着变暗
+function updateBatteryHUD(battery) {
+  if (!battery || !hudBatteryText) return;
+  const pct = Math.round(battery.level * 100);
+  const charging = battery.charging === true;
+  hudBatteryText.textContent = `${pct}%`;
+  hudBatteryIcon.textContent = charging ? "⚡" : "🔋";
+  hudBatteryEl.classList.toggle("charging", charging);
+  hudBatteryEl.classList.toggle("low", !charging && pct <= 20);
+  const shell = document.getElementById("stageShell");
+  if (shell) shell.classList.toggle("life-low", !charging && pct <= 20);
+  if (shell) shell.classList.toggle("battery-charging", charging);
+}
+function initBatteryHUD() {
+  if (!navigator.getBattery) {
+    updateBatteryHUD({ level: 1, charging: true });
+    return;
+  }
+  navigator.getBattery().then((battery) => {
+    updateBatteryHUD(battery);
+    battery.addEventListener("levelchange", () => updateBatteryHUD(battery));
+    battery.addEventListener("chargingchange", () => updateBatteryHUD(battery));
+  }).catch(() => updateBatteryHUD({ level: 1, charging: true }));
+}
+
 const MOOD_EXPRESSION_MAP = {
   calm: null, happy: "心心眼", curious: "心心眼", surprised: "星星眼",
   worried: "流泪", shy: "脸红", warm: "心心眼", caring: "星星眼",
@@ -423,6 +493,7 @@ function headpatFeedback() {
   try { count = Number(localStorage.getItem(HEADPAT_KEY) || "0") || 0; } catch { /* 忽略 */ }
   count += 1;
   try { localStorage.setItem(HEADPAT_KEY, String(count)); } catch { /* 忽略 */ }
+  updateLoveHUD(count);
   if (count % 5 === 0) {
     return { line: `（被你摸了 ${count} 次啦~）今天也最喜欢你！蹭蹭~`, mood: "happy" };
   }
@@ -448,6 +519,7 @@ function showStageBubble(line, moodKey) {
 // 情绪联动：舞台光晕 + Live2D 表情（心心眼/星星眼/脸红/流泪；模型没有对应表情时静默忽略）。
 function setStageMood(moodKey) {
   const key = String(moodKey || "calm").toLowerCase();
+  updateMoodHUD(key);
   avatarStageEl.classList.remove(
     "mood-happy", "mood-warm", "mood-curious", "mood-shy",
   );
@@ -480,6 +552,50 @@ avatarStageEl.addEventListener("keydown", (event) => {
   if (event.key === "Enter" || event.key === " ") {
     event.preventDefault();
     handleHeadpat();
+  }
+});
+
+// ── 手机端 3.0 ② 互动菜单：底部工具栏「互动」弹出（本地即时反馈台词） ──
+const interactMenu = document.getElementById("interactMenu");
+const interactBtn = document.getElementById("interactBtn");
+const dockChat = document.getElementById("dockChat");
+const dockSettings = document.getElementById("dockSettings");
+
+function setInteractMenu(open) {
+  interactMenu.hidden = !open;
+  interactBtn.setAttribute("aria-expanded", String(open));
+  if (open) {
+    interactMenu.querySelector("button")?.focus();
+  }
+}
+
+interactBtn.addEventListener("click", () => {
+  setInteractMenu(interactMenu.hidden);
+});
+
+interactMenu.addEventListener("click", (event) => {
+  const item = event.target.closest("button[data-line]");
+  if (!item) return;
+  setInteractMenu(true); // 保持菜单展开，方便连续互动
+  showStageBubble(item.dataset.line, item.dataset.mood);
+  startTalking(1500);
+});
+
+dockChat.addEventListener("click", () => {
+  setInteractMenu(false);
+  chatLog.scrollTop = chatLog.scrollHeight;
+  input.focus();
+});
+
+dockSettings.addEventListener("click", () => {
+  setInteractMenu(false);
+  settingsPanel.hidden = !settingsPanel.hidden;
+});
+
+// 点击菜单外任意处关闭
+document.addEventListener("click", (event) => {
+  if (!interactMenu.hidden && !interactMenu.contains(event.target) && event.target !== interactBtn) {
+    setInteractMenu(false);
   }
 });
 
@@ -682,6 +798,9 @@ wakeWordInput.addEventListener("change", () => {
 serverInput.value = localStorage.getItem(SERVER_KEY) || "";
 // 第三梯队 C：尝试加载 Live2D 角色（失败自动降级为文字形象，不阻塞聊天）
 loadLive2D();
+// 手机端 3.0 ② 游戏化 HUD：好感初始值 + 真电池监听
+updateLoveHUD(readLoveCount());
+initBatteryHUD();
 // 续聊：恢复本机保存的会话（最近 40 条），无记录则显示欢迎语。
 loadHistory();
 if (history.length === 0) {
