@@ -15,6 +15,28 @@ const micBtn = document.getElementById("micBtn");
 const statusDot = document.getElementById("statusDot");
 const modelLabel = document.getElementById("modelLabel");
 const settingsBtn = document.getElementById("settingsBtn");
+const modeBtn = document.getElementById("modeBtn");
+const MODE_KEY = "moling_mobile_mode"; // "chat" | "companion"
+
+// ── 步骤⑤ 双模式：聊天模式 ⇄ 陪伴模式（深色屏保式大舞台，HUD 常驻顶部小窗） ──
+function applyMode(mode) {
+  const companion = mode === "companion";
+  document.body.classList.toggle("companion-mode", companion);
+  modeBtn.textContent = companion ? "💬" : "🌙";
+  modeBtn.title = companion ? "回到聊天模式" : "切换到陪伴模式（深色屏保大舞台）";
+  modeBtn.setAttribute("aria-label", companion ? "回到聊天模式" : "切换到陪伴模式");
+  if (companion) {
+    // 进入陪伴模式：收起面板，隐藏输入焦点
+    settingsPanel.hidden = true;
+    wardrobePanel.hidden = true;
+    interactMenu.hidden = true;
+    if (document.activeElement === input) input.blur();
+  }
+  try { localStorage.setItem(MODE_KEY, companion ? "companion" : "chat"); } catch { /* 忽略 */ }
+}
+modeBtn.addEventListener("click", () => {
+  applyMode(document.body.classList.contains("companion-mode") ? "chat" : "companion");
+});
 const settingsPanel = document.getElementById("settingsPanel");
 const tokenInput = document.getElementById("tokenInput");
 const tokenSave = document.getElementById("tokenSave");
@@ -979,6 +1001,8 @@ loadLive2D();
 // 手机端 3.0 ② 游戏化 HUD：好感初始值（摸头+图鉴+互动）+ 真电池监听
 updateLoveHUD();
 initBatteryHUD();
+// 步骤⑤ 双模式：恢复上次模式（默认聊天模式）
+applyMode(localStorage.getItem(MODE_KEY) === "companion" ? "companion" : "chat");
 // 续聊：恢复本机保存的会话（最近 40 条），无记录则显示欢迎语。
 loadHistory();
 if (history.length === 0) {

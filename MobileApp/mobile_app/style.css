@@ -198,6 +198,29 @@ html, body {
 }
 .gear:active { background: rgba(255, 255, 255, 0.12); }
 
+/* ── 步骤⑤ 双模式：聊天模式 ⇄ 陪伴模式（深色屏保式大舞台 + 顶部常驻 HUD 小窗） ── */
+body.companion-mode .chat,
+body.companion-mode .dock,
+body.companion-mode .composer,
+body.companion-mode .settings { display: none; }
+body.companion-mode .stage-shell {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+}
+body.companion-mode .avatar-stage {
+  background:
+    radial-gradient(ellipse at 50% 85%, rgba(110, 168, 255, 0.14), transparent 55%),
+    radial-gradient(ellipse at 50% 18%, rgba(155, 140, 255, 0.12), transparent 50%),
+    linear-gradient(180deg, #0a0d16 0%, #10131c 68%, #141822 100%);
+}
+body.companion-mode .avatar-stage .live2d-stage canvas,
+body.companion-mode .avatar-stage .avatar-fallback {
+  transform: scale(1.12);
+}
+body.companion-mode .interact-menu { bottom: calc(20px + env(safe-area-inset-bottom)); }
+body.companion-mode .hud { top: calc(14px + env(safe-area-inset-top)); }
+
 .settings {
   background: var(--panel);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
