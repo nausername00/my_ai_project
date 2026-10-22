@@ -1042,3 +1042,10 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
 - 进入陪伴模式自动收起面板+释放键盘；模式记忆 localStorage，重启恢复上次模式
 - v3.1 APK 重打包验证；全量 111/111，mobile 15/15
 - 下一步：**⑥ 双端同步**（好感/图鉴/互动计数双端合并——本机 localStorage 与后端状态的读写+合并规则）
+**第 ⑥ 步已完成（双端同步，提交 2ada8d0）**：
+- 后端：新模块 m_studio/m6_collection.py（collection_state.json 权威存储：collected 并集 / interact_bonus 取大 / FileLock + os.replace 原子写）；api.py 新端点 GET /v1/collection/status + POST /v1/collection/sync
+- 摸头计数权威仍归 /v1/generate（m5_headpat），sync 返回时携带最新 headpat_count 回填手机
+- 手机前端：启动 syncFromBackend() 拉后端画像→并集→写回本机（换手机/重装不丢）；新收集/互动后 pushCollection() 防抖 500ms 上报；离线维持本机，联网后自动合并
+- 真实验收：临时起后端 → GET 返回画像+headpat=5 → POST 并集合并 deep_sea/gold/moon + bonus 4 → 清理测试状态文件
+- 测试：后端 808 passed（M6 5/5）+ 前端 111/111（mobile 15/15）
+- 下一步：**⑦ 原生增强**（Capacitor 图标/启动屏/真机验证等）
