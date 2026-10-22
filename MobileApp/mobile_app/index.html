@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#10131c" />
+  <title>墨灵 · 移动陪伴</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="identity">
+      <span class="dot" id="statusDot"></span>
+      <strong id="companionName">墨灵</strong>
+    </div>
+    <div class="top-actions">
+      <span class="model" id="modelLabel">…</span>
+      <button type="button" class="gear" id="settingsBtn" aria-label="设置">⚙</button>
+    </div>
+  </header>
+
+  <!-- 第三梯队 C：手机端 Live2D 角色舞台（模型从电脑后端 /v1/model/asset 按需加载）
+       B 手机入侵：点击舞台 = 摸摸头（互动反馈 + 摸头奖励），情绪联动表情与光晕 -->
+  <div class="avatar-stage" id="avatarStage" role="button" tabindex="0"
+       aria-label="墨灵形象，点击摸摸头" title="点击摸摸头">
+    <div id="live2d-stage" class="live2d-stage" hidden></div>
+    <div class="avatar-fallback" id="avatarFallback" aria-hidden="true">墨</div>
+    <div id="stageBubble" class="stage-bubble" role="status" hidden></div>
+  </div>
+
+  <div class="settings" id="settingsPanel" hidden>
+    <div class="setting-row">
+      <label for="serverInput">服务器地址（App 内必填：电脑局域网 IP + :8000；浏览器打开本页可留空自动同源）</label>
+      <div class="token-row">
+        <input type="text" id="serverInput" placeholder="http://192.168.1.5:8000" autocomplete="off" spellcheck="false" />
+        <button type="button" id="serverSave">保存</button>
+      </div>
+    </div>
+    <div class="setting-row">
+      <label for="tokenInput">API Token（非本机访问必需；仅存本机浏览器）</label>
+      <div class="token-row">
+        <input type="password" id="tokenInput" placeholder="MOLING_API_TOKEN" autocomplete="off" />
+        <button type="button" id="tokenSave">保存</button>
+      </div>
+    </div>
+    <div class="setting-row">
+      <label for="testConnBtn">连接自检：探测电脑后端是否可达，并给出分层排查提示</label>
+      <div class="token-row">
+        <button type="button" id="testConnBtn">测试连接</button>
+      </div>
+      <p class="diag" id="testConnResult" role="status"></p>
+    </div>
+    <div class="setting-row row-inline">
+      <label for="notifyToggle">新回复系统通知（需 HTTPS/本机；HTTP 局域网不可用）</label>
+      <button type="button" class="toggle" id="notifyToggle" role="switch" aria-checked="false">关</button>
+    </div>
+    <div class="setting-row row-inline">
+      <label for="wakeToggle">语音接收（说唤醒词「墨灵墨灵」→ 墨灵回应 → 再对我说一句，自动进对话；需 HTTPS/本机）</label>
+      <button type="button" class="toggle" id="wakeToggle" role="switch" aria-checked="false">关</button>
+    </div>
+    <div class="setting-row">
+      <label for="wakeWord">唤醒词（可自定义，如：墨灵墨灵 / 墨灵在么）</label>
+      <input type="text" id="wakeWord" value="墨灵墨灵" maxlength="12" autocomplete="off" spellcheck="false" />
+    </div>
+    <div class="setting-row row-inline">
+      <label for="clearBtn">清空本机聊天记录（不影响电脑端记忆）</label>
+      <button type="button" class="danger" id="clearBtn">清空</button>
+    </div>
+  </div>
+
+  <main class="chat" id="chatLog" aria-live="polite"></main>
+
+  <form class="composer" id="composer">
+    <textarea id="input" rows="1" placeholder="输入消息…" autocomplete="off"></textarea>
+    <button type="button" class="mic" id="micBtn" aria-label="语音输入" title="语音输入">🎤</button>
+    <button type="submit" id="sendBtn" aria-label="发送">发送</button>
+  </form>
+
+  <script src="vendor/live2dcubismcore.min.js"></script>
+  <script src="vendor/live2d-runtime.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
