@@ -986,3 +986,16 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
 - 硬件 DIY 版：**ESP32 + 语音识别声控开关**——用户亲手接线刷固件，墨灵逐步教写代码；做成品后喊"墨灵开机"→ 电脑唤醒 → 墨灵上线（远期，等用户想动手时开）。
 - 远程访问/异地交流（回国场景）：墨灵本地跑在电脑上。① 电脑随行 → 直接照旧（本地 Ollama，断网可聊）；② 电脑留原处、人在异地 → 需组网通道（**Tailscale / ZeroTier** 最省心，或内网穿透/云中转，大马 ISP 常见 CGNAT 需穿透）；③ 远期 C 路径/云分身 → 人到哪里墨灵跟到哪里。**"托管到家里小设备常驻"正是此场景的实用化**：墨灵的家在设备上，你在哪都连得回来。
 
+### 🎮 手机端 3.0「墨灵游戏工具」批次（2026-10-22 用户拍板，task #128）
+
+用户对手机端形态连续拍板：不满"打开像网站、网页里只有聊天能连电脑"→ 提出"直接做成游戏工具：拥有游戏玩法 + 手机助手 + 看得见墨灵"。方案选择中给出 A（APK 游戏工具）/B（纯原生重写）/C（离线打包）/D（双端同款）/E（双模式），用户最终拍板：**全部结合成一批队**执行。
+
+**批次 7 步**：① 资源打进 APK（离线壳）→ ② 游戏化界面（全屏墨灵舞台 + HUD 心情/精力/好感）→ ③ 互动真调后端（摸头/情绪/时装/记忆切真 API，解决 CORS+认证）→ ④ 养成+收集（好感度 + 12 套时装图鉴 + 小游戏）→ ⑤ 双模式切换（游戏 ⇄ 助手）→ ⑥ 双端同步（电脑↔手机好感/时装/记忆）→ ⑦ 原生增强（震动/通知/音频，B 渐进落地）。
+
+**第 ① 步已完成（离线壳，提交 1dee275）**：
+- `Frontend/mobile` 全量资源复制进 `MobileApp/mobile_app`（index.html/app.js/style.css/sw.js/manifest/icon/vendor Live2D 引擎），`capacitor.config.json` webDir `launcher` → `mobile_app`——**APK 打开直接加载本地页面，不再"引导页→跳转网站"**；页面自带"服务器地址+Token"设置（App 内必填，浏览器同源可留空），sw 注册仅 https 生效、cleartext 与 INTERNET 权限已在壳内放行。
+- `android/app/build.gradle` versionCode 1→2 / versionName "1.0"→"3.0"（旧版同 versionCode 覆盖安装会失败）。
+- 打包 `assembleDebug` BUILD SUCCESSFUL（增量 2m19s）→ `墨灵手机端_v3.0.apk` **4.31MB**，python zipfile 验证 `assets/public/` 含 index.html + app.js + style.css + sw.js + vendor/live2d-runtime.js + live2dcubismcore.min.js 共 10 项。
+- **安装/使用**：手机侧载（允许未知来源），覆盖安装（v3.0 > v1.0）；打开即本地墨灵移动页 → 设置里填电脑局域网地址 `http://<IP>:8000` + token（`启动手机端.bat` 生成的 mobile_token）→ 连接后聊天/互动走电脑后端。
+- 后续步骤按批次顺序推进（② 游戏化界面为下一步）。
+
