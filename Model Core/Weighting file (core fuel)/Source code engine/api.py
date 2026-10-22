@@ -83,8 +83,9 @@ from fashion_service import (
     detect_fashion_command,
     suggest_style_proposal,
 )
-from m_studio.m5_headpat import headpat_response
+from m_studio.m5_headpat import _load_state as _load_headpat_state, headpat_response
 from m_studio.m5_praise_service import praise_response
+from m_studio.m6_collection import get_collection, merge_collection
 
 # E4 最小版：状态类 hook（换装/摸头/自荐/夸奖）整体串行化的进程级锁
 _STATE_HOOK_LOCK = threading.Lock()
@@ -1210,6 +1211,12 @@ class ApiHandler(BaseHTTPRequestHandler):
             except (TypeError, ValueError, OSError) as error:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
+        if path == "/v1/collection/status":
+            try:
+                self._send_json(HTTPStatus.OK, get_collection())
+            except (TypeError, ValueError, OSError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
         if path == "/v1/notify":
             if not self._is_local_request():
                 self._send_json(HTTPStatus.FORBIDDEN, {"error": "notifications are 127.0.0.1 only"})
@@ -1269,6 +1276,22 @@ class ApiHandler(BaseHTTPRequestHandler):
                 if tone_id is not None and not isinstance(tone_id, str):
                     raise ValueError("tone_id 必须是字符串")
                 self._send_json(HTTPStatus.OK, change_outfit(outfit_id, tone_id))
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/v1/collection/sync":
+            # M6 双端同步：手机端上报本机图鉴/互动计数，后端并集合并后回写并返回
+            try:
+                payload = self._read_json()
+                collected = payload.get("collected", [])
+                interact_bonus = payload.get("interact_bonus", 0)
+                if not isinstance(collected, list):
+                    raise ValueError("collected 必须是数组")
+                if not isinstance(interact_bonus, (int, float)):
+                    raise ValueError("interact_bonus 必须是数字")
+                merged = merge_collection(collected, interact_bonus)
+                merged["headpat_count"] = int(_load_headpat_state().get("count", 0))
+                self._send_json(HTTPStatus.OK, merged)
             except (TypeError, ValueError, json.JSONDecodeError) as error:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return

@@ -484,6 +484,7 @@ function collectOutfit(outfitId) {
   if (!list.includes(outfitId)) {
     list.push(outfitId);
     try { localStorage.setItem(COLLECTED_KEY, JSON.stringify(list)); } catch { /* 忽略 */ }
+    pushCollection(); // 步骤⑥：新收集立即上报后端（双端同步）
     return true; // 新收集
   }
   return false;
@@ -704,6 +705,7 @@ function bumpInteractBonus() {
   try {
     const n = readInteractBonus() + 1;
     localStorage.setItem(INTERACT_BONUS_KEY, String(n));
+    pushCollection(); // 步骤⑥：互动计数上报后端（双端同步）
   } catch { /* 忽略 */ }
 }
 async function callInteract(prompt, fallbackLine, fallbackMood) {
@@ -807,6 +809,63 @@ async function api(path, payload) {
     body: JSON.stringify(payload),
   });
   return { status: res.status, body: await res.json().catch(() => ({})) };
+}
+
+// ── 步骤⑥ 双端同步：手机本机养成状态 ⇄ 电脑后端权威状态（M6 collection_state） ──
+async function apiGet(path) {
+  const res = await fetch(`${API}${path}`, { headers: authHeaders() });
+  return { status: res.status, body: await res.json().catch(() => ({})) };
+}
+
+let _syncTimer = 0;
+// 本机养成状态变化后防抖上报后端（并集合并，后端写回 collection_state.json）
+function pushCollection() {
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(async () => {
+    try {
+      const { body } = await api("/collection/sync", {
+        collected: readCollected(),
+        interact_bonus: readInteractBonus(),
+      });
+      // 后端权威回填：摸头计数（电脑手机共享）+ 合并后的图鉴/互动
+      if (body && Array.isArray(body.collected)) {
+        try { localStorage.setItem(COLLECTED_KEY, JSON.stringify(body.collected)); } catch { /* 忽略 */ }
+      }
+      if (body && Number.isFinite(body.interact_bonus)) {
+        try { localStorage.setItem(INTERACT_BONUS_KEY, String(body.interact_bonus)); } catch { /* 忽略 */ }
+      }
+      if (body && Number.isFinite(body.headpat_count)) {
+        try { localStorage.setItem(HEADPAT_KEY, String(body.headpat_count)); } catch { /* 忽略 */ }
+      }
+      renderWardrobe();
+      updateLoveHUD();
+    } catch { /* 离线：下次启动再同步 */ }
+  }, 500);
+}
+
+// 启动/回到前台时：拉后端权威画像 → 与本机并集 → 写回本机（换手机/重装不丢）
+async function syncFromBackend() {
+  try {
+    const { status, body } = await apiGet("/collection/status");
+    if (status !== 200 || !body) return;
+    if (Array.isArray(body.collected)) {
+      const merged = [...new Set([...readCollected(), ...body.collected])];
+      try { localStorage.setItem(COLLECTED_KEY, JSON.stringify(merged)); } catch { /* 忽略 */ }
+    }
+    if (Number.isFinite(body.interact_bonus)) {
+      try {
+        localStorage.setItem(
+          INTERACT_BONUS_KEY,
+          String(Math.max(readInteractBonus(), body.interact_bonus))
+        );
+      } catch { /* 忽略 */ }
+    }
+    if (Number.isFinite(body.headpat_count)) {
+      try { localStorage.setItem(HEADPAT_KEY, String(body.headpat_count)); } catch { /* 忽略 */ }
+    }
+    renderWardrobe();
+    updateLoveHUD();
+  } catch { /* 离线：维持本机状态 */ }
 }
 
 async function refreshStatus() {
@@ -1003,6 +1062,8 @@ updateLoveHUD();
 initBatteryHUD();
 // 步骤⑤ 双模式：恢复上次模式（默认聊天模式）
 applyMode(localStorage.getItem(MODE_KEY) === "companion" ? "companion" : "chat");
+// 步骤⑥ 双端同步：启动时拉后端权威养成画像并合并到本机（换手机/重装不丢）
+syncFromBackend();
 // 续聊：恢复本机保存的会话（最近 40 条），无记录则显示欢迎语。
 loadHistory();
 if (history.length === 0) {
