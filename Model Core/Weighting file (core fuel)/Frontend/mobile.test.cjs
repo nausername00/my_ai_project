@@ -141,24 +141,26 @@ test("mobile page embeds a Live2D avatar stage (third tier C)", () => {
 test("mobile app launcher: shell only, frontend loads from PC (in-app update)", () => {
   const mobileAppDir = path.join(__dirname, "..", "..", "..", "MobileApp");
   const launcher = fs.readFileSync(path.join(mobileAppDir, "launcher", "index.html"), "utf8");
+  const mobileApp = fs.readFileSync(path.join(mobileAppDir, "mobile_app", "index.html"), "utf8");
   const config = fs.readFileSync(path.join(mobileAppDir, "capacitor.config.json"), "utf8");
   const androidManifest = fs.readFileSync(
     path.join(mobileAppDir, "android", "app", "src", "main", "AndroidManifest.xml"),
     "utf8",
   );
-  // 壳不再内嵌完整手机页：webDir 指向 launcher（前端从电脑端拉取，更新无需重打包 APK）
-  assert.match(config, /"webDir"\s*:\s*"launcher"/);
-  // 连接页骨架
+  // 离线壳：webDir 指向 mobile_app（完整手机前端打入 APK，断网可打开，内更新走电脑端拉取）
+  assert.match(config, /"webDir"\s*:\s*"mobile_app"/);
+  // 历史在线引导页保留为备用入口（填地址跳转）
   assert.match(launcher, /id="server"/);
-  assert.match(launcher, /id="connect"/);
-  assert.match(launcher, /连接墨灵/);
-  // 服务器地址记忆（原生 Preferences + Web 降级 localStorage）
-  assert.match(launcher, /moling_launcher_server/);
-  assert.match(launcher, /window\.Capacitor && window\.Capacitor\.Preferences/);
-  assert.match(launcher, /localStorage\.getItem/);
-  // 跳转目标 = 电脑端 /v1/mobile/（页面从电脑同源拉取，前端更新无需重打包 APK）
   assert.match(launcher, /\/v1\/mobile\//);
-  assert.match(launcher, /"http:\/\/" \+ host/);
+  // 离线壳内置完整前端：对话 + Live2D 舞台 + App 内服务器地址设置
+  assert.match(mobileApp, /avatarStage/);
+  assert.match(mobileApp, /live2d-stage/);
+  assert.match(mobileApp, /serverInput/);
+  assert.match(mobileApp, /电脑局域网 IP/);
+  // 服务器地址记忆（App 内 localStorage 持久化 + 服务地址输入绑定）
+  const mobileAppJs = fs.readFileSync(path.join(mobileAppDir, "mobile_app", "app.js"), "utf8");
+  assert.match(mobileAppJs, /localStorage\.getItem\(SERVER_KEY\)/);
+  assert.match(mobileAppJs, /serverInput\.value\.trim\(\)/);
   // 整页加载局域网 http 页面需允许 cleartext（Android 9+ 默认禁止）
   assert.match(androidManifest, /usesCleartextTraffic="true"/);
 });

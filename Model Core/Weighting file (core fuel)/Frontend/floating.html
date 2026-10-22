@@ -198,6 +198,12 @@
     object-fit: contain;
   }
   #avatar-wrap:hover { transform: scale(1.05); }
+  /* 墨灵生活状态机：睡觉变暗缓息 / 低电趴着 / 醒来提亮 */
+  #avatar-wrap.life-sleeping { filter: brightness(0.85) saturate(0.75); }
+  #avatar-wrap.life-low { filter: brightness(0.68) saturate(0.5); }
+  #avatar-wrap.life-waking,
+  #avatar-wrap.life-waking-clean,
+  #avatar-wrap.life-waking-unclean { filter: brightness(1.08); }
   #avatar-wrap.listening {
     animation: pulse 1.2s ease-in-out infinite;
   }
@@ -605,6 +611,8 @@
 
   avatarEl.addEventListener("click", (event) => {
     event.stopPropagation();
+    // 生活状态机：互动 = 唤醒（自由时间/低电被叫醒）
+    window.floating.lifeWake?.().catch(() => {});
     setInteractMenuOpen(interactMenu.hidden);
   });
   avatarEl.addEventListener("keydown", (event) => {
@@ -631,6 +639,7 @@
         mood = reward.mood;
       }
       showInteractFeedback(line, mood);
+      window.floating.lifeWake?.().catch(() => {});
       window.floating.sendChat(item.dataset.chat).catch((error) => {
         console.error("Could not send chat from floating window:", error);
       });
@@ -785,6 +794,71 @@
       window.MolingLive2D?.stopTalking();
     }
   });
+
+  // ── 墨灵生活状态机（悬浮窗消费：睡觉/低电/起床过场）────────────────
+  const LIFE_BEDTIME_TEXT = { bed: "躺床", pod: "休眠舱", door: "开门出去" };
+  const LIFE_STATUS_TEXT = {
+    active: "在线 · 等待指令",
+    free: "",
+    low: "电量低 · 趴着休息",
+    sleeping: "去睡觉了…",
+    waking: "醒来了",
+    waking_clean: "起床了",
+    waking_unclean: "诶？发生什么了…",
+  };
+  const LIFE_DIALOG_TEXT = {
+    waking_clean: (b) =>
+      `唔…早呀，你回来啦~（这次是${LIFE_BEDTIME_TEXT[b] || "躺床"}睡的呢）`,
+    waking_unclean: () => "诶！？刚才是不是…有人把我抱走了？",
+  };
+  const LIFE_DISPLAY_CLASS = {
+    sleeping: "life-sleeping",
+    low: "life-low",
+    waking: "life-waking",
+    waking_clean: "life-waking-clean",
+    waking_unclean: "life-waking-unclean",
+  };
+
+  function applyFloatingLife(payload) {
+    if (!payload || typeof payload !== "object") return;
+    const st = payload.state || "active";
+    const statusText = document.getElementById("status-text");
+    // 1) 状态文字
+    let label = LIFE_STATUS_TEXT[st] || "";
+    if (st === "free") {
+      const act =
+        payload.activity === "read"
+          ? "在看书"
+          : payload.activity === "stare"
+            ? "在发呆"
+            : "在睡觉";
+      label = `自由时间 · ${act}`;
+    } else if (st === "active" && payload.prev === "free") {
+      label = "醒来了";
+    }
+    if (payload.batteryEvt === "battery_low" && st !== "low" && payload.battery) {
+      label += ` · ${payload.battery.percent}%`;
+    } else if (
+      payload.batteryEvt === "battery_charging" &&
+      payload.battery
+    ) {
+      label = `充电中 · ${payload.battery.percent}%`;
+    }
+    if (label && statusText) statusText.textContent = label;
+    // 2) 角色区生活态 class
+    for (const c of Object.values(LIFE_DISPLAY_CLASS)) avatarEl.classList.remove(c);
+    if (st === "free" && payload.activity === "sleep") {
+      avatarEl.classList.add(LIFE_DISPLAY_CLASS.sleeping);
+    } else if (LIFE_DISPLAY_CLASS[st]) {
+      avatarEl.classList.add(LIFE_DISPLAY_CLASS[st]);
+    }
+    // 3) 起床台词气泡（复用互动反馈气泡）
+    const text = LIFE_DIALOG_TEXT[st] ? LIFE_DIALOG_TEXT[st](payload.bedtime) : "";
+    if (text) {
+      showInteractFeedback(text, st === "waking_unclean" ? "surprised" : "warm");
+    }
+  }
+  window.floating.onLifeEvent(applyFloatingLife);
 
   // ── 悬浮窗 Live2D 动态形象（沐莹）────────────────────────────
   const live2dBox = document.getElementById("avatar-live2d");

@@ -3580,6 +3580,70 @@ body {
 .character-display.has-live2d .interact-menu {
   /* Live2D 画布在 figure 内铺满时，菜单浮在角色下方 */
 }
+/* 墨灵生活状态机：状态标签 + 台词气泡 + 生活态角色表现 */
+.life-status {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 12;
+  padding: 2px 9px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-1, #e8eaf0);
+  background: rgba(10, 12, 20, 0.55);
+  border: 1px solid rgba(155, 140, 255, 0.22);
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.life-status[hidden] { display: none; }
+.life-status::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: 1px;
+  background: var(--life-dot, #34d399);
+}
+.life-status.life-free { --life-dot: #8b93a7; }
+.life-status.life-low { --life-dot: #f87171; }
+.life-status.life-sleeping { --life-dot: #818cf8; }
+.life-status.life-waking { --life-dot: #34d399; }
+.life-status.life-waking-clean { --life-dot: #34d399; }
+.life-status.life-waking-unclean { --life-dot: #fbbf24; }
+.life-dialog {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  max-width: 230px;
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-1, #e8eaf0);
+  background: rgba(16, 18, 28, 0.92);
+  border: 1px solid rgba(155, 140, 255, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  white-space: normal;
+  animation: life-dialog-in 240ms ease both;
+}
+.life-dialog[hidden] { display: none; }
+@keyframes life-dialog-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+/* 生活态角色表现：睡觉（呼吸变缓、微倾）、低电（趴着、变暗）、醒来（提亮） */
+.character-display.life-sleeping { filter: brightness(0.88) saturate(0.8); }
+.character-display.life-low { filter: brightness(0.72) saturate(0.55); }
+.character-display.life-waking,
+.character-display.life-waking-clean,
+.character-display.life-waking-unclean { filter: brightness(1.06); }
 .character-display:hover {
   transform: translateY(-3px);
   box-shadow: var(--shadow-lg);

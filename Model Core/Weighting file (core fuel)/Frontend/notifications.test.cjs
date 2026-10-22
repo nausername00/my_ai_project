@@ -74,6 +74,8 @@ test("floating preload exposes only its notification and window controls", () =>
     "sendChat",
     "onCharacterUpdated",
     "onSpeechState",
+    "onLifeEvent",
+    "lifeWake",
   ]);
 
   const received = [];

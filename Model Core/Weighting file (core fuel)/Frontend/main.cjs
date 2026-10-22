@@ -15,6 +15,12 @@ const fs = require("node:fs/promises");
 const net = require("node:net");
 const path = require("node:path");
 
+// 墨灵生活状态机（电池 / 空闲自由时间 / 睡眠与开机过场）
+const {
+  LifeStateStore,
+  createLifeMonitor,
+} = require("./life-state.cjs");
+
 // moling:// 同源协议：主窗口页面与 Live2D 模型资源统一由本协议服务（Chromium CORS 只放行同源自定义 scheme）。
 const { createOllamaSetup } = require("./ollama-setup.cjs");
 const {
@@ -91,6 +97,7 @@ let apiBaseUrl;
 let mainWindow;
 let floatingWindow;
 let miniGameWindow;
+let lifeMonitor = null; // 墨灵生活状态机（电池/空闲/睡眠过场）
 let floatingWindowReady = false;
 let floatingCharacterUpdateVersion = 0;
 let floatingAvatarDisplayMode = avatarDisplayModes.FOLLOW;
@@ -1158,6 +1165,14 @@ function registerIpcHandlers() {
   ipcMain.handle("companion:translate", (_event, request) =>
     callApi("/v1/translate", "POST", request),
   );
+  // 墨灵生活状态机：查询当前状态 / 用户互动唤醒上报
+  ipcMain.handle("companion:life-state", () =>
+    lifeMonitor ? lifeMonitor.getState() : null,
+  );
+  ipcMain.handle("companion:life-wake", () => {
+    if (lifeMonitor) lifeMonitor.markUserActive();
+    return true;
+  });
   ipcMain.handle("companion:reflect-agent", (_event, characterId, history) =>
     callApi("/v1/agent/reflect", "POST", {
       character_id: characterId,
@@ -2032,6 +2047,19 @@ app.whenReady().then(async () => {
     registerIpcHandlers();
     createWindow();
     createFloatingWindow();
+    // 墨灵生活状态机：电池/空闲自由时间/睡眠与开机过场（广播到所有窗口）
+    lifeMonitor = createLifeMonitor({
+      store: new LifeStateStore(),
+      onEvent: (payload) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send("companion:life-event", payload);
+          }
+        }
+      },
+    });
+    lifeMonitor.bootScenario(); // 开机起床过场（干净退出=睡饱；否则=被突然带走）
+    lifeMonitor.start();
     // J3：真实窗口验收（MOLING_E2E=1 时由 npm run test:e2e 触发）。
     if (process.env.MOLING_E2E === "1") {
       try {
@@ -2062,6 +2090,7 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", () => {
   if (notificationPollTimer) clearInterval(notificationPollTimer);
+  if (lifeMonitor) lifeMonitor.beforeQuit(); // 记"干净退出"，供开机过场判定
   if (backendProcess && backendProcess.exitCode === null) backendProcess.kill();
   if (voiceWakeProcess && voiceWakeProcess.exitCode === null) voiceWakeProcess.kill();
 });

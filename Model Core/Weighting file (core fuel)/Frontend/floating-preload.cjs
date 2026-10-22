@@ -42,5 +42,15 @@ contextBridge.exposeInMainWorld(
       return () =>
         ipcRenderer.removeListener("companion:speech-state", listener);
     },
+    // 墨灵生活状态机：悬浮窗消费（睡觉/低电/起床过场）
+    onLifeEvent(callback) {
+      if (typeof callback !== "function") {
+        throw new TypeError("life event callback must be a function");
+      }
+      const listener = (_event, payload) => callback(payload);
+      ipcRenderer.on("companion:life-event", listener);
+      return () => ipcRenderer.removeListener("companion:life-event", listener);
+    },
+    lifeWake: () => ipcRenderer.invoke("companion:life-wake"),
   }),
 );

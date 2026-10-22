@@ -5368,6 +5368,8 @@ async function performSemanticCue(text) {
 async function sendMessage(text) {
   const prompt = text.trim();
   if (!prompt || sendButton.disabled) return;
+  // 生活状态机：用户互动 = 唤醒（自由时间/低电被叫醒）
+  window.companion.lifeWake?.().catch(() => {});
   // S1 分身阈值：复杂 / 跨领域任务先询问是否唤醒更多墨灵
   try {
     const assess = await window.companion.avatarAssess(prompt);
@@ -6081,6 +6083,7 @@ document.addEventListener("DOMContentLoaded", () => {
   void loadSpeechVoices();
   void loadSpeechReadiness();
   void refreshMiniGamePreviewState();
+  initLifeMonitor();
   characterVoicePreview.addEventListener("click", previewSelectedVoice);
   characterVoiceSelect.addEventListener("change", () => {
     const value = characterVoiceSelect.value;
@@ -6090,6 +6093,111 @@ document.addEventListener("DOMContentLoaded", () => {
     updateCharacterVoicePreviewState();
   });
 });
+
+// ============ 墨灵生活状态机（前端消费：电池/自由时间/睡眠与开机过场） ============
+const LIFE_UI_LABEL = {
+  active: "在线陪伴",
+  free: "",
+  low: "电量低 · 趴着休息",
+  sleeping: "去睡觉了…",
+  waking: "醒来了",
+  waking_clean: "起床了",
+  waking_unclean: "诶？发生什么了…",
+};
+const LIFE_ACTIVITY_LABEL = {
+  sleep: "在睡觉",
+  read: "在看书",
+  stare: "在发呆看窗外",
+};
+const LIFE_BEDTIME_TEXT = { bed: "躺床", pod: "休眠舱", door: "开门出去" };
+const LIFE_DIALOG_TEXT = {
+  waking_clean: (bedtime) =>
+    `唔…早呀，你回来啦~（这次是${LIFE_BEDTIME_TEXT[bedtime] || "躺床"}睡的呢）`,
+  waking_unclean: () => "诶！？刚才是不是…有人把我抱走了？",
+};
+const LIFE_DISPLAY_CLASS = {
+  sleeping: "life-sleeping",
+  low: "life-low",
+  waking: "life-waking",
+  waking_clean: "life-waking-clean",
+  waking_unclean: "life-waking-unclean",
+};
+const LIFE_MOOD = {
+  free: "calm",
+  low: "calm",
+  sleeping: "calm",
+  waking: "warm",
+  waking_clean: "warm",
+  waking_unclean: "surprised",
+};
+let lifeDialogTimer = null;
+
+function applyLifeState(payload) {
+  const statusEl = document.getElementById("life-status");
+  const dialogEl = document.getElementById("life-dialog");
+  const display = document.getElementById("character-display");
+  if (!statusEl || !dialogEl || !display) return;
+
+  const st = payload.state || "active";
+  const activity = payload.activity;
+  const bedtime = payload.bedtime;
+  const batteryEvt = payload.batteryEvt;
+
+  // 1) 状态标签（右上角小胶囊）
+  statusEl.hidden = false;
+  statusEl.className = "life-status";
+  statusEl.classList.add(`life-${st}`);
+  let label = LIFE_UI_LABEL[st] || "";
+  if (st === "free") {
+    label = `自由时间 · ${LIFE_ACTIVITY_LABEL[activity] || "在休息"}`;
+  } else if (st === "active" && payload.prev === "free") {
+    label = "醒来了";
+  }
+  if (batteryEvt === "battery_low" && st !== "low" && payload.battery) {
+    label += ` · 电量 ${payload.battery.percent}%`;
+  } else if (batteryEvt === "battery_charging" && payload.battery) {
+    label = `充电中 · ${payload.battery.percent}%`;
+  }
+  statusEl.textContent = label;
+
+  // 2) 角色区生活态 class（趴着/睡觉变暗/醒来提亮）
+  for (const c of Object.values(LIFE_DISPLAY_CLASS)) display.classList.remove(c);
+  if (st === "free" && activity === "sleep") {
+    display.classList.add(LIFE_DISPLAY_CLASS.sleeping);
+  } else if (LIFE_DISPLAY_CLASS[st]) {
+    display.classList.add(LIFE_DISPLAY_CLASS[st]);
+  }
+
+  // 3) Live2D 表情联动
+  const mood = LIFE_MOOD[st];
+  if (mood && live2DInitialized && window.MolingLive2D) {
+    window.MolingLive2D.setExpressionByMood(mood).catch(() => {});
+  }
+
+  // 4) 台词气泡（起床过场 / 被突然带走）
+  const text = LIFE_DIALOG_TEXT[st] ? LIFE_DIALOG_TEXT[st](bedtime) : "";
+  if (text) {
+    dialogEl.textContent = text;
+    dialogEl.hidden = false;
+    if (lifeDialogTimer) clearTimeout(lifeDialogTimer);
+    lifeDialogTimer = setTimeout(() => {
+      dialogEl.hidden = true;
+    }, 6000);
+  } else if (!dialogEl.hidden) {
+    dialogEl.hidden = true;
+  }
+}
+
+function initLifeMonitor() {
+  if (!window.companion || typeof window.companion.onLifeEvent !== "function") return;
+  window.companion.onLifeEvent((payload) => applyLifeState(payload));
+  window.companion
+    .getLifeState()
+    .then((s) => {
+      if (s && s.state) applyLifeState({ ...s, batteryEvt: null });
+    })
+    .catch(() => {});
+}
 
 // K3：Live2D 运行时接入。模型加载成功则显示动态角色（隐藏静态立绘）；失败保持静态立绘降级。
 let live2DInitialized = false;

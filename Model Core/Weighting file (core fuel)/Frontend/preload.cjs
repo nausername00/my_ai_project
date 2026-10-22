@@ -5,6 +5,17 @@ contextBridge.exposeInMainWorld(
   Object.freeze({
     health: () => ipcRenderer.invoke("companion:health"),
     modelStatus: () => ipcRenderer.invoke("companion:model-status"),
+    // 墨灵生活状态机
+    getLifeState: () => ipcRenderer.invoke("companion:life-state"),
+    lifeWake: () => ipcRenderer.invoke("companion:life-wake"),
+    onLifeEvent: (callback) => {
+      if (typeof callback !== "function") {
+        throw new TypeError("life event callback must be a function");
+      }
+      const listener = (_event, payload) => callback(payload);
+      ipcRenderer.on("companion:life-event", listener);
+      return () => ipcRenderer.removeListener("companion:life-event", listener);
+    },
     pullModel: () => ipcRenderer.invoke("companion:pull-model"),
     openOllamaDownload: () =>
       ipcRenderer.invoke("companion:open-ollama-download"),
