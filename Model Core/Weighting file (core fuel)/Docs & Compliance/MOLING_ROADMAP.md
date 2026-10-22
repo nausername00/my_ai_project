@@ -999,3 +999,17 @@ T1 三角唤醒 ✅ → T2 OCR+结构化抽取 ✅ → T3 轻量平台治理 ✅
 - **安装/使用**：手机侧载（允许未知来源），覆盖安装（v3.0 > v1.0）；打开即本地墨灵移动页 → 设置里填电脑局域网地址 `http://<IP>:8000` + token（`启动手机端.bat` 生成的 mobile_token）→ 连接后聊天/互动走电脑后端。
 - 后续步骤按批次顺序推进（② 游戏化界面为下一步）。
 
+
+### 🔋 墨灵生活状态机（2026-10-22 用户拍板，task #129，已提交）
+
+用户设计拍板：不做"精力条"数值管理——**没使用墨灵时就是自由时间**（睡觉/看书/发呆），搭配"真电池"增加趣味：没电时趴着、关机/重启走睡觉过场（躺床/休眠舱/开门出去）。
+
+**已实现（提交：生活状态机）**：
+- 状态机：`active / free / low / sleeping / waking / waking_clean / waking_unclean`（纯逻辑 `Frontend/life-state.cjs`，Electron 主进程适配）
+- 电池映射：无电池(台式)=稳定；充电中=charging；≤20%=low；低电角色"趴着"变暗、充电恢复
+- 空闲自由时间：idle≥300s 进入 free，活动随机（睡觉/看书/发呆看窗外），持续时偶尔换活动
+- 睡眠过场：系统 suspend → sleeping（躺床/休眠舱/开门出去随机，记入存档）；resume → waking 过渡
+- 开机过场：干净退出(before-quit)→"睡饱起床"（waking_clean + 台词气泡）；断电/强关→"迷糊被带走"（waking_unclean + 惊讶表情）
+- 主窗口消费：状态胶囊（右上角）+ 台词气泡 + 角色生活态 class + Live2D 表情联动 + 发消息/互动即唤醒
+- 悬浮窗消费：状态文字 + 角色生活态表现 + 起床台词气泡 + 点击/互动即唤醒（preload 新增 onLifeEvent/lifeWake）
+- 测试：`life-state.test.cjs`（纳入 npm test 111/111 全绿）；check 覆盖 life-state.cjs；mobile.test/notifications.test 同步离线壳现实
