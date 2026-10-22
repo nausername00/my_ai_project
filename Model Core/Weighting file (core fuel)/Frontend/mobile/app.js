@@ -120,6 +120,8 @@ function sendNotification(title, body) {
 
 // ---------- 设置面板 ----------
 settingsBtn.addEventListener("click", () => {
+  wardrobePanel.hidden = true;
+  setInteractMenu(false);
   settingsPanel.hidden = !settingsPanel.hidden;
   if (!settingsPanel.hidden) tokenInput.focus();
 });
@@ -426,6 +428,85 @@ const MOOD_HUD_COLOR = {
   calm: "#7c8cf8", happy: "#ffd166", warm: "#ffb84d", curious: "#7dd3fc",
   shy: "#ff8fab", surprised: "#f8a5ff", worried: "#ff9f6e", caring: "#6ee7b7",
 };
+// ── 手机端 3.0 步骤④ 养成+收集：时装图鉴（12 套，与后端 fashion_registry.json 一致） ──
+const FASHION_CATALOG = [
+  { id: "celadon_cloud", name: "青花云纹", icon: "🏺" },
+  { id: "phoenix_crimson", name: "绯红金凤", icon: "🦅" },
+  { id: "starlight_silk", name: "星澜蓝银", icon: "🌌" },
+  { id: "emerald_flow", name: "翡翠流光", icon: "💎" },
+  { id: "dawn_silk", name: "晨光", icon: "🌅" },
+  { id: "bloom_silk", name: "繁花", icon: "🌸" },
+  { id: "sakura_snow", name: "樱雪", icon: "❄️" },
+  { id: "maple_moss", name: "青枫", icon: "🍁" },
+  { id: "aurora", name: "极光", icon: "✨" },
+  { id: "deep_sea", name: "幽冥舞", icon: "🌊" },
+  { id: "gold", name: "鎏金幻影", icon: "👑" },
+  { id: "moon", name: "霓影月", icon: "🌙" },
+];
+const COLLECTED_KEY = "moling_mobile_collected";       // 已收集时装 id 数组（本机）
+const INTERACT_BONUS_KEY = "moling_mobile_interact_bonus"; // 非摸头互动次数（好感副来源）
+
+function readCollected() {
+  try { return JSON.parse(localStorage.getItem(COLLECTED_KEY) || "[]") || []; } catch { return []; }
+}
+function readInteractBonus() {
+  try { return Number(localStorage.getItem(INTERACT_BONUS_KEY) || "0") || 0; } catch { return 0; }
+}
+// 好感 = 摸头（后端共享）×1 + 收集时装 ×8 + 非摸头互动 ×2
+function computeLove() {
+  return readLoveCount() + readCollected().length * 8 + readInteractBonus() * 2;
+}
+function collectOutfit(outfitId) {
+  if (!outfitId) return false;
+  const list = readCollected();
+  if (!list.includes(outfitId)) {
+    list.push(outfitId);
+    try { localStorage.setItem(COLLECTED_KEY, JSON.stringify(list)); } catch { /* 忽略 */ }
+    return true; // 新收集
+  }
+  return false;
+}
+
+const wardrobePanel = document.getElementById("wardrobePanel");
+const wardrobeGrid = document.getElementById("wardrobeGrid");
+const wardrobeProgress = document.getElementById("wardrobeProgress");
+const wardrobeAchievements = document.getElementById("wardrobeAchievements");
+
+// 成就：摸头 10/50 次、收集 6/12 套、互动 10 次
+function computeAchievements() {
+  const hp = readLoveCount();
+  const collected = readCollected().length;
+  const bonus = readInteractBonus();
+  return [
+    { id: "pat10", label: `摸头 ${hp}/10`, done: hp >= 10 },
+    { id: "pat50", label: `摸头 ${hp}/50`, done: hp >= 50 },
+    { id: "col6", label: `收集 ${collected}/6`, done: collected >= 6 },
+    { id: "col12", label: `全图鉴 ${collected}/12`, done: collected >= 12 },
+    { id: "act10", label: `互动 ${bonus}/10`, done: bonus >= 10 },
+  ];
+}
+function renderWardrobe() {
+  const collected = readCollected();
+  const cards = FASHION_CATALOG.map((o) => {
+    const got = collected.includes(o.id);
+    return `<div class="wardrobe-card ${got ? "collected" : "uncollected"}">
+      <span class="w-icon">${o.icon}</span>
+      <span class="w-name">${o.name}</span>
+      <span class="w-mark">${got ? "✓ 已收集" : "未收集"}</span>
+    </div>`;
+  }).join("");
+  wardrobeGrid.innerHTML = cards;
+  wardrobeProgress.textContent = `${collected.length}/12`;
+  const ach = computeAchievements().map(
+    (a) => `<span class="ach ${a.done ? "done" : ""}">${a.label}${a.done ? " ✓" : ""}</span>`
+  ).join("");
+  wardrobeAchievements.innerHTML = ach;
+}
+function openWardrobe(open) {
+  wardrobePanel.hidden = !open;
+  if (open) renderWardrobe();
+}
+
 const hudMoodEl = document.getElementById("hudMood");
 const hudMoodIcon = document.getElementById("hudMoodIcon");
 const hudMoodText = document.getElementById("hudMoodText");
@@ -438,9 +519,9 @@ const hudBatteryText = document.getElementById("hudBatteryText");
 function readLoveCount() {
   try { return Number(localStorage.getItem(HEADPAT_KEY) || "0") || 0; } catch { return 0; }
 }
-// 好感等级：由真实互动计数映射（当前=摸头次数；步骤④养成扩展时装/小游戏等来源）
+// 好感等级：由真实互动计数映射（摸头后端共享 + 图鉴收集 + 互动次数）
 function updateLoveHUD(count) {
-  const n = Number.isFinite(count) ? count : readLoveCount();
+  const n = Number.isFinite(count) ? count : computeLove();
   let name = LOVE_LEVELS[0].name;
   for (const lv of LOVE_LEVELS) if (n >= lv.min) name = lv.name;
   if (hudLoveText) hudLoveText.textContent = name;
@@ -558,6 +639,7 @@ avatarStageEl.addEventListener("keydown", (event) => {
 const interactMenu = document.getElementById("interactMenu");
 const interactBtn = document.getElementById("interactBtn");
 const dockChat = document.getElementById("dockChat");
+const dockWardrobe = document.getElementById("dockWardrobe");
 const dockSettings = document.getElementById("dockSettings");
 
 function setInteractMenu(open) {
@@ -595,6 +677,13 @@ const INTERACT_FALLBACK_MOOD = {
   投喂甜点: "warm", 说晚安: "warm", 今天聊什么: "curious",
 };
 let interactBusy = false;
+// 步骤④：非摸头互动（夸夸/抱抱/投喂/晚安/聊什么）成功后累计好感副来源
+function bumpInteractBonus() {
+  try {
+    const n = readInteractBonus() + 1;
+    localStorage.setItem(INTERACT_BONUS_KEY, String(n));
+  } catch { /* 忽略 */ }
+}
 async function callInteract(prompt, fallbackLine, fallbackMood) {
   if (interactBusy) return;
   interactBusy = true;
@@ -617,18 +706,24 @@ async function callInteract(prompt, fallbackLine, fallbackMood) {
       const hp = body.headpat;
       if (hp && Number.isFinite(hp.count)) {
         try { localStorage.setItem(HEADPAT_KEY, String(hp.count)); } catch { /* 忽略 */ }
-        updateLoveHUD(hp.count);
+      } else if (String(prompt || "") !== "摸摸头") {
+        bumpInteractBonus(); // 其他互动成就
       }
-      // 换装演出：HUD 提示当前造型
-      if (body.response_kind === "fashion" && body.fashion?.outfit_name) {
+      // 换装演出：点亮图鉴 + 舞台气泡提示当前造型
+      if (body.response_kind === "fashion" && body.fashion) {
+        const isNew = collectOutfit(body.fashion.outfit_id);
+        renderWardrobe();
         const note = document.createElement("div");
         note.className = "stage-bubble show";
-        note.textContent = `✨ 当前造型：${body.fashion.outfit_name}`;
+        note.textContent = isNew
+          ? `✨ 收集「${body.fashion.outfit_name || body.fashion.outfit_id}」！图鉴 +1`
+          : `✨ 当前造型：${body.fashion.outfit_name || body.fashion.outfit_id}`;
         note.style.bottom = "74px";
         note.style.opacity = "1";
         avatarStageEl.appendChild(note);
         setTimeout(() => note.remove(), 3200);
       }
+      updateLoveHUD();
       return;
     }
     // 未授权：引导填 token；其他错误降级本地
@@ -646,7 +741,7 @@ async function callInteract(prompt, fallbackLine, fallbackMood) {
       try {
         const n = readLoveCount() + 1;
         localStorage.setItem(HEADPAT_KEY, String(n));
-        updateLoveHUD(n);
+        updateLoveHUD();
       } catch { /* 忽略 */ }
     }
     showStageBubble(fallbackLine, fallbackMood);
@@ -658,13 +753,21 @@ async function callInteract(prompt, fallbackLine, fallbackMood) {
 
 dockChat.addEventListener("click", () => {
   setInteractMenu(false);
+  wardrobePanel.hidden = true;
   chatLog.scrollTop = chatLog.scrollHeight;
   input.focus();
 });
 
 dockSettings.addEventListener("click", () => {
   setInteractMenu(false);
+  wardrobePanel.hidden = true;
   settingsPanel.hidden = !settingsPanel.hidden;
+});
+
+dockWardrobe.addEventListener("click", () => {
+  setInteractMenu(false);
+  settingsPanel.hidden = true;
+  openWardrobe(wardrobePanel.hidden);
 });
 
 // 点击菜单外任意处关闭
@@ -873,8 +976,8 @@ wakeWordInput.addEventListener("change", () => {
 serverInput.value = localStorage.getItem(SERVER_KEY) || "";
 // 第三梯队 C：尝试加载 Live2D 角色（失败自动降级为文字形象，不阻塞聊天）
 loadLive2D();
-// 手机端 3.0 ② 游戏化 HUD：好感初始值 + 真电池监听
-updateLoveHUD(readLoveCount());
+// 手机端 3.0 ② 游戏化 HUD：好感初始值（摸头+图鉴+互动）+ 真电池监听
+updateLoveHUD();
 initBatteryHUD();
 // 续聊：恢复本机保存的会话（最近 40 条），无记录则显示欢迎语。
 loadHistory();

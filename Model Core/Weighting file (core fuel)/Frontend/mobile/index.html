@@ -88,9 +88,21 @@
     <button type="button" data-prompt="今天聊什么" data-line="嗯…想听故事，还是想知道我今天的小发现？" data-mood="curious">💬 今天聊什么</button>
   </div>
 
+  <!-- 手机端 3.0 步骤④ 养成+收集：时装图鉴面板（12 套，换装成功点亮） -->
+  <div class="wardrobe-panel" id="wardrobePanel" role="dialog" aria-label="时装图鉴" hidden>
+    <div class="wardrobe-head">
+      <strong>🪞 时装图鉴</strong>
+      <span class="wardrobe-progress" id="wardrobeProgress">0/12</span>
+    </div>
+    <p class="wardrobe-tip">聊天里说「换上星夜 / 换上深海 / 换上鎏金…」换装成功即可收集，点亮全部 12 套有惊喜~</p>
+    <div class="wardrobe-achievements" id="wardrobeAchievements"></div>
+    <div class="wardrobe-grid" id="wardrobeGrid"></div>
+  </div>
+
   <nav class="dock" id="dock" aria-label="工具栏">
     <button type="button" class="dock-btn dock-chat" id="dockChat">💬 对话</button>
     <button type="button" class="dock-btn dock-interact" id="interactBtn" aria-haspopup="menu" aria-expanded="false">✋ 互动</button>
+    <button type="button" class="dock-btn dock-wardrobe" id="dockWardrobe">🪞 图鉴</button>
     <button type="button" class="dock-btn dock-settings" id="dockSettings">⚙ 设置</button>
   </nav>
 
